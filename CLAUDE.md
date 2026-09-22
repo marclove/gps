@@ -17,11 +17,25 @@ Package manager is Bun (`bun.lock` is the lockfile; use `bun`, not `npm`/`yarn`/
 - `bun run tauri build` — produce a release build/bundle of the desktop app
 - `bun run preview` — preview the built frontend
 
-Rust side (run from `src-tauri/`):
-- `cargo check` — type-check the Rust backend
-- `cargo build` — build the Rust backend
+### Linting, formatting, and tests
 
-There is no test suite or linter configured yet.
+- `bun run check` — runs every check below in sequence; run this before committing
+- `bun run typecheck` — `tsc --noEmit` against `tsconfig.json` (strict mode; test files are included)
+- `bun run lint` / `bun run lint:fix` — ESLint (flat config in `eslint.config.js`: `@eslint/js` recommended, `typescript-eslint` recommended, `react-hooks`, `react-refresh`)
+- `bun run test` — Vitest, single run; `bun run test:watch` for watch mode; `bun run test:coverage` for v8 coverage in `coverage/`
+- `bun run lint:rust` — `cargo clippy --all-targets -- -D warnings`; lint levels are set in `src-tauri/Cargo.toml` under `[lints]` (`clippy::all` and `clippy::pedantic` at warn, `unsafe_code` forbidden), so any warning fails the run
+- `bun run fmt:rust` / `bun run fmt:rust:check` — rustfmt (config in `src-tauri/rustfmt.toml`)
+- `bun run test:rust` — `cargo test` for the backend
+
+Running a single test:
+- TypeScript: `bun run test src/App.test.tsx` or `bunx vitest run -t "invokes the greet command"`
+- Rust: `cargo test --manifest-path src-tauri/Cargo.toml greet_includes_name`
+
+### Testing conventions
+
+- Frontend tests live next to the code as `*.test.tsx` / `*.test.ts` under `src/`, run in jsdom with React Testing Library. `src/test/setup.ts` registers jest-dom matchers and runs `cleanup()` after each test.
+- Tauri is not available in jsdom, so mock `@tauri-apps/api/core` (see `src/App.test.tsx`). Use `vi.hoisted` for the mock function so it is available before the module is imported.
+- Rust unit tests go in a `#[cfg(test)] mod tests` block in the same file as the code under test.
 
 ## Architecture
 
