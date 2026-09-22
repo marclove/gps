@@ -19,7 +19,7 @@ Package manager is Bun (`bun.lock` is the lockfile; use `bun`, not `npm`/`yarn`/
 
 ### Linting, formatting, and tests
 
-- `bun run check` — runs every check below in sequence; run this before committing
+- `bun run check` — runs every check below in sequence; run this before committing. CI (`.github/workflows/check.yml`) runs the same command on Ubuntu for pushes to `main` and all pull requests.
 - `bun run typecheck` — `tsc --noEmit` against `tsconfig.json` (strict mode; test files are included)
 - `bun run lint` / `bun run lint:fix` — ESLint (flat config in `eslint.config.js`: `@eslint/js` recommended, `typescript-eslint` recommended, `react-hooks`, `react-refresh`)
 - `bun run test` — Vitest, single run; `bun run test:watch` for watch mode; `bun run test:coverage` for v8 coverage in `coverage/`
