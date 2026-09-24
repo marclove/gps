@@ -28,6 +28,7 @@ Package manager is Bun (`bun.lock` is the lockfile; use `bun`, not `npm`/`yarn`/
 - `bun run test:rust` — `cargo test` for the backend
 
 Running a single test:
+
 - TypeScript: `bun run test src/App.test.tsx` or `bunx vitest run -t "invokes the greet command"`
 - Rust: `cargo test --manifest-path src-tauri/Cargo.toml greet_includes_name`
 
@@ -44,3 +45,31 @@ Running a single test:
 - **Tauri configuration** (`src-tauri/tauri.conf.json`): defines window settings, dev/build commands (which invoke the Bun scripts above), and bundle targets. The frontend dev server must stay on port 1420 (`vite.config.ts` enforces `strictPort`) since Tauri's `devUrl` depends on it.
 - **Capabilities/permissions** (`src-tauri/capabilities/default.json`): Tauri 2's permission system. Any new Tauri plugin or restricted API used from the frontend needs its permission added here (currently `core:default` and `opener:default`).
 - **IPC contract**: frontend and backend are decoupled processes; all communication goes through Tauri's `invoke` (JS → Rust command) and event system. There is no shared type layer, so keep argument/return shapes in sync manually between the `#[tauri::command]` signatures and the frontend call sites.
+
+## Development Process
+
+For new features, we always follow this process:
+
+1. Scoping and definition: Determine what user problem is to be solved. Define it in a new, numbered file, kept in `docs/features`. The definition should follow the "jobs to be done" (JTBD) ticket style. Tickets are **always** written by humans and never by agents. Agents **must** treat the `docs/features` directory as read-only. A human will hand off the process to an agent by assigning it one of these tickets.
+2. Branch checkout: Use the naming convention `feat/terse-name-of-the-feature`
+3. Exploration and design: Use the `superpowers:brainstorming` skill to investigate potential ways to solve the problem and make decisions regarding user experience and architecture.
+4. Capture any notable architecture decisions in an ADR in `docs/adrs`.
+5. Specification: Write black box feature spec(s) that describe the expected behavior from the user's perspective. The feature spec(s) must fail before proceeding to the next step to ensure they are meaningful.
+6. Planning: Use the `superpowers:writing-plans` skill to write step-by-step implementation plans, where each step is a releasable, vertical slice of new behavior of the system. The black box feature specs are not expected to pass until all steps are completed, but all other tests must pass before advancing from step to step.
+7. Implementation: Use the `superpowers:subagent-driven-development` skill to implement the plan task-by-task. Each commit you make should also be pushed to a draft PR on Github.
+8. Ensure the full test suite is passing, including the new feature spec(s).
+9. Convert the draft PR to an open PR and wait for human review.
+
+### Rules
+
+- An agent must never modify any files in `docs/features`. These are immutable, read-only files.
+- An agent must never modify an ADR in `docs/adrs` once the ADR has been merged into main. Changes to existing architecture are captured in a superceeding ADR.
+- An agent must never modify an spec file in `docs/specs` once the file has been merged into main.
+- An agent must never modify a plan file in `docs/plans` once the file has been merged into main.
+- Never reference sections of an ADR or plan in docstrings or code comments. This makes code documentation brittle.
+- Never put files in a `superpowers` subdirectory. Use the existing `docs` directory structure.
+
+### Guidelines
+
+- All ADRs and plan files must be written in plainspoken English that is contextually atomic and understandable to an engineer who has just joined the team. They should not assume the reader has any existing knowledge of project jargon or invariants. Important concepts are described in accessible language rather than abbreviated through jargon or shorthand.
+- All public items, should be documented with docstrings that use the ASD-STE100 writing standard.
