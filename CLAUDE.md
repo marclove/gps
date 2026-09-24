@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project overview
 
-`gps` is a Tauri 2 desktop application with a React 19 + TypeScript frontend (built with Vite) and a Rust backend in `src-tauri`. The repository currently contains the unmodified Tauri + React + TypeScript starter template.
+`gps` is a Tauri 2 desktop application with a React 19 + TypeScript frontend (built with Vite) and a Rust backend in `src-tauri`.
 
 ## Commands
 
@@ -52,19 +52,33 @@ Running a single test:
 
 For new features, we always follow this process:
 
-1. Scoping and definition: Determine what user problem is to be solved. Define it in a new, numbered file, kept in `docs/features`. The definition should follow the "jobs to be done" (JTBD) ticket style. Tickets are **always** written by humans and never by agents. Agents **must** treat the `docs/features` directory as read-only. A human will hand off the process to an agent by assigning it one of these tickets.
-2. Branch checkout: Use the naming convention `feat/terse-name-of-the-feature`
-3. Exploration and design: Use the `superpowers:brainstorming` skill to investigate potential ways to solve the problem and make decisions regarding user experience and architecture.
-4. Capture any notable architecture decisions in an ADR in `docs/adrs`.
-5. Specification: Write black box feature spec(s) that describe the expected behavior from the user's perspective. The feature spec(s) must fail before proceeding to the next step to ensure they are meaningful.
-6. Planning: Use the `superpowers:writing-plans` skill to write step-by-step implementation plans, where each step is a releasable, vertical slice of new behavior of the system. The black box feature specs are not expected to pass until all steps are completed, but all other tests must pass before advancing from step to step.
-7. Implementation: Use the `superpowers:subagent-driven-development` skill to implement the plan task-by-task. Each commit you make should also be pushed to a draft PR on Github.
-8. Ensure the full test suite is passing, including the new feature spec(s).
-9. Convert the draft PR to an open PR and wait for human review.
+1. Ticket: Every feature starts from a ticket that a human has written in a new, numbered file in `docs/features`, such as `docs/features/0007-export-route.md`. Tickets follow the "jobs to be done" (JTBD) style: they describe the user problem, not the solution. Tickets are **always** written by humans and never by agents. An agent begins this process only when a human assigns it a ticket. If the ticket is ambiguous or incomplete, ask the human to clarify rather than guessing.
+2. Branch checkout: Use the naming convention `feat/terse-name-of-the-feature`. Push the branch and open a draft PR on GitHub right away, so that every later commit, including design documents, is visible for review.
+3. Exploration and design: Use the `superpowers:brainstorming` skill to investigate potential ways to solve the problem and make decisions regarding user experience and architecture. Do not save a separate design document. Instead, record the outcome as ADRs (step 4) and feature specs (step 5).
+4. Architecture decisions: Capture any notable architecture decisions in an ADR in `docs/adrs`, using the next available number, such as `docs/adrs/0003-store-routes-in-sqlite.md`.
+5. Specification: Write black box feature specs that describe the expected behavior from the user's perspective. Each spec has two parts:
+   - A written description in `docs/specs`, numbered to match the ticket, such as `docs/specs/0007-export-route.md`.
+   - An executable test in a `*.spec.tsx` file under `src/`, which Vitest picks up alongside the unit tests. The `.spec` suffix separates feature specs from `*.test.tsx` unit tests. These specs drive the app through its user interface with React Testing Library and mock the Tauri backend, because there is no end-to-end harness for the real desktop app yet. Adopting one would require its own ADR.
+
+   The executable specs must fail before proceeding to the next step to ensure they are meaningful.
+6. Human approval of the design: Stop and ask a human to review the ADRs and specs before planning. Do not continue until they approve.
+7. Planning: Use the `superpowers:writing-plans` skill to write a step-by-step implementation plan in `docs/plans`, numbered to match the ticket, such as `docs/plans/0007-export-route.md`. Each step is a releasable, vertical slice of new behavior of the system. The feature specs are not expected to pass until all steps are completed, but all other tests must pass before advancing from step to step.
+8. Human approval of the plan: Stop and ask a human to review the plan. Do not begin implementation until they approve.
+9. Implementation: Use the `superpowers:subagent-driven-development` skill to implement the plan task by task. Push each commit to the draft PR.
+10. Verification: Run `bun run check` and ensure the full suite passes, including the new feature specs.
+11. Convert the draft PR to an open PR and wait for human review.
 
 ### Chores
 
-You may be asked to complete tasks that are neither features, bugs, nor major refactors. In that situation, simply complete the task without using any of the `superpowers` skills. If the requested change seems significant, explain why you think it is so that you can ensure we're on the same page about scope. If we are on the same page and the change is indeed significant, then suggest a planning session before beginning on the changes.
+A chore is a task that is not a feature, a bug fix, or a refactor. Examples include updating dependencies, changing CI or tooling configuration, editing documentation, and adjusting project settings. Trivial code changes that need no design, such as fixing a typo in a string or a comment, also count as chores.
+
+For chores:
+
+1. Complete the task without using any of the `superpowers` skills.
+2. If the requested change seems significant, explain why you think it is so that we can agree on scope. If we agree that it is significant, suggest a planning session before beginning on the changes, or handle it as a feature, bug fix, or refactor instead.
+3. Work on a branch named `chore/terse-name-of-the-chore`, never directly on `main`.
+4. Run `bun run check` and ensure it passes before committing. Skipping the `superpowers` skills does not mean skipping verification.
+5. Push the branch, open a PR on GitHub, and wait for human review.
 
 ### Bug Fixes
 
@@ -87,15 +101,15 @@ A refactor changes the structure of the code without changing its behavior. For 
 2. Baseline: Confirm the full test suite passes before making any changes. If coverage of the code to be refactored is weak, first add tests that pin down its current behavior, and commit them separately before the refactor begins.
 3. Scope: If the refactor is small and local (for example, renaming, extracting a function, or reorganizing a single module), proceed directly. If it touches multiple modules, changes the IPC contract between the frontend and backend, or alters architecture, use the `superpowers:brainstorming` skill to agree on the approach, capture notable decisions in an ADR in `docs/adrs`, and use the `superpowers:writing-plans` skill to break the work into steps.
 4. Implementation: Make changes in small steps. The full test suite must pass after every step. For a planned refactor, use the `superpowers:subagent-driven-development` skill to implement the plan task by task.
-5. Tests: Existing tests must not be changed to accommodate the refactor unless they depend on internal details that the refactor intentionally changes. When a test is changed, explain why in the commit message. Black box feature specs in `docs/specs` must never need to change during a refactor; if one does, the change is not a refactor.
+5. Tests: Existing tests must not be changed to accommodate the refactor unless they depend on internal details that the refactor intentionally changes. When a test is changed, explain why in the commit message. Black box feature specs, both the descriptions in `docs/specs` and the executable `*.spec.tsx` files, must never need to change during a refactor; if one does, the change is not a refactor.
 6. Commit each step and push to a draft PR on GitHub. The PR description must state the motivation for the refactor and confirm that no behavior changed.
 7. Convert the draft PR to an open PR and wait for human review.
 
 ### Rules
 
 - An agent must never modify any files in `docs/features`. These are immutable, read-only files.
-- An agent must never modify an ADR in `docs/adrs` once the ADR has been merged into main. Changes to existing architecture are captured in a superceeding ADR.
-- An agent must never modify an spec file in `docs/specs` once the file has been merged into main.
+- An agent must never modify an ADR in `docs/adrs` once the ADR has been merged into main. Changes to existing architecture are captured in a superseding ADR.
+- An agent must never modify a spec file in `docs/specs` once the file has been merged into main.
 - An agent must never modify a plan file in `docs/plans` once the file has been merged into main.
 - Never reference sections of an ADR or plan in docstrings or code comments. This makes code documentation brittle.
 - Never put files in a `superpowers` subdirectory. Use the existing `docs` directory structure.
@@ -103,4 +117,4 @@ A refactor changes the structure of the code without changing its behavior. For 
 ### Guidelines
 
 - All ADRs and plan files must be written in plainspoken English that is contextually atomic and understandable to an engineer who has just joined the team. They should not assume the reader has any existing knowledge of project jargon or invariants. Important concepts are described in accessible language rather than abbreviated through jargon or shorthand.
-- All public items, should be documented with docstrings that use the ASD-STE100 writing standard.
+- All public items should be documented with docstrings that use the ASD-STE100 writing standard.
