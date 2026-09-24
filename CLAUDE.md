@@ -48,6 +48,8 @@ Running a single test:
 
 ## Development Process
 
+### Features
+
 For new features, we always follow this process:
 
 1. Scoping and definition: Determine what user problem is to be solved. Define it in a new, numbered file, kept in `docs/features`. The definition should follow the "jobs to be done" (JTBD) ticket style. Tickets are **always** written by humans and never by agents. Agents **must** treat the `docs/features` directory as read-only. A human will hand off the process to an agent by assigning it one of these tickets.
@@ -59,6 +61,35 @@ For new features, we always follow this process:
 7. Implementation: Use the `superpowers:subagent-driven-development` skill to implement the plan task-by-task. Each commit you make should also be pushed to a draft PR on Github.
 8. Ensure the full test suite is passing, including the new feature spec(s).
 9. Convert the draft PR to an open PR and wait for human review.
+
+### Chores
+
+You may be asked to complete tasks that are neither features, bugs, nor major refactors. In that situation, simply complete the task without using any of the `superpowers` skills. If the requested change seems significant, explain why you think it is so that you can ensure we're on the same page about scope. If we are on the same page and the change is indeed significant, then suggest a planning session before beginning on the changes.
+
+### Bug Fixes
+
+For bug fixes, we always follow this process:
+
+1. Report: A human describes the bug, either directly in the conversation or in a GitHub issue. The report should state what the user expected, what actually happened, and how to reproduce it. If any of these are missing or unclear, ask before proceeding.
+2. Branch checkout: Use the naming convention `fix/terse-name-of-the-bug`
+3. Investigation: Use the `superpowers:systematic-debugging` skill to find the root cause. Do not propose or apply a fix until the root cause is understood and explained. Fixing a symptom without understanding the cause is not acceptable.
+4. Reproduction: Write a failing regression test that reproduces the bug at the lowest level that can demonstrate it. Confirm that the test fails for the reason you expect before changing any production code.
+5. Fix: Use the `superpowers:test-driven-development` skill to make the smallest change that makes the regression test pass. Do not include unrelated cleanups or refactors in the same branch; note them for a separate task instead.
+6. If the root cause reveals a flaw in an existing architecture decision, stop and discuss it with a human. A change of that size may need a superseding ADR, or may need to be handled as a feature or refactor instead.
+7. Ensure the full test suite is passing (`bun run check`), commit, and push to a draft PR on GitHub. The PR description must explain the root cause, the fix, and how the regression test covers it.
+8. Convert the draft PR to an open PR and wait for human review.
+
+### Refactors
+
+A refactor changes the structure of the code without changing its behavior. For refactors, we always follow this process:
+
+1. Branch checkout: Use the naming convention `refactor/terse-name-of-the-refactor`
+2. Baseline: Confirm the full test suite passes before making any changes. If coverage of the code to be refactored is weak, first add tests that pin down its current behavior, and commit them separately before the refactor begins.
+3. Scope: If the refactor is small and local (for example, renaming, extracting a function, or reorganizing a single module), proceed directly. If it touches multiple modules, changes the IPC contract between the frontend and backend, or alters architecture, use the `superpowers:brainstorming` skill to agree on the approach, capture notable decisions in an ADR in `docs/adrs`, and use the `superpowers:writing-plans` skill to break the work into steps.
+4. Implementation: Make changes in small steps. The full test suite must pass after every step. For a planned refactor, use the `superpowers:subagent-driven-development` skill to implement the plan task by task.
+5. Tests: Existing tests must not be changed to accommodate the refactor unless they depend on internal details that the refactor intentionally changes. When a test is changed, explain why in the commit message. Black box feature specs in `docs/specs` must never need to change during a refactor; if one does, the change is not a refactor.
+6. Commit each step and push to a draft PR on GitHub. The PR description must state the motivation for the refactor and confirm that no behavior changed.
+7. Convert the draft PR to an open PR and wait for human review.
 
 ### Rules
 
