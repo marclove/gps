@@ -30,19 +30,21 @@ Package manager is Bun (`bun.lock` is the lockfile; use `bun`, not `npm`/`yarn`/
 
 Running a single test:
 
-- TypeScript: `bun run test src/App.test.tsx` or `bunx vitest run -t "invokes the greet command"`
-- Rust: `cargo test --manifest-path src-tauri/Cargo.toml greet_includes_name`
+- TypeScript: `bun run test src/App.test.tsx` or `bunx vitest run -t "opens on the Meetings page"`
+- Rust: `cargo test --manifest-path src-tauri/Cargo.toml <test name>`
 
 ### Testing conventions
 
 - Frontend tests live next to the code as `*.test.tsx` / `*.test.ts` under `src/`, run in jsdom with React Testing Library. `src/test/setup.ts` registers jest-dom matchers and runs `cleanup()` after each test.
 - Tauri is not available in jsdom, so mock `@tauri-apps/api/core` (see `src/App.test.tsx`). Use `vi.hoisted` for the mock function so it is available before the module is imported.
 - Rust unit tests go in a `#[cfg(test)] mod tests` block in the same file as the code under test.
+- `src/test/setup.ts` also stubs browser APIs that jsdom does not implement, such as `window.matchMedia`, which the sidebar uses. When a component fails in tests because jsdom lacks a browser API, add a minimal stub there with a comment that says which component needs it.
 
 ## Architecture
 
 - **Frontend** (`src/`): standard Vite + React entry point (`main.tsx` → `App.tsx`). Communicates with the Rust backend via `@tauri-apps/api`'s `invoke()`, calling commands registered in Rust.
-- **UI components**: styling uses Tailwind CSS v4 through the `@tailwindcss/vite` plugin, with the theme defined as CSS variables in `src/index.css`. Components come from shadcn (configuration in `components.json`). Add a component with `bunx --bun shadcn@latest add <component>`; it is copied into `src/components/ui/`, where it can be edited like any other project code. Run `bun run fmt` afterward, because generated components are not formatted to the project style. Use the `cn` helper from `@/lib/utils` to combine class names. The `@/` import alias maps to `src/` and is configured in both `tsconfig.json` and `vite.config.ts`. ESLint's fast refresh rule is turned off for `src/components/ui/`, because shadcn components export variant helpers alongside the component.
+- **Shell and routing**: `App.tsx` wraps every page in the application shell, which is the shadcn `sidebar-04` floating sidebar (`src/components/app-sidebar.tsx`) and a main area. Each page renders `PageHeader` (`src/components/page-header.tsx`) first, with its breadcrumb trail. Routing uses React Router with a `MemoryRouter`, because a desktop window has no address bar; the application always starts at `/`. The sidebar is for navigation between sections only. Each section gets one item in `SECTIONS` in `app-sidebar.tsx` and its routes in `App.tsx`. Feature code lives in `src/features/<feature>/`.
+- **UI components**: styling uses Tailwind CSS v4 through the `@tailwindcss/vite` plugin, with the theme defined as CSS variables in `src/index.css`. Components come from shadcn (configuration in `components.json`). Add a component with `bunx --bun shadcn@latest add <component>`; it is copied into `src/components/ui/`, where it can be edited like any other project code. Run `bun run fmt` afterward, because generated components are not formatted to the project style. Generated code must pass our lint rules too. If it does not, fix the generated file rather than turning off the rule (for example, `src/hooks/use-mobile.ts` was rewritten to use `useSyncExternalStore`). Use the `cn` helper from `@/lib/utils` to combine class names. The `@/` import alias maps to `src/` and is configured in both `tsconfig.json` and `vite.config.ts`. ESLint's fast refresh rule is turned off for `src/components/ui/`, because shadcn components export variant helpers alongside the component.
 - **Backend** (`src-tauri/src/`): `main.rs` is the binary entry point and simply calls `gps_lib::run()` defined in `lib.rs`. `lib.rs` builds the `tauri::Builder`, registers plugins, and exposes commands via `#[tauri::command]` + `invoke_handler(tauri::generate_handler![...])`. New backend commands must be added to both the function definitions and the `generate_handler!` list in `lib.rs`.
 - **Tauri configuration** (`src-tauri/tauri.conf.json`): defines window settings, dev/build commands (which invoke the Bun scripts above), and bundle targets. The frontend dev server must stay on port 1420 (`vite.config.ts` enforces `strictPort`) since Tauri's `devUrl` depends on it.
 - **Capabilities/permissions** (`src-tauri/capabilities/default.json`): Tauri 2's permission system. Any new Tauri plugin or restricted API used from the frontend needs its permission added here (currently `core:default` and `opener:default`).
