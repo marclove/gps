@@ -27,7 +27,7 @@ On macOS, Tauri shows the application in WKWebView, the web view of the operatin
 - Layout behavior is checked automatically, with the application's real CSS, in the same test run as all other specs.
 - The browser specs start more slowly than jsdom tests, and the test run needs a browser that Playwright downloads, of about 80 MB. A new development computer must install it once before `bun run test` can pass.
 - The Playwright WebKit build is close to Safari and WKWebView, but it is not the same program. A difference between them can still cause a problem that only the desktop application shows.
-- The version of `@vitest/browser-playwright` must match the version of `vitest`. They are updated together.
+- The versions of `vitest`, `@vitest/browser-playwright`, and `@vitest/coverage-v8` must match. `package.json` pins all three to the same exact version, so that an update of one cannot move it away from the others. They are updated together.
 
 ## Alternatives considered
 
