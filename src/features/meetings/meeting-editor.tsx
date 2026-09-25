@@ -85,7 +85,9 @@ export function MeetingEditor({
                             if (!COMPLETE_DATE.test(date)) return;
                             setDraft((current) => ({ ...current, date }));
                         }}
-                        className="w-auto"
+                        // The base Input has `min-w-0`, so without `shrink-0` the name
+                        // field, which fills the row, squeezes this field and cuts off the year.
+                        className="w-auto shrink-0"
                     />
                 </div>
                 <NotesEditor
