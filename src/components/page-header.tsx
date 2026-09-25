@@ -34,7 +34,7 @@ export function PageHeader({
     return (
         <header
             data-tauri-drag-region="deep"
-            className="flex h-16 shrink-0 items-center gap-2 pr-4 pl-24"
+            className="flex h-16 shrink-0 items-center gap-2 pr-8 pl-24"
         >
             <Breadcrumb>
                 <BreadcrumbList>

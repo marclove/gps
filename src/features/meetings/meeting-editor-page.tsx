@@ -52,7 +52,7 @@ function MeetingLoader({ id, isNew }: { id: number; isNew: boolean }) {
     return (
         <>
             <PageHeader crumbs={[{ label: "Meetings", to: "/meetings" }]} />
-            <div className="flex flex-1 flex-col gap-4 p-4 pt-0 text-sm">
+            <div className="flex flex-1 flex-col gap-4 px-8 pb-4 text-sm">
                 {load.kind === "loading" && (
                     <p className="text-muted-foreground">Loading…</p>
                 )}

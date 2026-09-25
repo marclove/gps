@@ -64,7 +64,7 @@ export function MeetingEditor({
             >
                 <SaveStatus status={status} onRetry={retry} />
             </PageHeader>
-            <div className="flex items-center gap-2 px-4 pb-4">
+            <div className="flex items-center gap-2 px-8 pb-4">
                 <Input
                     ref={nameInput}
                     aria-label="Meeting name"

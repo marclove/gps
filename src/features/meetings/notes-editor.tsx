@@ -143,7 +143,7 @@ export function NotesEditor({
             <div
                 role="toolbar"
                 aria-label="Formatting"
-                className="mx-4 flex flex-wrap gap-1 border-b pb-2"
+                className="mx-8 flex flex-wrap gap-1 border-b pb-2"
             >
                 {TOOLBAR.map((item, index) => (
                     <Fragment key={item.label}>
@@ -175,7 +175,7 @@ export function NotesEditor({
                 of the window. The editor stretches to fill it, so that a click below
                 short notes puts the text cursor in the notes. Without `min-w-0`, a
                 long word without spaces makes the editor wider than the window. */}
-            <div className="flex overflow-y-auto px-4 pt-6">
+            <div className="flex overflow-y-auto px-8 pt-6">
                 <EditorContent
                     editor={editor}
                     className="flex min-w-0 flex-1 flex-col"
