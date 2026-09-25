@@ -21,7 +21,9 @@ export function AppSidebar() {
 
     return (
         <Sidebar variant="floating">
-            <SidebarHeader>
+            {/* The top padding leaves room for the macOS window controls, which the
+                window draws over the web content. */}
+            <SidebarHeader data-tauri-drag-region="deep" className="pt-6">
                 <div className="flex items-center gap-2 p-2">
                     <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
                         <NotebookPenIcon className="size-4" />

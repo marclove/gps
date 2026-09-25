@@ -9,7 +9,8 @@ import {
     BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
 import { Separator } from "@/components/ui/separator";
-import { SidebarTrigger } from "@/components/ui/sidebar";
+import { SidebarTrigger, useSidebar } from "@/components/ui/sidebar";
+import { cn } from "@/lib/utils";
 
 /** One item of the breadcrumb trail. An item without `to` is the current page. */
 export type Crumb = { label: string; to?: string };
@@ -17,6 +18,9 @@ export type Crumb = { label: string; to?: string };
 /**
  * The header at the top of each page. It shows the button that shows or hides the sidebar,
  * the breadcrumb trail, and optional content at the right side, such as a status.
+ *
+ * The header is also a drag region for the window. When the sidebar is hidden, the header
+ * moves its content to the right, clear of the macOS window controls.
  */
 export function PageHeader({
     crumbs,
@@ -25,8 +29,16 @@ export function PageHeader({
     crumbs: Crumb[];
     children?: ReactNode;
 }) {
+    const { open } = useSidebar();
+
     return (
-        <header className="flex h-16 shrink-0 items-center gap-2 px-4">
+        <header
+            data-tauri-drag-region="deep"
+            className={cn(
+                "flex h-16 shrink-0 items-center gap-2 px-4",
+                !open && "pl-20",
+            )}
+        >
             <SidebarTrigger className="-ml-1" />
             <Separator
                 orientation="vertical"
