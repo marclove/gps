@@ -15,7 +15,7 @@ function App() {
                     style={{ "--sidebar-width": "19rem" } as CSSProperties}
                 >
                     <AppSidebar />
-                    <SidebarInset className="min-h-0">
+                    <SidebarInset className="min-h-0 overflow-hidden">
                         <Routes>
                             <Route
                                 path="/"

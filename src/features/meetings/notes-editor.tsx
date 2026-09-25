@@ -89,6 +89,10 @@ const TOOLBAR: ToolbarItem[] = [
 /**
  * A rich text editor for meeting notes. It reads and writes Markdown.
  *
+ * The editor fills the height of its container. The toolbar stays at the top, and the
+ * notes scroll below it. Give the editor a container with a fixed height, such as a grid
+ * row of `minmax(0,1fr)`.
+ *
  * `initialMarkdown` is read only when the editor is created. To show a different note,
  * give the component a different `key`. `onChange` receives the notes as Markdown after
  * each change.
@@ -122,7 +126,7 @@ export function NotesEditor({
                 role: "textbox",
                 "aria-label": "Notes",
                 "aria-multiline": "true",
-                class: "notes-editor prose prose-sm dark:prose-invert max-w-none min-h-64 focus:outline-none",
+                class: "notes-editor prose prose-sm dark:prose-invert max-w-none flex-1 pb-4 focus:outline-none",
             },
         },
         onUpdate: ({ editor }) => onChange(editor.getMarkdown()),
@@ -135,11 +139,11 @@ export function NotesEditor({
     });
 
     return (
-        <div className="flex flex-col gap-6">
+        <div className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)]">
             <div
                 role="toolbar"
                 aria-label="Formatting"
-                className="flex flex-wrap gap-1 border-b pb-2"
+                className="mx-4 flex flex-wrap gap-1 border-b pb-2"
             >
                 {TOOLBAR.map((item, index) => (
                     <Fragment key={item.label}>
@@ -167,7 +171,16 @@ export function NotesEditor({
                     </Fragment>
                 ))}
             </div>
-            <EditorContent editor={editor} />
+            {/* The notes area spans the full width, so its scroll bar is at the edge
+                of the window. The editor stretches to fill it, so that a click below
+                short notes puts the text cursor in the notes. Without `min-w-0`, a
+                long word without spaces makes the editor wider than the window. */}
+            <div className="flex overflow-y-auto px-4 pt-6">
+                <EditorContent
+                    editor={editor}
+                    className="flex min-w-0 flex-1 flex-col"
+                />
+            </div>
         </div>
     );
 }

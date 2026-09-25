@@ -17,9 +17,9 @@ On macOS, Tauri shows the application in WKWebView, the web view of the operatin
 ## Decision
 
 - We use Vitest browser mode with the Playwright provider (`@vitest/browser-playwright` and `playwright`) to run some specs in a real browser engine. The engine is WebKit, the engine that is closest to the web view that the application uses on macOS. The browser runs headless, with a viewport of 1200 by 800 pixels, which is the default window size.
-- Browser specs are named `*.browser.spec.tsx`. They load the application's CSS (`src/index.css`) and replace the Tauri backend with a fake through `vi.mock`, like the jsdom specs.
-- The Vitest configuration has two projects. The `unit` project runs all other `*.test.*` and `*.spec.*` files in jsdom, as before. The `browser` project runs only the `*.browser.spec.tsx` files in WebKit. `bun run test` runs both projects.
-- We write browser specs only for behavior that jsdom cannot show, such as layout, scrolling, and positions on the screen. All other behavior stays in jsdom tests, which are faster.
+- Feature specs that run in the browser are named `*.browser.spec.tsx`, and unit tests that run in the browser are named `*.browser.test.tsx`. They load the application's CSS (`src/index.css`) and replace the Tauri backend with a fake through `vi.mock`, like the jsdom tests.
+- The Vitest configuration has two projects. The `unit` project runs all other `*.test.*` and `*.spec.*` files in jsdom, as before. The `browser` project runs only the `*.browser.spec.tsx` and `*.browser.test.tsx` files in WebKit. `bun run test` runs both projects.
+- We write browser tests only for behavior that jsdom cannot show, such as layout, scrolling, and positions on the screen. All other behavior stays in jsdom tests, which are faster.
 - Continuous integration installs WebKit and the system libraries that it needs with `bunx playwright install --with-deps webkit` before it runs the checks. On a development computer, `bunx playwright install webkit` installs the browser once.
 
 ## Consequences

@@ -2,8 +2,9 @@ import { playwright } from "@vitest/browser-playwright";
 import { defineConfig, mergeConfig } from "vitest/config";
 import viteConfig from "./vite.config.ts";
 
-// Two projects: `unit` runs in jsdom, and `browser` runs the `*.browser.spec.tsx` files
-// in a real WebKit engine, because jsdom does not calculate layout.
+// Two projects: `unit` runs in jsdom, and `browser` runs the `*.browser.spec.tsx` and
+// `*.browser.test.tsx` files in a real WebKit engine, because jsdom does not
+// calculate layout.
 export default mergeConfig(
     viteConfig({ command: "serve", mode: "test" }),
     defineConfig({
@@ -21,7 +22,7 @@ export default mergeConfig(
                         environment: "jsdom",
                         setupFiles: ["./src/test/setup.ts"],
                         include: ["src/**/*.{test,spec}.{ts,tsx}"],
-                        exclude: ["src/**/*.browser.spec.tsx"],
+                        exclude: ["src/**/*.browser.{test,spec}.tsx"],
                     },
                 },
                 {
@@ -29,7 +30,7 @@ export default mergeConfig(
                     test: {
                         name: "browser",
                         setupFiles: ["./src/test/browser-setup.ts"],
-                        include: ["src/**/*.browser.spec.tsx"],
+                        include: ["src/**/*.browser.{test,spec}.tsx"],
                         browser: {
                             enabled: true,
                             provider: playwright(),
