@@ -197,3 +197,11 @@
         text-decoration: line-through;
     }
 }
+
+/* Selected text in the notes stays marked while the focus is elsewhere, such as in the
+   link popover. `Highlight` is the system color for selected text. */
+@layer utilities {
+    .notes-editor .selection {
+        background-color: Highlight;
+    }
+}

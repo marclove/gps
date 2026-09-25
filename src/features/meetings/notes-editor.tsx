@@ -1,4 +1,5 @@
 import { TaskItem, TaskList } from "@tiptap/extension-list";
+import { Selection } from "@tiptap/extensions";
 import { Markdown } from "@tiptap/markdown";
 import {
     EditorContent,
@@ -107,6 +108,9 @@ export function NotesEditor({
             // draws every link with `target="_blank"`.
             StarterKit.configure({ link: { openOnClick: false } }),
             LinkShortcut.configure({ onOpen: () => setLinkOpen(true) }),
+            // Keeps the selected text marked while the focus is elsewhere, such as
+            // in the link popover.
+            Selection,
             TaskList,
             TaskItem.configure({ nested: true }),
             Markdown,

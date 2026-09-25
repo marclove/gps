@@ -1,4 +1,4 @@
-import type { Editor } from "@tiptap/core";
+import { getMarkRange, posToDOMRect, type Editor } from "@tiptap/core";
 import { useEditorState } from "@tiptap/react";
 import { LinkIcon } from "lucide-react";
 import { useState } from "react";
@@ -50,11 +50,30 @@ export function LinkPopover({
             >
                 <LinkIcon />
             </PopoverTrigger>
-            <PopoverContent align="start" finalFocus={false}>
+            <PopoverContent
+                anchor={() => ({
+                    getBoundingClientRect: () => linkTextRect(editor),
+                })}
+                align="start"
+                finalFocus={false}
+            >
                 <LinkForm editor={editor} onDone={() => onOpenChange(false)} />
             </PopoverContent>
         </Popover>
     );
+}
+
+/**
+ * Returns the position on screen of the text that the popover edits: the whole link
+ * if the selection is in one, otherwise the selected text.
+ */
+function linkTextRect(editor: Editor) {
+    const { state, view } = editor;
+    const { from, to, $from } = state.selection;
+    const link = getMarkRange($from, state.schema.marks.link);
+    return link
+        ? posToDOMRect(view, link.from, link.to)
+        : posToDOMRect(view, from, to);
 }
 
 /**

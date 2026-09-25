@@ -171,6 +171,18 @@ describe("NotesEditor links", () => {
         expect(onChange).not.toHaveBeenCalled();
     });
 
+    it("keeps the selected text marked while the popover has the focus", async () => {
+        const { user } = await renderAndSelectAll("Roadmap");
+        const notes = screen.getByRole("textbox", { name: "Notes" });
+
+        await user.click(screen.getByRole("button", { name: "Link" }));
+
+        expect(
+            screen.getByRole("textbox", { name: "Link address" }),
+        ).toHaveFocus();
+        expect(notes.querySelector(".selection")).toHaveTextContent("Roadmap");
+    });
+
     it("disables the Link button when no text is selected", async () => {
         const user = userEvent.setup();
         render(<NotesEditor initialMarkdown="" onChange={() => {}} />);
