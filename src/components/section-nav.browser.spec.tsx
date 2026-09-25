@@ -1,0 +1,84 @@
+import { render, screen, within } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import { page, userEvent } from "vitest/browser";
+import App from "@/App";
+
+// Feature spec for docs/specs/0003-compact-section-nav.md, for the parts that
+// depend on layout. It runs in WebKit with the application's CSS, at the default
+// window size of 1200 by 800 pixels. The Tauri backend is replaced by a fake with
+// no meetings.
+
+const invoke = vi.hoisted(() => vi.fn());
+
+vi.mock("@tauri-apps/api/core", () => ({ invoke }));
+
+beforeEach(async () => {
+    await page.viewport(1200, 800);
+    invoke.mockReset();
+    invoke.mockImplementation(async (command: string) => {
+        if (command === "list_meetings") return [];
+        throw `unexpected command ${command}`;
+    });
+});
+
+/** The width of the icons, 48 pixels, and the border at the right side. */
+const MAX_NAVIGATION_WIDTH = 49;
+
+function navigation() {
+    return screen.getByRole("navigation", { name: "Main" });
+}
+
+function pageHeader() {
+    const header = screen
+        .getByRole("navigation", { name: "breadcrumb" })
+        .closest("header");
+    if (!header) throw new Error("The breadcrumb is not in a header");
+    return header;
+}
+
+async function renderApp() {
+    render(<App />);
+    await screen.findByText("No meetings yet");
+}
+
+function expectCompactNavigation() {
+    const nav = navigation().getBoundingClientRect();
+    const link = within(navigation())
+        .getByRole("link", { name: "Meetings" })
+        .getBoundingClientRect();
+
+    expect(nav.left).toBe(0);
+    expect(nav.right).toBeLessThanOrEqual(MAX_NAVIGATION_WIDTH);
+    expect(link.right).toBeLessThanOrEqual(MAX_NAVIGATION_WIDTH);
+    expect(pageHeader().getBoundingClientRect().left).toBeLessThanOrEqual(
+        MAX_NAVIGATION_WIDTH,
+    );
+}
+
+describe("Compact navigation between sections", () => {
+    it("takes only as much width as its icons need", async () => {
+        await renderApp();
+
+        expectCompactNavigation();
+    });
+
+    it("keeps the same width at the minimum window size", async () => {
+        await page.viewport(900, 600);
+        await renderApp();
+
+        expectCompactNavigation();
+    });
+
+    it("stays in place when the user presses Ctrl+Cmd+S", async () => {
+        await renderApp();
+        const headerLeft = pageHeader().getBoundingClientRect().left;
+
+        await userEvent.keyboard("{Control>}{Meta>}s{/Meta}{/Control}");
+        // Give a transition time to start, if the shortcut did anything.
+        await new Promise((resolve) => setTimeout(resolve, 300));
+
+        expect(navigation()).toBeVisible();
+        expect(pageHeader().getBoundingClientRect().left).toBe(headerLeft);
+        expectCompactNavigation();
+    });
+});
