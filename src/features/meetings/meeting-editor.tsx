@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { PageHeader } from "@/components/page-header";
+import { PAGE_TITLE_CLASSES } from "@/components/page-title";
 import { Input } from "@/components/ui/input";
+import { cn } from "@/lib/utils";
 import {
     displayName,
     updateMeeting,
@@ -71,9 +73,10 @@ export function MeetingEditor({
                             const name = event.target.value;
                             setDraft((current) => ({ ...current, name }));
                         }}
-                        // The base Input sets `md:text-sm`, which would override a plain
-                        // `text-3xl` in wide windows.
-                        className="h-auto border-none px-0 text-3xl font-semibold shadow-none focus-visible:ring-0 md:text-3xl"
+                        className={cn(
+                            PAGE_TITLE_CLASSES,
+                            "h-auto border-none px-0 shadow-none focus-visible:ring-0",
+                        )}
                     />
                     <Input
                         type="date"

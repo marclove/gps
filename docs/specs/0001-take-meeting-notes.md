@@ -24,6 +24,7 @@ A user can see a list of their meeting notes, create a new note with one click, 
 
 ### Meetings page
 
+- The page shows the title "Meetings", at the same size and position as the meeting name on the editor page.
 - The page shows a "New note" button.
 - When there are no meetings, the page says "No meetings yet".
 - When there are meetings, each one is shown as a link that contains its name and its date. The date is written in the user's locale in the medium date style, such as "Sep 24, 2026" in United States English.

@@ -29,6 +29,16 @@ beforeEach(() => {
 });
 
 describe("MeetingsPage", () => {
+    it("shows the page title Meetings", async () => {
+        invoke.mockResolvedValue([]);
+        renderPage();
+
+        expect(
+            screen.getByRole("heading", { level: 1, name: "Meetings" }),
+        ).toBeInTheDocument();
+        await screen.findByText("No meetings yet");
+    });
+
     it("says that there are no meetings", async () => {
         invoke.mockResolvedValue([]);
         renderPage();

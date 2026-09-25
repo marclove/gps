@@ -2,6 +2,7 @@ import { PlusIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { PageHeader } from "@/components/page-header";
+import { PAGE_TITLE_CLASSES } from "@/components/page-title";
 import { Button } from "@/components/ui/button";
 import { formatMeetingDate, toMeetingDate } from "@/lib/dates";
 import {
@@ -65,6 +66,7 @@ export function MeetingsPage() {
                 </Button>
             </PageHeader>
             <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
+                <h1 className={PAGE_TITLE_CLASSES}>Meetings</h1>
                 {createFailed && (
                     <p role="alert" className="text-sm text-destructive">
                         Couldn't create a note. Try again.
