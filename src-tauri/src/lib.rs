@@ -6,7 +6,7 @@ use std::sync::Mutex;
 use rusqlite::Connection;
 use tauri::{Manager, State};
 
-use crate::meetings::MeetingSummary;
+use crate::meetings::{Meeting, MeetingSummary};
 
 /// The name of the database file in the application data directory.
 const DATABASE_FILE: &str = "gps.sqlite";
@@ -38,6 +38,39 @@ fn list_meetings(database: State<'_, Database>) -> Result<Vec<MeetingSummary>, S
     database.run(meetings::list)
 }
 
+#[tauri::command]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Tauri gives managed state to commands by value"
+)]
+fn create_meeting(database: State<'_, Database>, date: &str) -> Result<Meeting, String> {
+    database.run(|connection| meetings::create(connection, date))
+}
+
+#[tauri::command]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Tauri gives managed state to commands by value"
+)]
+fn get_meeting(database: State<'_, Database>, id: i64) -> Result<Option<Meeting>, String> {
+    database.run(|connection| meetings::get(connection, id))
+}
+
+#[tauri::command]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Tauri gives managed state to commands by value"
+)]
+fn update_meeting(
+    database: State<'_, Database>,
+    id: i64,
+    name: &str,
+    date: &str,
+    notes: &str,
+) -> Result<Meeting, String> {
+    database.run(|connection| meetings::update(connection, id, name, date, notes))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -49,7 +82,12 @@ pub fn run() {
             app.manage(Database(Mutex::new(connection)));
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![list_meetings])
+        .invoke_handler(tauri::generate_handler![
+            list_meetings,
+            create_meeting,
+            get_meeting,
+            update_meeting
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
