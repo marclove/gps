@@ -115,6 +115,22 @@ describe("NotesEditor links", () => {
         );
     });
 
+    it.each([
+        ["example.com:8080/page", "https://example.com:8080/page"],
+        ["localhost:3000", "https://localhost:3000"],
+        ["tel:5551234", "tel:5551234"],
+        ["mailto:sam@example.com", "mailto:sam@example.com"],
+    ])("links %s to %s", async (typed, href) => {
+        const { onChange, user } = await renderAndSelectAll("Roadmap");
+
+        await user.click(screen.getByRole("button", { name: "Link" }));
+        await user.keyboard(`${typed}{Enter}`);
+
+        await waitFor(() =>
+            expect(lastMarkdown(onChange)).toBe(`[Roadmap](${href})`),
+        );
+    });
+
     it("shows the address of the current link and changes it", async () => {
         const { onChange, user } = await renderAndSelectAll(
             "[Roadmap](https://old.example.com)",

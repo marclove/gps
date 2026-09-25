@@ -16,6 +16,23 @@ import { canEditLink } from "./link-shortcut";
 const HAS_SCHEME = /^[a-z][a-z0-9+.-]*:/i;
 
 /**
+ * Matches an address that starts with a host and a port, such as `localhost:3000` or
+ * `example.com:8080/page`. The host looks like a scheme to `HAS_SCHEME`.
+ */
+const HOST_AND_PORT = /^[a-z0-9.-]+:\d+(?:[/?#]|$)/i;
+
+/** Matches the schemes whose addresses are digits, which look like a port. */
+const PHONE_SCHEME = /^(?:tel|sms|callto):/i;
+
+/** Returns `address` with `https://` in front of it if it has no scheme. */
+function withScheme(address: string) {
+    const hasScheme =
+        HAS_SCHEME.test(address) &&
+        (!HOST_AND_PORT.test(address) || PHONE_SCHEME.test(address));
+    return hasScheme ? address : `https://${address}`;
+}
+
+/**
  * The Link button of the notes toolbar and its popover, where the user adds, changes,
  * or removes the link at the current selection. The parent controls whether the
  * popover is open, so that a keyboard shortcut can open it too.
@@ -86,8 +103,7 @@ function LinkForm({ editor, onDone }: { editor: Editor; onDone: () => void }) {
     const [invalid, setInvalid] = useState(false);
 
     function apply() {
-        const trimmed = address.trim();
-        const href = HAS_SCHEME.test(trimmed) ? trimmed : `https://${trimmed}`;
+        const href = withScheme(address.trim());
         // The link extension refuses unsafe addresses, such as `javascript:` ones.
         if (!editor.can().setLink({ href })) {
             setInvalid(true);
