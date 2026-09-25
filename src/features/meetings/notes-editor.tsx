@@ -82,7 +82,10 @@ export function NotesEditor({
 }) {
     const editor = useEditor({
         extensions: [
-            StarterKit,
+            // A click on a link inside the app window must not open a web view
+            // window. Opening links in the system browser instead needs the
+            // opener plugin, which this feature does not add.
+            StarterKit.configure({ link: { openOnClick: false } }),
             TaskList,
             TaskItem.configure({ nested: true }),
             Markdown,
