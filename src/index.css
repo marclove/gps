@@ -131,6 +131,14 @@
     }
 }
 
+/* An H1 in the notes is the same size as the meeting name, so it uses normal weight
+   to keep the name the most prominent text on the page. */
+@layer utilities {
+    .notes-editor h1 {
+        font-weight: 400;
+    }
+}
+
 /* List items in the notes editor are as close together as the lines of a paragraph.
    TipTap puts the text of each item in a paragraph, which the typography plugin treats
    as a loose list with extra space around every item, so those margins are removed.
