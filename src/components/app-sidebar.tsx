@@ -23,7 +23,7 @@ export function AppSidebar() {
     return (
         <Sidebar
             collapsible="none"
-            className="w-[calc(var(--sidebar-width-icon)+1px)] border-r"
+            className="w-[calc(var(--sidebar-width-icon)+1px)] border-r border-sidebar-border"
         >
             <SidebarContent>
                 <nav aria-label="Main">
@@ -33,11 +33,11 @@ export function AppSidebar() {
                                 <SidebarMenuItem key={section.path}>
                                     <SidebarMenuButton
                                         className="aria-[current=page]:bg-sidebar-accent aria-[current=page]:font-medium aria-[current=page]:text-sidebar-accent-foreground"
-                                        // WebKit on macOS leaves links out of the Tab order by
-                                        // default. An explicit tab index puts the link back in it.
                                         render={
                                             <NavLink
                                                 to={section.path}
+                                                // WebKit on macOS leaves links out of the Tab order by
+                                                // default. An explicit tab index puts the link back in it.
                                                 tabIndex={0}
                                             />
                                         }

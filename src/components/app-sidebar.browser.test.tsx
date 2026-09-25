@@ -83,6 +83,10 @@ describe("AppSidebar", () => {
 
     it("highlights the current section", async () => {
         await renderApp();
+        // Move the pointer off the link, because the hover highlight has the same color.
+        await userEvent.hover(
+            screen.getByRole("navigation", { name: "breadcrumb" }),
+        );
         const navigation = screen.getByRole("navigation", { name: "Main" });
 
         expect(getComputedStyle(meetingsLink()).backgroundColor).not.toBe(
