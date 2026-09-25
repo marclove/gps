@@ -109,6 +109,13 @@ async function scrollUntilVisible(element: Element, target: Element) {
     await expect.poll(() => isFullyVisible(target)).toBe(true);
 }
 
+/** The vertical space between two elements, or 0 if they overlap vertically. */
+function distance(a: Element, b: Element) {
+    const first = a.getBoundingClientRect();
+    const second = b.getBoundingClientRect();
+    return Math.max(0, first.top - second.bottom, second.top - first.bottom);
+}
+
 async function expectChromeStaysWhileNotesScroll(notes: HTMLElement) {
     const chrome = editorChrome();
     const before = positions(chrome);
@@ -191,5 +198,26 @@ describe("MeetingEditor layout", () => {
         const { right } = within(notes).getByText(word).getBoundingClientRect();
         expect(right).toBeLessThanOrEqual(window.innerWidth);
         expect(window.scrollX).toBe(0);
+    });
+
+    it("keeps the link popover next to the text while the notes scroll", async () => {
+        seed("Weekly sync", longNotes(150));
+        render(<App />);
+        const notes = await openMeeting("Weekly sync");
+        const last = within(notes).getByText("Paragraph 150");
+        await scrollUntilVisible(within(notes).getByText("Paragraph 1"), last);
+        await userEvent.tripleClick(last);
+        await userEvent.click(screen.getByRole("button", { name: "Link" }));
+        const popover = await screen.findByRole("dialog");
+        const textTop = last.getBoundingClientRect().top;
+
+        await userEvent.wheel(within(notes).getByText("Paragraph 140"), {
+            delta: { y: -200 },
+        });
+
+        await expect
+            .poll(() => last.getBoundingClientRect().top)
+            .toBeGreaterThan(textTop + 100);
+        await expect.poll(() => distance(popover, last)).toBeLessThan(16);
     });
 });
