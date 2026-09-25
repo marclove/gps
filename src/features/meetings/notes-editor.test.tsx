@@ -168,6 +168,9 @@ describe("NotesEditor links", () => {
         await user.click(screen.getByRole("button", { name: "Link" }));
         await user.keyboard("javascript:alert(1){Enter}");
 
+        expect(
+            screen.getByRole("textbox", { name: "Link address" }),
+        ).toHaveAttribute("aria-invalid", "true");
         expect(onChange).not.toHaveBeenCalled();
     });
 
