@@ -1,4 +1,5 @@
 import { render, screen, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import App from "./App";
 
@@ -19,5 +20,34 @@ describe("App", () => {
         expect(
             screen.getByRole("navigation", { name: "breadcrumb" }),
         ).toHaveTextContent("Meetings");
+    });
+
+    it("lets the user drag the window by the page header and the sidebar header", () => {
+        render(<App />);
+
+        const pageHeader = screen
+            .getByRole("navigation", { name: "breadcrumb" })
+            .closest("header");
+        const sidebarHeader = screen
+            .getByText("gps")
+            .closest('[data-sidebar="header"]');
+
+        expect(pageHeader).toHaveAttribute("data-tauri-drag-region", "deep");
+        expect(sidebarHeader).toHaveAttribute("data-tauri-drag-region", "deep");
+    });
+
+    it("moves the page header clear of the window controls when the sidebar is hidden", async () => {
+        const user = userEvent.setup();
+        render(<App />);
+        const pageHeader = screen
+            .getByRole("navigation", { name: "breadcrumb" })
+            .closest("header");
+        expect(pageHeader).not.toHaveClass("pl-24");
+
+        await user.click(
+            screen.getByRole("button", { name: "Toggle Sidebar" }),
+        );
+
+        expect(pageHeader).toHaveClass("pl-24");
     });
 });
