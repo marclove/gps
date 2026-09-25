@@ -71,7 +71,10 @@ export function MeetingEditor({
                             const name = event.target.value;
                             setDraft((current) => ({ ...current, name }));
                         }}
-                        className="h-auto border-none px-0 text-2xl font-semibold shadow-none focus-visible:ring-0"
+                        // The base Input sets `md:text-sm`, which would override a plain
+                        // `text-4xl` in wide windows. The name must stay larger than the
+                        // largest heading in the notes (an H1 is 30px).
+                        className="h-auto border-none px-0 text-4xl font-semibold shadow-none focus-visible:ring-0 md:text-4xl"
                     />
                     <Input
                         type="date"
