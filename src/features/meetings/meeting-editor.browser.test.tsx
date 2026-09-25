@@ -204,9 +204,25 @@ describe("MeetingEditor layout", () => {
         render(<App />);
         const notes = await openMeeting("Weekly sync");
 
-        const { right } = within(notes).getByText(word).getBoundingClientRect();
-        expect(right).toBeLessThanOrEqual(window.innerWidth);
-        expect(window.scrollX).toBe(0);
+        // Measure the text itself, not the paragraph that contains it, because
+        // text that does not wrap spills out of its paragraph.
+        const text = document.createRange();
+        text.selectNodeContents(within(notes).getByText(word));
+        expect(text.getBoundingClientRect().right).toBeLessThanOrEqual(
+            notes.getBoundingClientRect().right,
+        );
+        // No element around the notes, such as the scrolling notes area, can
+        // scroll sideways.
+        for (
+            let element: Element | null = notes;
+            element;
+            element = element.parentElement
+        ) {
+            expect(
+                element.scrollWidth,
+                element.outerHTML.slice(0, 80),
+            ).toBeLessThanOrEqual(element.clientWidth);
+        }
     });
 
     it("keeps the link popover next to the text while the notes scroll", async () => {
