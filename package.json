@@ -10,6 +10,8 @@
     "tauri": "tauri",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
+    "fmt": "prettier --write \"**/*.{ts,tsx}\"",
+    "fmt:check": "prettier --check \"**/*.{ts,tsx}\"",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -18,7 +20,7 @@
     "fmt:rust": "cargo fmt --manifest-path src-tauri/Cargo.toml",
     "fmt:rust:check": "cargo fmt --manifest-path src-tauri/Cargo.toml -- --check",
     "test:rust": "cargo test --manifest-path src-tauri/Cargo.toml",
-    "check": "bun run typecheck && bun run lint && bun run test && bun run fmt:rust:check && bun run lint:rust && bun run test:rust"
+    "check": "bun run typecheck && bun run lint && bun run fmt:check && bun run test && bun run fmt:rust:check && bun run lint:rust && bun run test:rust"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",
@@ -51,6 +53,7 @@
     "eslint-plugin-react-refresh": "^0.5.7",
     "globals": "^17.12.0",
     "jsdom": "^30.1.1",
+    "prettier": "^3.9.9",
     "typescript": "~6.0.3",
     "typescript-eslint": "^8.70.1",
     "vite": "^8.0.16",
