@@ -48,4 +48,45 @@ describe("AppSidebar", () => {
         expect(title.getBoundingClientRect().width).toBeLessThanOrEqual(1);
         expect(link.scrollWidth).toBe(link.clientWidth);
     });
+
+    it("opens the tooltip to the right of the icon, inside the window", async () => {
+        await renderApp();
+        const link = meetingsLink();
+
+        await userEvent.hover(link);
+
+        const popup = await screen.findByRole("tooltip");
+        // The tooltip slides in from the left, so measure it after it stops.
+        await Promise.all(
+            popup.getAnimations().map((animation) => animation.finished),
+        );
+        const tooltip = popup.getBoundingClientRect();
+        expect(tooltip.left).toBeGreaterThanOrEqual(
+            link.getBoundingClientRect().right,
+        );
+        expect(tooltip.top).toBeGreaterThanOrEqual(0);
+        expect(tooltip.right).toBeLessThanOrEqual(window.innerWidth);
+    });
+
+    it("closes the tooltip when the pointer leaves the icon", async () => {
+        await renderApp();
+        const link = meetingsLink();
+        await userEvent.hover(link);
+        await screen.findByRole("tooltip");
+
+        await userEvent.unhover(link);
+
+        await expect
+            .poll(() => screen.queryByRole("tooltip"))
+            .not.toBeInTheDocument();
+    });
+
+    it("highlights the current section", async () => {
+        await renderApp();
+        const navigation = screen.getByRole("navigation", { name: "Main" });
+
+        expect(getComputedStyle(meetingsLink()).backgroundColor).not.toBe(
+            getComputedStyle(navigation).backgroundColor,
+        );
+    });
 });

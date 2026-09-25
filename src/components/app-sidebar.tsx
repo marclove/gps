@@ -1,5 +1,5 @@
 import { NotebookPenIcon, type LucideIcon } from "lucide-react";
-import { Link, useLocation } from "react-router";
+import { NavLink } from "react-router";
 import {
     Sidebar,
     SidebarContent,
@@ -20,8 +20,6 @@ const SECTIONS: Section[] = [
  * The navigation between sections. It is a narrow column of section icons that is always shown.
  */
 export function AppSidebar() {
-    const { pathname } = useLocation();
-
     return (
         <Sidebar
             collapsible="none"
@@ -34,17 +32,19 @@ export function AppSidebar() {
                             {SECTIONS.map((section) => (
                                 <SidebarMenuItem key={section.path}>
                                     <SidebarMenuButton
-                                        isActive={pathname.startsWith(
-                                            section.path,
-                                        )}
+                                        className="aria-[current=page]:bg-sidebar-accent aria-[current=page]:font-medium aria-[current=page]:text-sidebar-accent-foreground"
                                         // WebKit on macOS leaves links out of the Tab order by
                                         // default. An explicit tab index puts the link back in it.
                                         render={
-                                            <Link
+                                            <NavLink
                                                 to={section.path}
                                                 tabIndex={0}
                                             />
                                         }
+                                        tooltip={{
+                                            children: section.title,
+                                            hidden: false,
+                                        }}
                                     >
                                         <section.icon />
                                         <span className="sr-only">
