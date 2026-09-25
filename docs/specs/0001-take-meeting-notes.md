@@ -60,7 +60,7 @@ The executable spec replaces the Tauri backend with a fake that stores meetings 
 | ---------------- | -------------------------- | ----------------------- |
 | `list_meetings`  | none                       | list of meeting summaries |
 | `create_meeting` | `date`                     | meeting                 |
-| `get_meeting`    | `id`                       | meeting                 |
+| `get_meeting`    | `id`                       | meeting, or `null` if no meeting has the identifier |
 | `update_meeting` | `id`, `name`, `date`, `notes` | meeting              |
 
 A meeting has the fields `id` (number), `name`, `date` (`YYYY-MM-DD`), `notes` (Markdown), `createdAt`, and `updatedAt` (RFC 3339 timestamps in UTC). A meeting summary has `id`, `name`, `date`, and `updatedAt`. When a command fails, it rejects with a message.

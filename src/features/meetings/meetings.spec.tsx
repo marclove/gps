@@ -85,11 +85,8 @@ class FakeBackend {
                     name: "Untitled meeting",
                     date: args.date as string,
                 });
-            case "get_meeting": {
-                const meeting = this.meetings.find((m) => m.id === args.id);
-                if (!meeting) throw `meeting ${String(args.id)} not found`;
-                return meeting;
-            }
+            case "get_meeting":
+                return this.meetings.find((m) => m.id === args.id) ?? null;
             case "update_meeting": {
                 if (this.failUpdates) throw "disk I/O error";
                 const meeting = this.meetings.find((m) => m.id === args.id);
@@ -225,7 +222,7 @@ describe("Take meeting notes", () => {
 
         await user.click(notes);
         await user.click(screen.getByRole("button", { name: "Task list" }));
-        await user.type(notes, "Send notes to team");
+        await user.keyboard("Send notes to team");
 
         await waitFor(
             () =>
