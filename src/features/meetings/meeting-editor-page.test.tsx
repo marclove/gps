@@ -127,6 +127,37 @@ describe("MeetingEditorPage", () => {
         ).toBe(true);
     });
 
+    it("keeps the last complete date when the date field has an invalid value", async () => {
+        serveMeeting();
+        renderPage("/meetings/42");
+        const date = await screen.findByLabelText("Meeting date");
+
+        fireEvent.change(date, { target: { value: "20261-09-24" } });
+        fireEvent.change(
+            screen.getByRole("textbox", { name: "Meeting name" }),
+            {
+                target: { value: "Renamed" },
+            },
+        );
+
+        await waitFor(
+            () =>
+                expect(invoke).toHaveBeenCalledWith(
+                    "update_meeting",
+                    expect.objectContaining({
+                        name: "Renamed",
+                        date: "2026-09-24",
+                    }),
+                ),
+            { timeout: 2000 },
+        );
+        expect(
+            updates().every(
+                ([, args]) => (args as Meeting).date !== "20261-09-24",
+            ),
+        ).toBe(true);
+    });
+
     it("carries the stored notes along unchanged when the name changes", async () => {
         invoke.mockImplementation(
             async (command: string, args?: Record<string, unknown>) =>

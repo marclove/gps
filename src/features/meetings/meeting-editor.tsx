@@ -11,6 +11,9 @@ import { NotesEditor } from "./notes-editor";
 import { SaveStatus } from "./save-status";
 import { useAutosave } from "./use-autosave";
 
+/** Matches a complete calendar date in the `YYYY-MM-DD` format that the backend accepts. */
+const COMPLETE_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
 /**
  * The editor for one meeting: its name, its date, and its notes. Changes are saved
  * automatically. If `isNew` is true, the name field gets the focus and its text is
@@ -77,9 +80,9 @@ export function MeetingEditor({
                         required
                         onChange={(event) => {
                             const date = event.target.value;
-                            // An empty value means the date is incomplete. Keep the last
-                            // complete date, because the backend accepts only real dates.
-                            if (date === "") return;
+                            // An incomplete or out of range value keeps the last complete
+                            // date, because the backend accepts only `YYYY-MM-DD`.
+                            if (!COMPLETE_DATE.test(date)) return;
                             setDraft((current) => ({ ...current, date }));
                         }}
                         className="w-auto"
