@@ -2,7 +2,6 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router";
-import { SidebarProvider } from "@/components/ui/sidebar";
 import { formatMeetingDate } from "@/lib/dates";
 import { MeetingsPage } from "./meetings-page";
 
@@ -13,9 +12,7 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke }));
 function renderPage() {
     render(
         <MemoryRouter>
-            <SidebarProvider>
-                <MeetingsPage />
-            </SidebarProvider>
+            <MeetingsPage />
         </MemoryRouter>,
     );
 }

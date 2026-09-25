@@ -1,4 +1,3 @@
-import { CSSProperties } from "react";
 import { MemoryRouter, Navigate, Route, Routes } from "react-router";
 import { AppSidebar } from "@/components/app-sidebar";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
@@ -10,10 +9,7 @@ function App() {
     return (
         <TooltipProvider>
             <MemoryRouter>
-                <SidebarProvider
-                    className="h-svh"
-                    style={{ "--sidebar-width": "19rem" } as CSSProperties}
-                >
+                <SidebarProvider className="h-svh">
                     <AppSidebar />
                     <SidebarInset className="min-h-0 overflow-hidden">
                         <Routes>

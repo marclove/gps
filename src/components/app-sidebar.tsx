@@ -1,34 +1,32 @@
-import { NotebookPenIcon } from "lucide-react";
+import { NotebookPenIcon, type LucideIcon } from "lucide-react";
 import { Link, useLocation } from "react-router";
 import {
     Sidebar,
     SidebarContent,
     SidebarGroup,
-    SidebarHeader,
     SidebarMenu,
     SidebarMenuButton,
     SidebarMenuItem,
 } from "@/components/ui/sidebar";
 
 /** A section of the application that the sidebar links to. */
-type Section = { title: string; path: string };
+type Section = { title: string; path: string; icon: LucideIcon };
 
-const SECTIONS: Section[] = [{ title: "Meetings", path: "/meetings" }];
+const SECTIONS: Section[] = [
+    { title: "Meetings", path: "/meetings", icon: NotebookPenIcon },
+];
 
-/** The floating sidebar with the application name and the navigation between sections. */
+/**
+ * The navigation between sections. It is a narrow column of section icons that is always shown.
+ */
 export function AppSidebar() {
     const { pathname } = useLocation();
 
     return (
-        <Sidebar variant="floating">
-            <SidebarHeader>
-                <div className="flex items-center gap-2 p-2">
-                    <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-                        <NotebookPenIcon className="size-4" />
-                    </div>
-                    <span className="font-medium">gps</span>
-                </div>
-            </SidebarHeader>
+        <Sidebar
+            collapsible="none"
+            className="w-[calc(var(--sidebar-width-icon)+1px)] border-r"
+        >
             <SidebarContent>
                 <nav aria-label="Main">
                     <SidebarGroup>
@@ -39,14 +37,19 @@ export function AppSidebar() {
                                         isActive={pathname.startsWith(
                                             section.path,
                                         )}
+                                        // WebKit on macOS leaves links out of the Tab order by
+                                        // default. An explicit tab index puts the link back in it.
                                         render={
                                             <Link
                                                 to={section.path}
-                                                className="font-medium"
+                                                tabIndex={0}
                                             />
                                         }
                                     >
-                                        {section.title}
+                                        <section.icon />
+                                        <span className="sr-only">
+                                            {section.title}
+                                        </span>
                                     </SidebarMenuButton>
                                 </SidebarMenuItem>
                             ))}
