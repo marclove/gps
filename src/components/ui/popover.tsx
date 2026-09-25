@@ -31,7 +31,9 @@ function PopoverContent({
                 alignOffset={alignOffset}
                 side={side}
                 sideOffset={sideOffset}
-                className="isolate z-50"
+                // Hide the popover while its anchor is scrolled out of view, so that it
+                // does not float over other content with nothing to point at.
+                className="isolate z-50 data-[anchor-hidden]:invisible"
             >
                 <PopoverPrimitive.Popup
                     data-slot="popover-content"

@@ -220,4 +220,29 @@ describe("MeetingEditor layout", () => {
             .toBeGreaterThan(textTop + 100);
         await expect.poll(() => distance(popover, last)).toBeLessThan(16);
     });
+
+    it("hides the link popover while its text is scrolled out of view", async () => {
+        seed("Weekly sync", longNotes(150));
+        render(<App />);
+        const notes = await openMeeting("Weekly sync");
+        const last = within(notes).getByText("Paragraph 150");
+        await scrollUntilVisible(within(notes).getByText("Paragraph 1"), last);
+        await userEvent.tripleClick(last);
+        await userEvent.click(screen.getByRole("button", { name: "Link" }));
+        const popover = await screen.findByRole("dialog");
+        const visible = () =>
+            popover.checkVisibility({ visibilityProperty: true });
+        expect(visible()).toBe(true);
+
+        await userEvent.wheel(within(notes).getByText("Paragraph 140"), {
+            delta: { y: -2000 },
+        });
+        await expect.poll(visible).toBe(false);
+
+        await scrollUntilVisible(
+            within(notes).getByText("Paragraph 100"),
+            last,
+        );
+        await expect.poll(visible).toBe(true);
+    });
 });
