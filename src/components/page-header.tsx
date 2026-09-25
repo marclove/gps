@@ -36,7 +36,7 @@ export function PageHeader({
             data-tauri-drag-region="deep"
             className={cn(
                 "flex h-16 shrink-0 items-center gap-2 px-4",
-                !open && "pl-20",
+                !open && "pl-24",
             )}
         >
             <SidebarTrigger className="-ml-1" />

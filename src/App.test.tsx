@@ -42,12 +42,12 @@ describe("App", () => {
         const pageHeader = screen
             .getByRole("navigation", { name: "breadcrumb" })
             .closest("header");
-        expect(pageHeader).not.toHaveClass("pl-20");
+        expect(pageHeader).not.toHaveClass("pl-24");
 
         await user.click(
             screen.getByRole("button", { name: "Toggle Sidebar" }),
         );
 
-        expect(pageHeader).toHaveClass("pl-20");
+        expect(pageHeader).toHaveClass("pl-24");
     });
 });
