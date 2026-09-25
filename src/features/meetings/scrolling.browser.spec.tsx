@@ -71,9 +71,12 @@ function longNotes(count: number) {
     );
 }
 
+/** Opens the meeting named `name` from the Meetings page. */
 async function openMeeting(name: string) {
     render(<App />);
-    await userEvent.click(await screen.findByRole("link", { name: /Weekly/ }));
+    await userEvent.click(
+        await screen.findByRole("link", { name: new RegExp(`^${name}`) }),
+    );
     const notes = await screen.findByRole("textbox", { name: "Notes" });
     expect(screen.getByRole("textbox", { name: "Meeting name" })).toHaveValue(
         name,
