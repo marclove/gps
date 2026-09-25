@@ -110,7 +110,7 @@ export function NotesEditor({
     });
 
     return (
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-4">
             <div
                 role="toolbar"
                 aria-label="Formatting"
