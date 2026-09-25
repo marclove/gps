@@ -1,19 +1,31 @@
+import { PlusIcon } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Link } from "react-router";
+import { Link, useNavigate } from "react-router";
 import { PageHeader } from "@/components/page-header";
 import { Button } from "@/components/ui/button";
-import { formatMeetingDate } from "@/lib/dates";
-import { displayName, listMeetings, type MeetingSummary } from "@/lib/meetings";
+import { formatMeetingDate, toMeetingDate } from "@/lib/dates";
+import {
+    createMeeting,
+    displayName,
+    listMeetings,
+    type MeetingSummary,
+} from "@/lib/meetings";
 
 type ListState =
     | { kind: "loading" }
     | { kind: "error" }
     | { kind: "loaded"; meetings: MeetingSummary[] };
 
-/** The page that lists all meetings. */
+/** State that the Meetings page gives the editor page when it opens a new meeting. */
+export type NewMeetingState = { isNew: true };
+
+/** The page that lists all meetings and creates new ones. */
 export function MeetingsPage() {
+    const navigate = useNavigate();
     const [list, setList] = useState<ListState>({ kind: "loading" });
     const [attempt, setAttempt] = useState(0);
+    const [creating, setCreating] = useState(false);
+    const [createFailed, setCreateFailed] = useState(false);
 
     useEffect(() => {
         let current = true;
@@ -31,10 +43,33 @@ export function MeetingsPage() {
         setAttempt((value) => value + 1);
     }
 
+    async function createNote() {
+        setCreating(true);
+        setCreateFailed(false);
+        try {
+            const meeting = await createMeeting(toMeetingDate(new Date()));
+            const state: NewMeetingState = { isNew: true };
+            navigate(`/meetings/${meeting.id}`, { state });
+        } catch {
+            setCreateFailed(true);
+            setCreating(false);
+        }
+    }
+
     return (
         <>
-            <PageHeader crumbs={[{ label: "Meetings" }]} />
+            <PageHeader crumbs={[{ label: "Meetings" }]}>
+                <Button onClick={createNote} disabled={creating}>
+                    <PlusIcon />
+                    New note
+                </Button>
+            </PageHeader>
             <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
+                {createFailed && (
+                    <p role="alert" className="text-sm text-destructive">
+                        Couldn't create a note. Try again.
+                    </p>
+                )}
                 {list.kind === "loading" && (
                     <p className="text-sm text-muted-foreground">Loading…</p>
                 )}

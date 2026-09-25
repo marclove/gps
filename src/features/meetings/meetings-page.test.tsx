@@ -79,4 +79,42 @@ describe("MeetingsPage", () => {
             await screen.findByRole("link", { name: /Kickoff/ }),
         ).toBeInTheDocument();
     });
+
+    it("reports a failed creation and lets the user try again", async () => {
+        invoke.mockImplementation(async (command: string) => {
+            if (command === "list_meetings") return [];
+            throw "disk I/O error";
+        });
+        const user = userEvent.setup();
+        renderPage();
+
+        await user.click(
+            await screen.findByRole("button", { name: "New note" }),
+        );
+
+        expect(await screen.findByRole("alert")).toHaveTextContent(
+            "Couldn't create a note",
+        );
+        expect(screen.getByRole("button", { name: "New note" })).toBeEnabled();
+    });
+
+    it("creates only one meeting when New note is clicked twice", async () => {
+        invoke.mockImplementation((command: string) =>
+            command === "list_meetings"
+                ? Promise.resolve([])
+                : new Promise(() => {}),
+        );
+        const user = userEvent.setup();
+        renderPage();
+        const button = await screen.findByRole("button", { name: "New note" });
+
+        await user.click(button);
+        await user.click(button);
+
+        expect(
+            invoke.mock.calls.filter(
+                ([command]) => command === "create_meeting",
+            ),
+        ).toHaveLength(1);
+    });
 });
