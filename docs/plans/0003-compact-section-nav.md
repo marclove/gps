@@ -171,7 +171,7 @@ Expected: FAIL with `Unable to find role="tooltip"` and with a missing `aria-cur
 - `it("highlights the current section")`: on the Meetings page, the computed `background-color` of the Meetings link differs from the computed `background-color` of the navigation labeled "Main".
 
 Run: `bunx vitest run --project browser src/components/app-sidebar.browser.test.tsx`
-Expected: the tooltip tests FAIL, because no tooltip opens, and the highlight test FAILS, because nothing is highlighted yet.
+Expected: the tooltip tests FAIL, because no tooltip opens. The highlight test may already pass, because Task 2 keeps `isActive`; it must still pass after Step 3 removes `isActive`.
 
 - [ ] **Step 3: Add the tooltip role, the tooltip, and `NavLink`**
 
