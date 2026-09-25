@@ -146,14 +146,14 @@ describe("MeetingEditor layout", () => {
         render(<App />);
         const notes = await openMeeting("Weekly sync");
 
-        const toolbar = screen.getByRole("toolbar", { name: "Formatting" });
-        const leftBefore = toolbar.getBoundingClientRect().left;
+        const main = document.querySelector('[data-slot="sidebar-inset"]')!;
+        const rightBefore = main.getBoundingClientRect().right;
 
         await userEvent.click(
             screen.getByRole("button", { name: "Toggle Sidebar" }),
         );
-        // Wait for the sidebar to finish sliding away: it is collapsed, the toolbar
-        // has moved to the left, and no transition is still running.
+        // Wait for the sidebar to finish sliding away: it is collapsed, the main area
+        // has grown to the right, and no transition is still running.
         await expect
             .poll(() =>
                 document
@@ -164,7 +164,7 @@ describe("MeetingEditor layout", () => {
         await expect
             .poll(
                 () =>
-                    toolbar.getBoundingClientRect().left < leftBefore &&
+                    main.getBoundingClientRect().right > rightBefore &&
                     document.getAnimations().length === 0,
             )
             .toBe(true);

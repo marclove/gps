@@ -14,7 +14,6 @@ function App() {
                     className="h-svh"
                     style={{ "--sidebar-width": "19rem" } as CSSProperties}
                 >
-                    <AppSidebar />
                     <SidebarInset className="min-h-0 overflow-hidden">
                         <Routes>
                             <Route
@@ -31,6 +30,9 @@ function App() {
                             />
                         </Routes>
                     </SidebarInset>
+                    {/* The sidebar comes after the main area, because it is at the right
+                        side of the window. */}
+                    <AppSidebar />
                 </SidebarProvider>
             </MemoryRouter>
         </TooltipProvider>

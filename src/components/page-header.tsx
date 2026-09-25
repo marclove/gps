@@ -9,18 +9,17 @@ import {
     BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
 import { Separator } from "@/components/ui/separator";
-import { SidebarTrigger, useSidebar } from "@/components/ui/sidebar";
-import { cn } from "@/lib/utils";
+import { SidebarTrigger } from "@/components/ui/sidebar";
 
 /** One item of the breadcrumb trail. An item without `to` is the current page. */
 export type Crumb = { label: string; to?: string };
 
 /**
- * The header at the top of each page. It shows the button that shows or hides the sidebar,
- * the breadcrumb trail, and optional content at the right side, such as a status.
+ * The header at the top of each page. It shows the breadcrumb trail, optional content at
+ * the right side, such as a status, and the button that shows or hides the sidebar.
  *
- * The header is also a drag region for the window. When the sidebar is hidden, the header
- * moves its content to the right, clear of the macOS window controls.
+ * The header is also a drag region for the window. Its left padding keeps the breadcrumb
+ * trail clear of the macOS window controls.
  */
 export function PageHeader({
     crumbs,
@@ -29,21 +28,11 @@ export function PageHeader({
     crumbs: Crumb[];
     children?: ReactNode;
 }) {
-    const { open } = useSidebar();
-
     return (
         <header
             data-tauri-drag-region="deep"
-            className={cn(
-                "flex h-16 shrink-0 items-center gap-2 px-4",
-                !open && "pl-24",
-            )}
+            className="flex h-16 shrink-0 items-center gap-2 pr-4 pl-24"
         >
-            <SidebarTrigger className="-ml-1" />
-            <Separator
-                orientation="vertical"
-                className="mr-2 data-vertical:h-4 data-vertical:self-auto"
-            />
             <Breadcrumb>
                 <BreadcrumbList>
                     {crumbs.map((crumb, index) => (
@@ -66,11 +55,18 @@ export function PageHeader({
                     ))}
                 </BreadcrumbList>
             </Breadcrumb>
-            {children && (
-                <div className="ml-auto flex items-center gap-2">
-                    {children}
-                </div>
-            )}
+            <div className="ml-auto flex items-center gap-2">
+                {children && (
+                    <>
+                        {children}
+                        <Separator
+                            orientation="vertical"
+                            className="ml-2 data-vertical:h-4 data-vertical:self-auto"
+                        />
+                    </>
+                )}
+                <SidebarTrigger className="-mr-1" />
+            </div>
         </header>
     );
 }
