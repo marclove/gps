@@ -131,6 +131,19 @@
     }
 }
 
+/* List items in the notes editor are as close together as the lines of a paragraph.
+   TipTap puts the text of each item in a paragraph, which the typography plugin treats
+   as a loose list with extra space around every item, so those margins are removed.
+   The margin around the list as a whole stays. */
+@layer utilities {
+    .notes-editor li,
+    .notes-editor li p,
+    .notes-editor li ul,
+    .notes-editor li ol {
+        margin-block: 0;
+    }
+}
+
 /* Task lists in the notes editor. The typography plugin puts its list styles in the
    utilities layer, so these rules must be in the same layer to take effect. Items stay
    normal blocks, so their spacing matches bullet list items, and the check box sits in
@@ -152,17 +165,6 @@
         align-items: center;
         height: 1lh;
         padding-inline-end: 0.5em;
-    }
-
-    /* Top level list items with paragraphs get extra space from the typography plugin
-       (prose-sm). Its selectors expect the paragraph directly in the item, but TipTap
-       wraps it in a div, so the same margins are repeated here. */
-    .notes-editor > ul[data-type="taskList"] > li > div > p:first-child {
-        margin-top: 1.14286em;
-    }
-
-    .notes-editor > ul[data-type="taskList"] > li > div > p:last-child {
-        margin-bottom: 1.14286em;
     }
 
     .notes-editor ul[data-type="taskList"] > li[data-checked="true"] > div {
