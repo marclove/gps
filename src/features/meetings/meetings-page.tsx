@@ -67,7 +67,7 @@ export function MeetingsPage() {
                     New note
                 </Button>
             </PageHeader>
-            <div className="flex flex-col gap-4 px-4 pb-3">
+            <div className="flex flex-col gap-4 px-4 pb-2">
                 <h1 className={PAGE_TITLE_CLASSES}>Meetings</h1>
                 {createFailed && (
                     <p role="alert" className="text-sm text-destructive">
@@ -75,10 +75,10 @@ export function MeetingsPage() {
                     </p>
                 )}
             </div>
-            {/* `pt-1` leaves room for the focus ring of the first meeting, which the
-                scrolling area would cut off. The title row has 4 pixels less padding,
+            {/* `pt-2` leaves room for the focus ring of the first meeting, which the
+                scrolling area would cut off. The title row has 8 pixels less padding,
                 so the list stays at the same position. */}
-            <div className="overflow-y-auto px-4 pt-1 pb-4">
+            <div className="overflow-y-auto px-4 pt-2 pb-4">
                 {list.kind === "loading" && (
                     <p className="text-sm text-muted-foreground">Loading…</p>
                 )}

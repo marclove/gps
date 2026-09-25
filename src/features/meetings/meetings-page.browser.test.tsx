@@ -27,12 +27,13 @@ describe("MeetingsPage layout", () => {
         render(<App />);
         const first = await screen.findByRole("link", { name: /^Weekly 1/ });
         // The list scrolls in its own area, which cuts off anything drawn outside
-        // it, such as the 3 pixel focus ring that WebKit draws around a link.
+        // it, such as the focus ring around a link. In the macOS web view, that
+        // ring is about 5 pixels wide.
         const area = first.closest("ul")!.parentElement!;
 
         expect(
             first.getBoundingClientRect().top -
                 area.getBoundingClientRect().top,
-        ).toBeGreaterThanOrEqual(3);
+        ).toBeGreaterThanOrEqual(5);
     });
 });
