@@ -146,18 +146,27 @@ describe("MeetingEditor layout", () => {
         render(<App />);
         const notes = await openMeeting("Weekly sync");
 
+        const toolbar = screen.getByRole("toolbar", { name: "Formatting" });
+        const leftBefore = toolbar.getBoundingClientRect().left;
+
         await userEvent.click(
             screen.getByRole("button", { name: "Toggle Sidebar" }),
         );
-        // Wait for the sidebar to finish sliding away.
-        const toolbar = screen.getByRole("toolbar", { name: "Formatting" });
-        let left = NaN;
+        // Wait for the sidebar to finish sliding away: it is collapsed, the toolbar
+        // has moved to the left, and no transition is still running.
         await expect
-            .poll(() => {
-                const previous = left;
-                left = toolbar.getBoundingClientRect().left;
-                return left === previous;
-            })
+            .poll(() =>
+                document
+                    .querySelector('[data-slot="sidebar"]')
+                    ?.getAttribute("data-state"),
+            )
+            .toBe("collapsed");
+        await expect
+            .poll(
+                () =>
+                    toolbar.getBoundingClientRect().left < leftBefore &&
+                    document.getAnimations().length === 0,
+            )
             .toBe(true);
 
         await expectChromeStaysWhileNotesScroll(notes);
