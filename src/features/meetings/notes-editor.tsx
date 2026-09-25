@@ -1,4 +1,5 @@
 import { TaskItem, TaskList } from "@tiptap/extension-list";
+import { Selection } from "@tiptap/extensions";
 import { Markdown } from "@tiptap/markdown";
 import {
     EditorContent,
@@ -18,7 +19,10 @@ import {
     ListOrderedIcon,
     type LucideIcon,
 } from "lucide-react";
+import { Fragment, useState } from "react";
 import { Toggle } from "@/components/ui/toggle";
+import { LinkPopover } from "./link-popover";
+import { LinkShortcut } from "./link-shortcut";
 
 /** A formatting button in the toolbar. */
 type ToolbarItem = {
@@ -96,12 +100,17 @@ export function NotesEditor({
     initialMarkdown: string;
     onChange: (markdown: string) => void;
 }) {
+    const [linkOpen, setLinkOpen] = useState(false);
     const editor = useEditor({
         extensions: [
-            // A click on a link inside the app window must not open a web view
-            // window. Opening links in the system browser instead needs the
-            // opener plugin, which this feature does not add.
+            // TipTap must not open a link when it is clicked. The opener plugin
+            // opens it in the system browser instead, because the link extension
+            // draws every link with `target="_blank"`.
             StarterKit.configure({ link: { openOnClick: false } }),
+            LinkShortcut.configure({ onOpen: () => setLinkOpen(true) }),
+            // Keeps the selected text marked while the focus is elsewhere, such as
+            // in the link popover.
+            Selection,
             TaskList,
             TaskItem.configure({ nested: true }),
             Markdown,
@@ -133,18 +142,29 @@ export function NotesEditor({
                 className="flex flex-wrap gap-1 border-b pb-2"
             >
                 {TOOLBAR.map((item, index) => (
-                    <Toggle
-                        key={item.label}
-                        size="sm"
-                        aria-label={item.label}
-                        pressed={active?.[index] ?? false}
-                        // Keep the focus and the selection in the editor when the
-                        // button is clicked with the mouse.
-                        onMouseDown={(event) => event.preventDefault()}
-                        onPressedChange={() => editor && item.run(editor)}
-                    >
-                        <item.icon />
-                    </Toggle>
+                    <Fragment key={item.label}>
+                        <Toggle
+                            size="sm"
+                            aria-label={item.label}
+                            pressed={active?.[index] ?? false}
+                            // Keep the focus and the selection in the editor when the
+                            // button is clicked with the mouse.
+                            onMouseDown={(event) => event.preventDefault()}
+                            onPressedChange={() => editor && item.run(editor)}
+                        >
+                            <item.icon />
+                        </Toggle>
+                        {item.label === "Italic" && editor && (
+                            <LinkPopover
+                                editor={editor}
+                                open={linkOpen}
+                                onOpenChange={(open) => {
+                                    setLinkOpen(open);
+                                    if (!open) editor.commands.focus();
+                                }}
+                            />
+                        )}
+                    </Fragment>
                 ))}
             </div>
             <EditorContent editor={editor} />
