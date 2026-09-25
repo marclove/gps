@@ -131,32 +131,41 @@
     }
 }
 
-@layer components {
+/* Task lists in the notes editor. The typography plugin puts its list styles in the
+   utilities layer, so these rules must be in the same layer to take effect. Items stay
+   normal blocks, so their spacing matches bullet list items, and the check box sits in
+   the gutter where a bullet list shows its marker. */
+@layer utilities {
     .notes-editor ul[data-type="taskList"] {
         list-style: none;
-        padding-left: 0;
     }
 
-    .notes-editor ul[data-type="taskList"] li {
+    .notes-editor ul[data-type="taskList"] > li {
+        position: relative;
+    }
+
+    .notes-editor ul[data-type="taskList"] > li > label {
+        position: absolute;
+        top: 0;
+        right: 100%;
         display: flex;
-        align-items: flex-start;
-        gap: 0.5rem;
+        align-items: center;
+        height: 1lh;
+        padding-inline-end: 0.5em;
     }
 
-    .notes-editor ul[data-type="taskList"] li > label {
-        flex-shrink: 0;
-        margin-top: 0.3em;
+    /* Top level list items with paragraphs get extra space from the typography plugin
+       (prose-sm). Its selectors expect the paragraph directly in the item, but TipTap
+       wraps it in a div, so the same margins are repeated here. */
+    .notes-editor > ul[data-type="taskList"] > li > div > p:first-child {
+        margin-top: 1.14286em;
     }
 
-    .notes-editor ul[data-type="taskList"] li > div {
-        flex: 1;
+    .notes-editor > ul[data-type="taskList"] > li > div > p:last-child {
+        margin-bottom: 1.14286em;
     }
 
-    .notes-editor ul[data-type="taskList"] li > div > p {
-        margin: 0;
-    }
-
-    .notes-editor ul[data-type="taskList"] li[data-checked="true"] > div {
+    .notes-editor ul[data-type="taskList"] > li[data-checked="true"] > div {
         color: var(--muted-foreground);
         text-decoration: line-through;
     }
