@@ -1,5 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { displayName, listMeetings } from "./meetings";
+import {
+    createMeeting,
+    displayName,
+    getMeeting,
+    listMeetings,
+    updateMeeting,
+} from "./meetings";
 
 const invoke = vi.hoisted(() => vi.fn());
 
@@ -7,14 +13,34 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke }));
 
 beforeEach(() => {
     invoke.mockReset();
-    invoke.mockResolvedValue([]);
+    invoke.mockResolvedValue(null);
 });
 
 describe("meeting commands", () => {
-    it("lists meetings with the list_meetings command", async () => {
+    it("calls the backend commands with their arguments", async () => {
         await listMeetings();
+        await createMeeting("2026-09-24");
+        await getMeeting(3);
+        await updateMeeting(3, {
+            name: "Weekly sync",
+            date: "2026-09-25",
+            notes: "- [ ] Send notes",
+        });
 
-        expect(invoke).toHaveBeenCalledWith("list_meetings");
+        expect(invoke.mock.calls).toEqual([
+            ["list_meetings"],
+            ["create_meeting", { date: "2026-09-24" }],
+            ["get_meeting", { id: 3 }],
+            [
+                "update_meeting",
+                {
+                    id: 3,
+                    name: "Weekly sync",
+                    date: "2026-09-25",
+                    notes: "- [ ] Send notes",
+                },
+            ],
+        ]);
     });
 });
 

@@ -1,4 +1,14 @@
 /**
+ * Returns the calendar date of `now` in the local time zone, in the format `YYYY-MM-DD`.
+ */
+export function toMeetingDate(now: Date): string {
+    const year = String(now.getFullYear()).padStart(4, "0");
+    const month = String(now.getMonth() + 1).padStart(2, "0");
+    const day = String(now.getDate()).padStart(2, "0");
+    return `${year}-${month}-${day}`;
+}
+
+/**
  * Returns a meeting date (`YYYY-MM-DD`) written for people, in the medium date style of
  * the user's locale, such as "Sep 24, 2026". Returns the text unchanged if it is not a
  * meeting date.
