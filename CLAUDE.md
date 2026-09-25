@@ -115,6 +115,7 @@ A refactor changes the structure of the code without changing its behavior. For 
 - An agent must never modify a plan file in `docs/plans` once the file has been merged into main.
 - Never reference sections of an ADR or plan in docstrings or code comments. This makes code documentation brittle.
 - Never put files in a `superpowers` subdirectory. Use the existing `docs` directory structure.
+- Never implement a feature, or any part of it, before a human approves its plan. During design and planning, a spike may only answer a specific open question, such as whether a library works in the test environment. Write the smallest code that answers the question, keep it in a throwaway location outside the branch, never commit it, and stop as soon as the question is answered. If checking the plan seems to need more than that, ask a human first.
 
 ### Guidelines
 
