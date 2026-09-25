@@ -11,10 +11,11 @@ function App() {
         <TooltipProvider>
             <MemoryRouter>
                 <SidebarProvider
+                    className="h-svh"
                     style={{ "--sidebar-width": "19rem" } as CSSProperties}
                 >
                     <AppSidebar />
-                    <SidebarInset>
+                    <SidebarInset className="min-h-0 overflow-hidden">
                         <Routes>
                             <Route
                                 path="/"

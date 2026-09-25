@@ -58,20 +58,27 @@ export function MeetingsPage() {
     }
 
     return (
-        <>
+        // The header and the title stay in place, and the last row, which gets the
+        // remaining height, scrolls.
+        <div className="grid min-h-0 flex-1 grid-rows-[auto_auto_minmax(0,1fr)]">
             <PageHeader crumbs={[{ label: "Meetings" }]}>
                 <Button onClick={createNote} disabled={creating}>
                     <PlusIcon />
                     New note
                 </Button>
             </PageHeader>
-            <div className="flex flex-1 flex-col gap-4 p-4 pt-0">
+            <div className="flex flex-col gap-4 px-4 pb-2">
                 <h1 className={PAGE_TITLE_CLASSES}>Meetings</h1>
                 {createFailed && (
                     <p role="alert" className="text-sm text-destructive">
                         Couldn't create a note. Try again.
                     </p>
                 )}
+            </div>
+            {/* `pt-2` leaves room for the focus ring of the first meeting, which the
+                scrolling area would cut off. The title row has 8 pixels less padding,
+                so the list stays at the same position. */}
+            <div className="overflow-y-auto px-4 pt-2 pb-4">
                 {list.kind === "loading" && (
                     <p className="text-sm text-muted-foreground">Loading…</p>
                 )}
@@ -108,6 +115,6 @@ export function MeetingsPage() {
                     </ul>
                 )}
             </div>
-        </>
+        </div>
     );
 }

@@ -68,8 +68,11 @@ export function LinkPopover({
                 <LinkIcon />
             </PopoverTrigger>
             <PopoverContent
+                // `contextElement` lets the popover follow the text when the notes
+                // scroll, not only when the window scrolls.
                 anchor={() => ({
                     getBoundingClientRect: () => linkTextRect(editor),
+                    contextElement: editor.view.dom,
                 })}
                 align="start"
                 finalFocus={false}
