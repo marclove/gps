@@ -21,3 +21,13 @@ window.matchMedia = (query: string) =>
         removeListener: () => {},
         dispatchEvent: () => false,
     }) as MediaQueryList;
+
+// The editor measures text positions when it scrolls to or reads the selection.
+Range.prototype.getClientRects = () =>
+    ({
+        length: 0,
+        item: () => null,
+        [Symbol.iterator]: [][Symbol.iterator],
+    }) as unknown as DOMRectList;
+Range.prototype.getBoundingClientRect = () => new DOMRect();
+document.elementFromPoint = () => null;

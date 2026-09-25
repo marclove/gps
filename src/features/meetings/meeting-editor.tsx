@@ -7,6 +7,7 @@ import {
     type Meeting,
     type MeetingChanges,
 } from "@/lib/meetings";
+import { NotesEditor } from "./notes-editor";
 import { SaveStatus } from "./save-status";
 import { useAutosave } from "./use-autosave";
 
@@ -40,6 +41,11 @@ export function MeetingEditor({
         nameInput.current?.focus();
         nameInput.current?.select();
     }, [isNew]);
+
+    const changeNotes = useCallback(
+        (notes: string) => setDraft((current) => ({ ...current, notes })),
+        [],
+    );
 
     return (
         <>
@@ -79,6 +85,10 @@ export function MeetingEditor({
                         className="w-auto"
                     />
                 </div>
+                <NotesEditor
+                    initialMarkdown={meeting.notes}
+                    onChange={changeNotes}
+                />
             </div>
         </>
     );

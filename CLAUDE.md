@@ -38,7 +38,8 @@ Running a single test:
 - Frontend tests live next to the code as `*.test.tsx` / `*.test.ts` under `src/`, run in jsdom with React Testing Library. `src/test/setup.ts` registers jest-dom matchers and runs `cleanup()` after each test.
 - Tauri is not available in jsdom, so mock `@tauri-apps/api/core` (see `src/lib/meetings.test.ts`). Use `vi.hoisted` for the mock function so it is available before the module is imported.
 - Rust unit tests go in a `#[cfg(test)] mod tests` block in the same file as the code under test.
-- `src/test/setup.ts` also stubs browser APIs that jsdom does not implement, such as `window.matchMedia`, which the sidebar uses. When a component fails in tests because jsdom lacks a browser API, add a minimal stub there with a comment that says which component needs it.
+- `src/test/setup.ts` also stubs browser APIs that jsdom does not implement, such as `window.matchMedia`, which the sidebar uses, and `Range.getClientRects`, `Range.getBoundingClientRect`, and `document.elementFromPoint`, which the TipTap notes editor uses. When a component fails in tests because jsdom lacks a browser API, add a minimal stub there with a comment that says which component needs it.
+- To type into the TipTap editor after a toolbar click in a test, use `user.keyboard`, because `user.type` clicks the element first and moves the cursor.
 
 ## Architecture
 
