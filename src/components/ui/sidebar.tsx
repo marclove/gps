@@ -30,7 +30,9 @@ const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7;
 const SIDEBAR_WIDTH = "16rem";
 const SIDEBAR_WIDTH_MOBILE = "18rem";
 const SIDEBAR_WIDTH_ICON = "3rem";
-const SIDEBAR_KEYBOARD_SHORTCUT = "b";
+// Ctrl+Cmd+S is the standard macOS shortcut for showing and hiding a sidebar. The
+// shadcn default, Cmd+B, conflicts with bold in the notes editor.
+const SIDEBAR_KEYBOARD_SHORTCUT = "s";
 
 type SidebarContextProps = {
     state: "expanded" | "collapsed";
@@ -99,8 +101,9 @@ function SidebarProvider({
     React.useEffect(() => {
         const handleKeyDown = (event: KeyboardEvent) => {
             if (
-                event.key === SIDEBAR_KEYBOARD_SHORTCUT &&
-                (event.metaKey || event.ctrlKey)
+                event.key.toLowerCase() === SIDEBAR_KEYBOARD_SHORTCUT &&
+                event.metaKey &&
+                event.ctrlKey
             ) {
                 event.preventDefault();
                 toggleSidebar();
