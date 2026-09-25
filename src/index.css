@@ -131,14 +131,13 @@
     }
 }
 
-/* Headings in the notes editor. An H1 is smaller than the meeting name and uses normal
-   weight, so the name stays the most prominent text on the page. All headings have the
+/* Headings in the notes editor. An H1 is smaller than the meeting name, so the name
+   stays the most prominent text on the page. All headings have the
    same space above them, and only a little space below them, with no extra space from
    the element that follows. A heading at the top of a note has no space above it. */
 @layer utilities {
     .notes-editor h1 {
         font-size: 1.5rem;
-        font-weight: 400;
     }
 
     .notes-editor :is(h1, h2, h3, h4, h5, h6) {
