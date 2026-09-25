@@ -39,7 +39,7 @@ A user can see a list of their meeting notes, create a new note with one click, 
 
 - The page shows a text field labeled "Meeting name", a date field labeled "Meeting date", a formatting toolbar, and a multi-line text area labeled "Notes".
 - When the user opens an existing meeting, the notes are shown formatted. For example, stored Markdown `## Agenda` is shown as a heading, and `- [x] Review roadmap` is shown as a checked checklist item. The Markdown punctuation itself is not shown.
-- The toolbar has buttons labeled "Bold", "Italic", "Heading", "Bullet list", "Numbered list", and "Task list", which apply that formatting.
+- The toolbar has buttons labeled "Bold", "Italic", "Heading 1", "Heading 2", "Heading 3", "Bullet list", "Numbered list", and "Task list", which apply that formatting.
 - If the meeting does not exist, the page says "This meeting doesn't exist" and links back to the Meetings page.
 
 ### Saving

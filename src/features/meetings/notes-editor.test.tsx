@@ -37,7 +37,9 @@ describe("NotesEditor", () => {
 
     it.each([
         ["Bold", "**Decision**"],
-        ["Heading", "## Decision"],
+        ["Heading 1", "# Decision"],
+        ["Heading 2", "## Decision"],
+        ["Heading 3", "### Decision"],
         ["Bullet list", "- Decision"],
         ["Numbered list", "1. Decision"],
         ["Task list", "- [ ] Decision"],

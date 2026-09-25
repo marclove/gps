@@ -9,7 +9,9 @@ import {
 import StarterKit from "@tiptap/starter-kit";
 import {
     BoldIcon,
+    Heading1Icon,
     Heading2Icon,
+    Heading3Icon,
     ItalicIcon,
     ListChecksIcon,
     ListIcon,
@@ -40,11 +42,25 @@ const TOOLBAR: ToolbarItem[] = [
         run: (editor) => editor.chain().focus().toggleItalic().run(),
     },
     {
-        label: "Heading",
+        label: "Heading 1",
+        icon: Heading1Icon,
+        isActive: (editor) => editor.isActive("heading", { level: 1 }),
+        run: (editor) =>
+            editor.chain().focus().toggleHeading({ level: 1 }).run(),
+    },
+    {
+        label: "Heading 2",
         icon: Heading2Icon,
         isActive: (editor) => editor.isActive("heading", { level: 2 }),
         run: (editor) =>
             editor.chain().focus().toggleHeading({ level: 2 }).run(),
+    },
+    {
+        label: "Heading 3",
+        icon: Heading3Icon,
+        isActive: (editor) => editor.isActive("heading", { level: 3 }),
+        run: (editor) =>
+            editor.chain().focus().toggleHeading({ level: 3 }).run(),
     },
     {
         label: "Bullet list",
