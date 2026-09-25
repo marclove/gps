@@ -9,14 +9,15 @@ import {
     BreadcrumbSeparator,
 } from "@/components/ui/breadcrumb";
 import { Separator } from "@/components/ui/separator";
-import { SidebarTrigger } from "@/components/ui/sidebar";
+import { SidebarTrigger, useSidebar } from "@/components/ui/sidebar";
 
 /** One item of the breadcrumb trail. An item without `to` is the current page. */
 export type Crumb = { label: string; to?: string };
 
 /**
- * The header at the top of each page. It shows the breadcrumb trail, optional content at
- * the right side, such as a status, and the button that shows or hides the sidebar.
+ * The header at the top of each page. It shows the breadcrumb trail and optional content at
+ * the right side, such as a status. When the sidebar is hidden, it also shows the button
+ * that shows the sidebar again.
  *
  * The header is also a drag region for the window. Its left padding keeps the breadcrumb
  * trail clear of the macOS window controls.
@@ -28,6 +29,8 @@ export function PageHeader({
     crumbs: Crumb[];
     children?: ReactNode;
 }) {
+    const { open } = useSidebar();
+
     return (
         <header
             data-tauri-drag-region="deep"
@@ -56,16 +59,18 @@ export function PageHeader({
                 </BreadcrumbList>
             </Breadcrumb>
             <div className="ml-auto flex items-center gap-2">
-                {children && (
+                {children}
+                {!open && (
                     <>
-                        {children}
-                        <Separator
-                            orientation="vertical"
-                            className="ml-2 data-vertical:h-4 data-vertical:self-auto"
-                        />
+                        {children && (
+                            <Separator
+                                orientation="vertical"
+                                className="ml-2 data-vertical:h-4 data-vertical:self-auto"
+                            />
+                        )}
+                        <SidebarTrigger className="-mr-1" />
                     </>
                 )}
-                <SidebarTrigger className="-mr-1" />
             </div>
         </header>
     );

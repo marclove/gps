@@ -8,6 +8,9 @@ import {
     SidebarMenu,
     SidebarMenuButton,
     SidebarMenuItem,
+    SidebarSeparator,
+    SidebarTrigger,
+    useSidebar,
 } from "@/components/ui/sidebar";
 
 /** A section of the application that the sidebar links to. */
@@ -15,20 +18,33 @@ type Section = { title: string; path: string };
 
 const SECTIONS: Section[] = [{ title: "Meetings", path: "/meetings" }];
 
-/** The floating sidebar with the application name and the navigation between sections. */
+/**
+ * The floating sidebar with the application name, the button that hides the sidebar, and
+ * the navigation between sections.
+ */
 export function AppSidebar() {
     const { pathname } = useLocation();
+    const { open } = useSidebar();
 
     return (
         <Sidebar side="right" variant="floating">
-            <SidebarHeader data-tauri-drag-region="deep">
-                <div className="flex items-center gap-2 p-2">
+            {/* The header is 48 pixels tall inside the 8 pixel margin of the sidebar, so
+                its center lines up with the center of the 64 pixel page header. */}
+            <SidebarHeader
+                data-tauri-drag-region="deep"
+                className="h-12 flex-row items-center justify-between py-0"
+            >
+                <div className="flex items-center gap-2">
                     <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
                         <NotebookPenIcon className="size-4" />
                     </div>
                     <span className="font-medium">gps</span>
                 </div>
+                {/* When the sidebar is hidden, the page header shows this button instead.
+                    Only one of the two is rendered at a time. */}
+                {open && <SidebarTrigger />}
             </SidebarHeader>
+            <SidebarSeparator />
             <SidebarContent>
                 <nav aria-label="Main">
                     <SidebarGroup>

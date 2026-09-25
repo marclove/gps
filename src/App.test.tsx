@@ -50,4 +50,35 @@ describe("App", () => {
 
         expect(pageHeader).toHaveClass("pl-24");
     });
+
+    it("moves the sidebar button to the page header while the sidebar is hidden", async () => {
+        const user = userEvent.setup();
+        render(<App />);
+        const sidebarHeader = screen
+            .getByText("gps")
+            .closest('[data-sidebar="header"]') as HTMLElement;
+        const pageHeader = screen
+            .getByRole("navigation", { name: "breadcrumb" })
+            .closest("header") as HTMLElement;
+
+        await user.click(
+            within(sidebarHeader).getByRole("button", {
+                name: "Toggle Sidebar",
+            }),
+        );
+        await user.click(
+            within(pageHeader).getByRole("button", { name: "Toggle Sidebar" }),
+        );
+
+        expect(
+            within(sidebarHeader).getByRole("button", {
+                name: "Toggle Sidebar",
+            }),
+        ).toBeInTheDocument();
+        expect(
+            within(pageHeader).queryByRole("button", {
+                name: "Toggle Sidebar",
+            }),
+        ).not.toBeInTheDocument();
+    });
 });

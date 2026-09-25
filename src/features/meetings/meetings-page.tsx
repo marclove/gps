@@ -96,7 +96,9 @@ export function MeetingsPage() {
                     </p>
                 )}
                 {list.kind === "loaded" && list.meetings.length > 0 && (
-                    <ul className="flex flex-col gap-1">
+                    // The negative margin lines up the text of each row, not its
+                    // hover background, with the page title.
+                    <ul className="-mx-3 flex flex-col gap-1">
                         {list.meetings.map((meeting) => (
                             <li key={meeting.id}>
                                 <Link
