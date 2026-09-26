@@ -2,6 +2,15 @@ import type { ReactNode } from "react";
 import { Separator } from "@/components/ui/separator";
 
 /**
+ * The grid classes of an editor page with a `DetailsSidebar`. The first column holds the
+ * editor and gets the remaining width. The second column holds the sidebar, and its
+ * width changes with the window width, between 18rem and 24rem. The one row fills the
+ * height of the main area.
+ */
+export const DETAILS_PAGE_COLUMNS =
+    "grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_clamp(18rem,calc(11rem_+_11vw),24rem)] grid-rows-[minmax(0,1fr)]";
+
+/**
  * The sidebar at the right side of an editor page, such as the meeting editor. It is as
  * tall as the main area. From top to bottom, it shows the properties of the item, the
  * actions on the whole item, a separator, and the lists that belong to the item. The

@@ -34,7 +34,11 @@ type ArchivedNeighbors = {
 export type ArchivableListProps<T extends { id: number; name: string }> = {
     /** The kind of the items, which selects the archive commands. */
     kind: ArchiveKind;
-    /** Loads the items that are not archived. Called again after each archive or restore. */
+    /**
+     * Loads the items that are not archived. A new `load` function does not load the
+     * list again by itself. The list loads again only after a retry, an archive, or a
+     * restore.
+     */
     load: () => Promise<T[]>;
     /** The route that opens the item. */
     itemPath: (item: T) => string;

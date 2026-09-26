@@ -26,7 +26,7 @@ erDiagram
         INTEGER id PK "Identifier that SQLite assigns"
         TEXT name "Not null. New initiatives get 'Untitled initiative'"
         TEXT description "Not null, default empty. Markdown"
-        TEXT raci_role "Null until the user chooses a role. responsible, accountable, consulted, or informed"
+        TEXT raci_role "Null when the user has not chosen a role. responsible, accountable, consulted, or informed"
         TEXT created_at "Not null. RFC 3339 timestamp in UTC"
         TEXT updated_at "Not null. RFC 3339 timestamp in UTC"
         TEXT archived_at "Null until the initiative is archived. RFC 3339 timestamp in UTC"
@@ -51,7 +51,7 @@ Each row is one meeting and its notes. A meeting can have many tasks, which are 
 Each row is one company initiative that the user has a responsibility in, such as a product launch or a migration (see ADR 0013). An initiative can have many meetings.
 
 - `description` holds the description as Markdown, like the notes of a meeting.
-- `raci_role` is the role of the user in the initiative, from the RACI model. It is empty until the user chooses a role. A `CHECK` constraint accepts only the four lowercase values `responsible`, `accountable`, `consulted`, and `informed`. The backend also checks the value before it writes it.
+- `raci_role` is the role of the user in the initiative, from the RACI model. It is empty when the user has not chosen a role. A `CHECK` constraint accepts only the four lowercase values `responsible`, `accountable`, `consulted`, and `informed`. The backend also checks the value before it writes it.
 - `archived_at` is empty for an initiative that is not archived. Archiving and restoring work as for a meeting: the backend sets the current time, keeps the time that was recorded first if the initiative is already archived, and clears it when the user restores the initiative. The list of initiatives shows only the initiatives where `archived_at` is empty.
 - Archiving an initiative keeps the assignments of its meetings. The meetings stay assigned to the archived initiative.
 - The backend sets `created_at` and `updated_at`. It changes `updated_at` each time the name, the description, or the role changes. Archiving and restoring do not change `updated_at`.

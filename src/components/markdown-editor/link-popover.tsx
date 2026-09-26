@@ -33,9 +33,9 @@ function withScheme(address: string) {
 }
 
 /**
- * The Link button of the Markdown editor toolbar and its popover, where the user adds, changes,
- * or removes the link at the current selection. The parent controls whether the
- * popover is open, so that a keyboard shortcut can open it too.
+ * The Link button of the Markdown editor toolbar and its popover, where the user adds,
+ * changes, or removes the link at the current selection. The parent controls whether
+ * the popover is open, so that a keyboard shortcut can open it too.
  */
 export function LinkPopover({
     editor,
@@ -69,7 +69,7 @@ export function LinkPopover({
             </PopoverTrigger>
             <PopoverContent
                 // `contextElement` lets the popover follow the text when the editor text
-                // scroll, not only when the window scrolls.
+                // scrolls, not only when the window scrolls.
                 anchor={() => ({
                     getBoundingClientRect: () => linkTextRect(editor),
                     contextElement: editor.view.dom,

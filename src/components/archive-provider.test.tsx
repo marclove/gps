@@ -250,6 +250,7 @@ describe("ArchiveProvider", () => {
         expect(harness.restoredId()).toBe("none");
         expect(harness.version()).toBe(3);
     });
+
     it("archives and restores an initiative with the initiative commands", async () => {
         const harness = renderHarness();
 

@@ -1,7 +1,10 @@
 import { ArchiveIcon } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useNavigate } from "react-router";
-import { DetailsSidebar } from "@/components/details-sidebar";
+import {
+    DETAILS_PAGE_COLUMNS,
+    DetailsSidebar,
+} from "@/components/details-sidebar";
 import { MarkdownEditor } from "@/components/markdown-editor/markdown-editor";
 import { PageHeader } from "@/components/page-header";
 import { PAGE_TITLE_CLASSES } from "@/components/page-title";
@@ -92,7 +95,7 @@ export function InitiativeEditor({
         // right, as tall as the main area. In the left column, the header and the name row
         // stay in place, and the description editor gets the remaining height and scrolls
         // the description itself.
-        <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_clamp(18rem,calc(11rem_+_11vw),24rem)] grid-rows-[minmax(0,1fr)]">
+        <div className={DETAILS_PAGE_COLUMNS}>
             <div className="grid min-h-0 grid-rows-[auto_auto_minmax(0,1fr)]">
                 <PageHeader
                     crumbs={[
