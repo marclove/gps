@@ -175,6 +175,22 @@ describe("ActionItemsPanel", () => {
         expect(addField()).toHaveValue("にほん");
     });
 
+    it("does not add an item on the Enter that WebKit sends after an input method composition ends", async () => {
+        answer();
+        render(<ActionItemsPanel meetingId={1} />);
+        await screen.findByText("No action items yet");
+
+        fireEvent.change(addField(), { target: { value: "にほん" } });
+        fireEvent.keyDown(addField(), {
+            key: "Enter",
+            keyCode: 229,
+            isComposing: false,
+        });
+
+        expect(createCalls()).toEqual([]);
+        expect(addField()).toHaveValue("にほん");
+    });
+
     it("keeps the text and reports the problem when adding fails", async () => {
         answer({ create: () => Promise.reject("database is locked") });
         const user = userEvent.setup();

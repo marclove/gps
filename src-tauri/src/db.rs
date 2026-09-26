@@ -76,6 +76,7 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("gps.sqlite");
         let connection = open(&path).unwrap();
+        assert!(crate::meetings::list(&connection).unwrap().is_empty());
         let meeting = crate::meetings::create(&connection, "2026-09-24").unwrap();
         let task = crate::tasks::create(&connection, meeting.id, "Send the deck").unwrap();
         drop(connection);

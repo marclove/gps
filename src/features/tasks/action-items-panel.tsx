@@ -23,8 +23,9 @@ const MESSAGE_TEXTS: Record<Exclude<Message, null>, string> = {
 };
 
 /**
- * The panel that shows the action items of a meeting and lets the user add and remove items.
- * Only the list scrolls. The heading and the field that adds an item stay in place.
+ * The panel that shows the action items of a meeting. The user can add items, change
+ * their text, check them off, and remove them. Only the list scrolls. The heading and
+ * the field that adds an item stay in place.
  */
 export function ActionItemsPanel({ meetingId }: { meetingId: number }) {
     const headingId = useId();
@@ -69,8 +70,14 @@ export function ActionItemsPanel({ meetingId }: { meetingId: number }) {
     }, [load]);
 
     async function add(event: KeyboardEvent<HTMLInputElement>) {
-        // Enter that confirms an input method composition does not add an item.
-        if (event.key !== "Enter" || event.nativeEvent.isComposing) return;
+        // Enter that confirms an input method composition does not add an item. WebKit ends the
+        // composition before this keydown, so it sends `isComposing` as false and key code 229.
+        if (
+            event.key !== "Enter" ||
+            event.nativeEvent.isComposing ||
+            event.keyCode === 229
+        )
+            return;
         const text = newText.trim();
         if (text === "") return;
         // Clear the field at once, so the user can type the next item while this one saves.

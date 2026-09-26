@@ -266,8 +266,10 @@ mod tests {
         let completed_again = set_completed(&connection, created.id, true).unwrap();
         assert_eq!(completed_again.completed_at.as_deref(), Some(OLD_TIME));
 
+        set_updated_at(&connection, created.id, OLD_TIME);
         let uncompleted = set_completed(&connection, created.id, false).unwrap();
         assert_eq!(uncompleted.completed_at, None);
+        assert_ne!(uncompleted.updated_at, OLD_TIME);
 
         assert!(matches!(
             set_completed(&connection, 999, true),
