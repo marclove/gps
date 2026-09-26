@@ -1,31 +1,36 @@
 import { createContext, useContext } from "react";
 
-/** The identifier and name of a meeting to archive. */
-export type MeetingToArchive = {
+/** A kind of item that the user can archive. */
+export type ArchiveKind = "meeting" | "initiative";
+
+/** The kind, identifier, and name of an item to archive. */
+export type ItemToArchive = {
+    kind: ArchiveKind;
     id: number;
     /**
-     * The meeting's raw name, exactly as stored. It may be empty; the archive
-     * toast shows "Untitled meeting" for an empty name.
+     * The item's raw name, exactly as stored. It may be empty; the archive toast
+     * shows the default name of the kind for an empty name, such as "Untitled
+     * meeting".
      */
     name: string;
 };
 
-/** The identifier of a meeting a restore just brought back. */
-export type RestoredMeeting = { id: number };
+/** The kind and identifier of an item a restore just brought back. */
+export type RestoredItem = { kind: ArchiveKind; id: number };
 
 /** The archive action and its state, shared by every page. */
 export type ArchiveApi = {
     /**
-     * Archives the meeting and shows the archive toast.
+     * Archives the item and shows the archive toast.
      *
-     * Rejects if the meeting cannot be archived. It does not show the toast in that
+     * Rejects if the item cannot be archived. It does not show the toast in that
      * case, so the caller can show its own failure message.
      */
-    archive: (meeting: MeetingToArchive) => Promise<void>;
+    archive: (item: ItemToArchive) => Promise<void>;
     /** Counts every archive and restore, so a page knows its list is out of date. */
     version: number;
-    /** The meeting a restore just brought back, or `null` if none is pending. */
-    restored: RestoredMeeting | null;
+    /** The item a restore just brought back, or `null` if none is pending. */
+    restored: RestoredItem | null;
 };
 
 /** Holds the archive action and its state. Provided by `ArchiveProvider`. */

@@ -19,7 +19,7 @@ import {
 } from "@/lib/meetings";
 import { ActionItemsPanel } from "@/features/tasks/action-items-panel";
 import type { MeetingsPageState } from "./meetings-page";
-import { useArchive } from "./use-archive";
+import { useArchive } from "@/components/use-archive";
 
 /** Matches a complete calendar date in the `YYYY-MM-DD` format that the backend accepts. */
 const COMPLETE_DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -70,6 +70,7 @@ export function MeetingEditor({
         setArchiving(true);
         try {
             await archiveInProvider({
+                kind: "meeting",
                 id: meeting.id,
                 name: draft.name,
             });

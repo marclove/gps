@@ -10,7 +10,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Toaster } from "@/components/toaster";
 import { toast } from "@/components/ui/toast";
 import { ArchiveProvider } from "./archive-provider";
-import { useArchive, type ArchiveApi } from "./use-archive";
+import { useArchive, type ArchiveApi, type ItemToArchive } from "./use-archive";
 
 const invoke = vi.hoisted(() => vi.fn());
 
@@ -40,6 +40,9 @@ function Harness({ onReady }: { onReady: (api: ArchiveApi) => void }) {
         <div>
             <span data-testid="version">{api.version}</span>
             <span data-testid="restored">{api.restored?.id ?? "none"}</span>
+            <span data-testid="restored-kind">
+                {api.restored?.kind ?? "none"}
+            </span>
         </div>
     );
 }
@@ -59,10 +62,10 @@ function renderHarness() {
         </Toaster>,
     );
     return {
-        archive: (meeting: { id: number; name: string }) =>
-            ref.current!.archive(meeting),
+        archive: (item: ItemToArchive) => ref.current!.archive(item),
         version: () => Number(screen.getByTestId("version").textContent),
         restoredId: () => screen.getByTestId("restored").textContent,
+        restoredKind: () => screen.getByTestId("restored-kind").textContent,
     };
 }
 
@@ -80,7 +83,9 @@ describe("ArchiveProvider", () => {
     it("shows a toast with the name and Undo after an archive", async () => {
         const harness = renderHarness();
 
-        await act(() => harness.archive({ id: 1, name: "Standup" }));
+        await act(() =>
+            harness.archive({ kind: "meeting", id: 1, name: "Standup" }),
+        );
 
         expect(invoke).toHaveBeenCalledWith("archive_meeting", { id: 1 });
         expect(
@@ -98,7 +103,9 @@ describe("ArchiveProvider", () => {
         const harness = renderHarness();
 
         await expect(
-            act(() => harness.archive({ id: 1, name: "Standup" })),
+            act(() =>
+                harness.archive({ kind: "meeting", id: 1, name: "Standup" }),
+            ),
         ).rejects.toThrow("boom");
 
         expect(
@@ -112,8 +119,12 @@ describe("ArchiveProvider", () => {
     it("closes the earlier toast when another meeting is archived", async () => {
         const harness = renderHarness();
 
-        await act(() => harness.archive({ id: 1, name: "Standup" }));
-        await act(() => harness.archive({ id: 2, name: "Kickoff" }));
+        await act(() =>
+            harness.archive({ kind: "meeting", id: 1, name: "Standup" }),
+        );
+        await act(() =>
+            harness.archive({ kind: "meeting", id: 2, name: "Kickoff" }),
+        );
 
         const toasts = notifications();
         expect(
@@ -135,7 +146,9 @@ describe("ArchiveProvider", () => {
                 : Promise.resolve(null),
         );
         const harness = renderHarness();
-        await act(() => harness.archive({ id: 1, name: "Standup" }));
+        await act(() =>
+            harness.archive({ kind: "meeting", id: 1, name: "Standup" }),
+        );
 
         const button = undoButton();
         fireEvent.click(button);
@@ -165,7 +178,9 @@ describe("ArchiveProvider", () => {
                 : Promise.resolve(null),
         );
         const harness = renderHarness();
-        await act(() => harness.archive({ id: 1, name: "Standup" }));
+        await act(() =>
+            harness.archive({ kind: "meeting", id: 1, name: "Standup" }),
+        );
 
         await act(() => fireEvent.click(undoButton()));
 
@@ -187,7 +202,9 @@ describe("ArchiveProvider", () => {
         const harness = renderHarness();
         expect(harness.version()).toBe(0);
 
-        await act(() => harness.archive({ id: 1, name: "Standup" }));
+        await act(() =>
+            harness.archive({ kind: "meeting", id: 1, name: "Standup" }),
+        );
         expect(harness.version()).toBe(1);
 
         await act(() => fireEvent.click(undoButton()));
@@ -202,10 +219,14 @@ describe("ArchiveProvider", () => {
                 : Promise.resolve(null),
         );
         const harness = renderHarness();
-        await act(() => harness.archive({ id: 1, name: "Standup" }));
+        await act(() =>
+            harness.archive({ kind: "meeting", id: 1, name: "Standup" }),
+        );
         await act(() => fireEvent.click(undoButton()));
 
-        await act(() => harness.archive({ id: 2, name: "Kickoff" }));
+        await act(() =>
+            harness.archive({ kind: "meeting", id: 2, name: "Kickoff" }),
+        );
 
         const toasts = notifications();
         expect(
@@ -228,5 +249,91 @@ describe("ArchiveProvider", () => {
         ).not.toBeInTheDocument();
         expect(harness.restoredId()).toBe("none");
         expect(harness.version()).toBe(3);
+    });
+    it("archives and restores an initiative with the initiative commands", async () => {
+        const harness = renderHarness();
+
+        await act(() =>
+            harness.archive({ kind: "initiative", id: 1, name: "Launch" }),
+        );
+
+        expect(invoke).toHaveBeenCalledWith("archive_initiative", { id: 1 });
+        expect(
+            within(notifications()).getByText('Archived "Launch".'),
+        ).toBeInTheDocument();
+
+        await act(() => fireEvent.click(undoButton()));
+
+        await waitFor(() => expect(harness.restoredId()).toBe("1"));
+        expect(harness.restoredKind()).toBe("initiative");
+        expect(invoke).toHaveBeenCalledWith("unarchive_initiative", { id: 1 });
+        expect(invoke).not.toHaveBeenCalledWith(
+            "archive_meeting",
+            expect.anything(),
+        );
+        expect(invoke).not.toHaveBeenCalledWith(
+            "unarchive_meeting",
+            expect.anything(),
+        );
+    });
+
+    it("names an initiative with an empty name Untitled initiative in the toast", async () => {
+        const harness = renderHarness();
+
+        await act(() =>
+            harness.archive({ kind: "initiative", id: 1, name: "" }),
+        );
+
+        expect(
+            within(notifications()).getByText(
+                'Archived "Untitled initiative".',
+            ),
+        ).toBeInTheDocument();
+    });
+
+    it("says that the initiative could not be restored", async () => {
+        invoke.mockImplementation((command: string) =>
+            command === "unarchive_initiative"
+                ? Promise.reject(new Error("boom"))
+                : Promise.resolve(null),
+        );
+        const harness = renderHarness();
+        await act(() =>
+            harness.archive({ kind: "initiative", id: 1, name: "Launch" }),
+        );
+
+        await act(() => fireEvent.click(undoButton()));
+
+        const toasts = notifications();
+        expect(
+            await within(toasts).findByText(
+                "Couldn't restore the initiative. Try again.",
+            ),
+        ).toBeInTheDocument();
+        expect(
+            within(toasts).getByRole("button", { name: "Undo" }),
+        ).toBeInTheDocument();
+    });
+
+    it("closes a meeting's toast when an initiative is archived", async () => {
+        const harness = renderHarness();
+
+        await act(() =>
+            harness.archive({ kind: "meeting", id: 1, name: "Standup" }),
+        );
+        await act(() =>
+            harness.archive({ kind: "initiative", id: 1, name: "Launch" }),
+        );
+
+        const toasts = notifications();
+        expect(
+            within(toasts).getByText('Archived "Launch".'),
+        ).toBeInTheDocument();
+        expect(
+            within(toasts).queryByText('Archived "Standup".'),
+        ).not.toBeInTheDocument();
+        expect(
+            within(toasts).getAllByRole("button", { name: "Undo" }),
+        ).toHaveLength(1);
     });
 });
