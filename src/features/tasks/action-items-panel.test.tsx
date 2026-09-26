@@ -27,7 +27,8 @@ function task(id: number, description: string): Task {
 
 /**
  * Answers the task commands. `create` answers `create_task`, `complete` answers
- * `set_task_completed`, and `update` answers `update_task_description`.
+ * `set_task_completed`, `update` answers `update_task_description`, and `remove`
+ * answers `delete_task`.
  */
 function answer({
     tasks = [],
@@ -36,11 +37,13 @@ function answer({
         Promise.resolve(tasks.find((stored) => stored.id === id) as Task),
     update = (id: number, description: string) =>
         Promise.resolve(task(id, description)),
+    remove = () => Promise.resolve(),
 }: {
     tasks?: Task[];
     create?: (description: string) => Promise<Task>;
     complete?: (id: number, completed: boolean) => Promise<Task>;
     update?: (id: number, description: string) => Promise<Task>;
+    remove?: (id: number) => Promise<void>;
 } = {}) {
     invoke.mockImplementation(
         async (command: string, args: Record<string, unknown> = {}) => {
@@ -59,6 +62,8 @@ function answer({
                         args.id as number,
                         args.description as string,
                     );
+                case "delete_task":
+                    return remove(args.id as number);
                 default:
                     throw `unexpected command ${command}`;
             }
@@ -343,5 +348,72 @@ describe("ActionItemsPanel", () => {
             ]),
         );
         expect(field).toHaveValue("Send the deck to Alex");
+    });
+
+    it("saves the edited text when the removal fails", async () => {
+        answer({
+            tasks: [task(1, "Send the deck"), task(2, "Book a room")],
+            remove: () => Promise.reject("database is locked"),
+        });
+        const user = userEvent.setup();
+        render(<ActionItemsPanel meetingId={1} />);
+        await waitFor(() =>
+            expect(itemValues()).toEqual(["Send the deck", "Book a room"]),
+        );
+
+        await user.click(
+            screen.getAllByRole("textbox", { name: "Action item" })[1],
+        );
+        await user.keyboard("{End} for Friday");
+        await user.click(
+            screen.getByRole("button", {
+                name: 'Remove "Book a room for Friday"',
+            }),
+        );
+
+        expect(await screen.findByRole("alert")).toHaveTextContent(
+            "Couldn't remove the action item. Try again.",
+        );
+        await waitFor(
+            () =>
+                expect(updateCalls()).toEqual([
+                    [
+                        "update_task_description",
+                        { id: 2, description: "Book a room for Friday" },
+                    ],
+                ]),
+            { timeout: 2000 },
+        );
+    });
+
+    it("reports each failed save of the text, also when the failures follow each other quickly", async () => {
+        answer({
+            tasks: [task(1, "Send the deck")],
+            update: () => Promise.reject("database is locked"),
+        });
+        const user = userEvent.setup();
+        render(<ActionItemsPanel meetingId={1} />);
+        const checkbox = await screen.findByRole("checkbox", {
+            name: 'Complete "Send the deck"',
+        });
+        const field = screen.getByRole("textbox", { name: "Action item" });
+
+        await user.click(field);
+        await user.keyboard("{End} to Alex");
+        expect(await screen.findByRole("alert")).toHaveTextContent(
+            "Couldn't save the action item. Try again.",
+        );
+
+        await user.click(checkbox);
+        await waitFor(() =>
+            expect(screen.queryByRole("alert")).not.toBeInTheDocument(),
+        );
+
+        await user.click(field);
+        await user.keyboard("!");
+        await waitFor(() => expect(updateCalls()).toHaveLength(2));
+        expect(await screen.findByRole("alert")).toHaveTextContent(
+            "Couldn't save the action item. Try again.",
+        );
     });
 });

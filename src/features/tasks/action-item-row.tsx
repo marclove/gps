@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import { XIcon } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { useAutosave } from "@/features/meetings/use-autosave";
@@ -11,38 +13,53 @@ import { actionItemName, updateTaskDescription, type Task } from "@/lib/tasks";
  * when a save of the text succeeds and `false` when it fails. `inputRef` gets the
  * text field of the item, so that the panel can move the focus to it. `completed`
  * sets the checkbox, and `onCompletedChange` gets the new value when the user clicks it.
+ * `onRemove` deletes the item when the user clicks the remove button. It resolves to
+ * `true` when the item was deleted and to `false` when the delete failed.
  */
 export function ActionItemRow({
     task,
     completed,
     onCompletedChange,
     onSaveResult,
+    onRemove,
     inputRef,
 }: {
     task: Task;
     completed: boolean;
     onCompletedChange: (completed: boolean) => void;
     onSaveResult: (ok: boolean) => void;
+    onRemove: () => Promise<boolean>;
     inputRef: (element: HTMLInputElement | null) => void;
 }) {
     // The row owns the text after the first render, so that an answer from the backend never replaces what the user typed.
     const [text, setText] = useState(task.description);
-    const save = (description: string) =>
-        updateTaskDescription(task.id, description);
-    const { status } = useAutosave(text, save);
-
-    // Report each change of the status once, not again for each new callback from the panel.
+    // The delete that the user started last, until a save finds that it failed.
+    const removal = useRef<Promise<boolean> | null>(null);
+    // Use the latest callback from the panel when a save finishes.
     const onSaveResultRef = useRef(onSaveResult);
     useEffect(() => {
         onSaveResultRef.current = onSaveResult;
     }, [onSaveResult]);
-    useEffect(() => {
-        if (status === "saved") onSaveResultRef.current(true);
-        else if (status === "error") onSaveResultRef.current(false);
-    }, [status]);
+
+    const save = async (description: string) => {
+        // A change that waits while the item is removed is discarded only when the delete succeeds.
+        while (removal.current !== null) {
+            const current = removal.current;
+            if (await current) return;
+            if (removal.current === current) removal.current = null;
+        }
+        try {
+            await updateTaskDescription(task.id, description);
+        } catch (error) {
+            onSaveResultRef.current(false);
+            throw error;
+        }
+        onSaveResultRef.current(true);
+    };
+    useAutosave(text, save);
 
     return (
-        <li className="flex items-center gap-2">
+        <li className="group flex items-center gap-2">
             <Checkbox
                 aria-label={`Complete "${actionItemName(text)}"`}
                 checked={completed}
@@ -58,6 +75,17 @@ export function ActionItemRow({
                     completed ? "text-muted-foreground" : "text-foreground",
                 )}
             />
+            <Button
+                variant="ghost"
+                size="icon-sm"
+                aria-label={`Remove "${actionItemName(text)}"`}
+                className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+                onClick={() => {
+                    removal.current = onRemove();
+                }}
+            >
+                <XIcon />
+            </Button>
         </li>
     );
 }

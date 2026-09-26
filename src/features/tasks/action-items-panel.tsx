@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
     createTask,
+    deleteTask,
     listMeetingTasks,
     setTaskCompleted,
     type Task,
@@ -22,7 +23,7 @@ const MESSAGE_TEXTS: Record<Exclude<Message, null>, string> = {
 };
 
 /**
- * The panel that shows the action items of a meeting and lets the user add items.
+ * The panel that shows the action items of a meeting and lets the user add and remove items.
  * Only the list scrolls. The heading and the field that adds an item stay in place.
  */
 export function ActionItemsPanel({ meetingId }: { meetingId: number }) {
@@ -41,6 +42,9 @@ export function ActionItemsPanel({ meetingId }: { meetingId: number }) {
     );
     // The text field of each item, by task identifier, so that the focus can move to an item.
     const itemFields = useRef(new Map<number, HTMLInputElement>());
+    const addFieldRef = useRef<HTMLInputElement>(null);
+    // The position of the item that was removed last, until the focus has moved after the removal.
+    const removedIndex = useRef<number | null>(null);
 
     useEffect(() => {
         let current = true;
@@ -52,6 +56,17 @@ export function ActionItemsPanel({ meetingId }: { meetingId: number }) {
             current = false;
         };
     }, [meetingId, attempt]);
+
+    // Move the focus after a removal when the new list is in the page, so that the fields of the items are known.
+    useEffect(() => {
+        const index = removedIndex.current;
+        if (index === null || load.kind !== "loaded") return;
+        removedIndex.current = null;
+        // The item that is now in the same position, or else the item before it.
+        const next = load.tasks[Math.min(index, load.tasks.length - 1)];
+        if (next === undefined) addFieldRef.current?.focus();
+        else itemFields.current.get(next.id)?.focus();
+    }, [load]);
 
     async function add(event: KeyboardEvent<HTMLInputElement>) {
         // Enter that confirms an input method composition does not add an item.
@@ -87,7 +102,9 @@ export function ActionItemsPanel({ meetingId }: { meetingId: number }) {
             // Do not show the returned task, because a later click may have changed the item since.
             await setTaskCompleted(task.id, value);
             const saved = savedCompleted.current.get(task.id);
-            if (saved === undefined || saved.click < click) {
+            // An item that was removed since the click has no clicks, and keeps no saved value.
+            const removed = !completeClicks.current.has(task.id);
+            if (!removed && (saved === undefined || saved.click < click)) {
                 savedCompleted.current.set(task.id, { click, value });
             }
             setMessage(null);
@@ -101,6 +118,36 @@ export function ActionItemsPanel({ meetingId }: { meetingId: number }) {
                 setCompleted((current) => new Map(current).set(task.id, saved));
             }
         }
+    }
+
+    async function remove(task: Task): Promise<boolean> {
+        try {
+            await deleteTask(task.id);
+        } catch {
+            setMessage("remove");
+            return false;
+        }
+        setLoad((current) => {
+            if (current.kind !== "loaded") return current;
+            const index = current.tasks.findIndex(
+                (stored) => stored.id === task.id,
+            );
+            if (index !== -1) removedIndex.current = index;
+            return {
+                kind: "loaded",
+                tasks: current.tasks.filter((stored) => stored.id !== task.id),
+            };
+        });
+        setCompleted((current) => {
+            const next = new Map(current);
+            next.delete(task.id);
+            return next;
+        });
+        completeClicks.current.delete(task.id);
+        savedCompleted.current.delete(task.id);
+        itemFields.current.delete(task.id);
+        setMessage(null);
+        return true;
     }
 
     function itemFieldRef(id: number) {
@@ -155,6 +202,7 @@ export function ActionItemsPanel({ meetingId }: { meetingId: number }) {
                                 onSaveResult={(ok) =>
                                     setMessage(ok ? null : "save")
                                 }
+                                onRemove={() => remove(task)}
                                 inputRef={itemFieldRef(task.id)}
                             />
                         ))}
@@ -168,6 +216,7 @@ export function ActionItemsPanel({ meetingId }: { meetingId: number }) {
                     </p>
                 )}
                 <Input
+                    ref={addFieldRef}
                     aria-label="Add action item"
                     placeholder="Add action item"
                     value={newText}
