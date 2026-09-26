@@ -31,6 +31,7 @@ The terms "meeting", "Meetings page", and "editor page" are defined in [Spec 000
 
 - The page header of the editor page has a button named "Archive", next to the save status.
 - When the user clicks it, the meeting is archived, the Meetings page opens, and the archive toast appears. The archived meeting is not in the list.
+- When the Meetings page opens after an archive from the editor page, keyboard focus moves to the "New note" button. Focus does not move to the archive toast.
 - A change to the name, date, or notes that was not yet saved is saved when the editor page closes, as for any other way of leaving the editor page. The change is not lost.
 - If the meeting cannot be archived, the editor page stays open with the user's text, and the page says "Couldn't archive the meeting. Try again."
 

@@ -12,6 +12,7 @@ import {
     type Meeting,
     type MeetingChanges,
 } from "@/lib/meetings";
+import type { MeetingsPageState } from "./meetings-page";
 import { NotesEditor } from "./notes-editor";
 import { SaveStatus } from "./save-status";
 import { useArchive } from "./use-archive";
@@ -68,7 +69,8 @@ export function MeetingEditor({
                 id: meeting.id,
                 name: draft.name,
             });
-            navigate("/meetings");
+            const state: MeetingsPageState = { focusNewNote: true };
+            navigate("/meetings", { state });
         } catch {
             setArchiveFailed(true);
             setArchiving(false);

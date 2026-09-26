@@ -387,6 +387,24 @@ describe("Archive meetings", () => {
             expect(undoButton()).toBeInTheDocument();
         });
 
+        it("moves focus to New note on the Meetings page", async () => {
+            seedThreeMeetings();
+            const user = renderApp();
+
+            await user.click(
+                await screen.findByRole("link", { name: /Standup/ }),
+            );
+            await screen.findByRole("textbox", { name: "Notes" });
+            await user.click(screen.getByRole("button", { name: "Archive" }));
+
+            await within(notifications()).findByText('Archived "Standup".');
+            await waitFor(() =>
+                expect(
+                    screen.getByRole("button", { name: "New note" }),
+                ).toHaveFocus(),
+            );
+        });
+
         it("names the meeting in the toast with the name the user typed", async () => {
             seedThreeMeetings();
             const user = renderApp();

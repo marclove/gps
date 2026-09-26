@@ -1,6 +1,6 @@
 import { ArchiveIcon, PlusIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router";
+import { Link, useLocation, useNavigate } from "react-router";
 import { PageHeader } from "@/components/page-header";
 import { PAGE_TITLE_CLASSES } from "@/components/page-title";
 import { Button } from "@/components/ui/button";
@@ -22,6 +22,13 @@ type ListState =
 export type NewMeetingState = { isNew: true };
 
 /**
+ * State that the editor page gives the Meetings page after it archives a meeting. The
+ * Meetings page then moves focus to the "New note" button, because the button that the
+ * user clicked is gone.
+ */
+export type MeetingsPageState = { focusNewNote: true };
+
+/**
  * Records an archive so the effect that watches the list can move focus once the
  * backend truth catches up, even if another archive changes the list first.
  */
@@ -35,6 +42,9 @@ type ArchivedNeighbors = {
 /** The page that lists all meetings and creates new ones. */
 export function MeetingsPage() {
     const navigate = useNavigate();
+    const location = useLocation();
+    const focusNewNote =
+        (location.state as MeetingsPageState | null)?.focusNewNote === true;
     const { archive, version, restored } = useArchive();
     const [list, setList] = useState<ListState>({ kind: "loading" });
     const [attempt, setAttempt] = useState(0);
@@ -54,6 +64,10 @@ export function MeetingsPage() {
     // The identifiers of meetings with an archive in progress, so a second click on the
     // same row before the first archive finishes has no effect.
     const pendingArchiveIds = useRef(new Set<number>());
+
+    useEffect(() => {
+        if (focusNewNote) newNoteButtonRef.current?.focus();
+    }, [focusNewNote]);
 
     useEffect(() => {
         let current = true;
