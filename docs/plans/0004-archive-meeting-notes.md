@@ -8,7 +8,7 @@
 
 **Tech Stack:** Tauri 2, React 19, TypeScript, Tailwind CSS 4, shadcn `Button`, `lucide-react` icons, React Router (memory router), Rust with `rusqlite` and `rusqlite_migration`, Vitest with jsdom and with WebKit in browser mode.
 
-**Spec:** `docs/specs/0004-archive-meeting-notes.md`, with the executable specs `src/features/meetings/archive.spec.tsx` and `src/features/meetings/archive.browser.spec.tsx`. The decision about storage is in `docs/adrs/0008-archive-meetings-with-a-timestamp.md`. Read the spec and the ADR before you start a task.
+**Spec:** `docs/specs/0004-archive-meeting-notes.md`, with the executable specs `src/features/meetings/archive.spec.tsx` and `src/features/meetings/archive.browser.spec.tsx`. The decision about storage is in `docs/adrs/0008-archive-meetings-with-a-timestamp.md`. The decision to show the archive notice as a toast, owned by a provider in `App.tsx`, is in `docs/adrs/0009-show-brief-notifications-as-toasts.md`. Tasks 1 to 3 built an inline notice on the Meetings page. Tasks 4 and 5 replace it with a toast. Read the spec and the ADR before you start a task.
 
 ## Background for a new engineer
 
@@ -25,7 +25,7 @@
 - Document every exported TypeScript item and every public Rust item with a docstring in the ASD-STE100 standard: short sentences, active voice, simple words.
 - Do not refer to sections of an ADR or of this plan in code comments or docstrings.
 - Do not change `docs/features/`, the ADRs, the specs in `docs/specs/`, or any `*.spec.tsx` file. If one of them seems wrong, stop and ask a human.
-- Exact user text: `Archive "<name>"` (accessible name of the row button), `Archive` (editor button), `Archived "<name>".` (notice), `Undo`, `Couldn't archive the meeting. Try again.`, `Couldn't restore the meeting. Try again.`. `<name>` is `displayName(name)`, so an empty name is `Untitled meeting`.
+- Exact user text: `Archive "<name>"` (accessible name of the row button), `Archive` (editor button), `Archived "<name>".` (notice), `Undo`, `Close` (toast close button), `Notifications` (accessible name of the toast region), `Couldn't archive the meeting. Try again.`, `Couldn't restore the meeting. Try again.`. `<name>` is `displayName(name)`, so an empty name is `Untitled meeting`.
 - Commit after each task. Push each commit to the draft pull request with `git push`. Write the commit message as a short imperative summary line, a blank line, and a body that explains why. End it with the attribution lines that the orchestrating session gives you.
 - The executable specs `archive.spec.tsx` and `archive.browser.spec.tsx` are expected to pass only in part until Task 3 is complete. Every other test must pass at the end of each task. At the end of each task, run the **task check**:
 
@@ -259,3 +259,128 @@ git push
 ## Manual verification
 
 After Task 3, run `bun run tauri dev`. Create a meeting, archive it from the editor, and check that the Meetings page shows the notice and that "Undo" brings the meeting back. Archive a meeting from the list, quit the application, open it again, and check that the meeting is still hidden.
+
+---
+
+## Tasks 4 and 5: Show the archive notice as a toast
+
+After Task 3, the notice was an inline line on the Meetings page, and the editor passed it to that page through router state. Spec 0004 now asks for a toast that closes after 8 seconds, stays open across pages, and turns into an error when a restore fails. Focus no longer goes to Undo after an archive; it goes to a neighboring row. The executable specs `archive.spec.tsx` and `archive.browser.spec.tsx` describe the new behavior and pass only after Task 5.
+
+### Review Focus for Tasks 4 and 5
+
+1. **Undo is clicked twice quickly.** Only one `unarchive_meeting` call is made. (Task 4, `archive-provider.test.tsx`)
+2. **A restore finishes after another meeting was archived.** The newer toast stays open, shows no error, and focus does not jump to the restored meeting, but the list still reloads so the restored meeting appears. (Task 4, `archive-provider.test.tsx`)
+3. **Undo is clicked on another page.** The Meetings page is not mounted. The restore still happens, React logs no warnings, and the Meetings page shows the meeting when it opens. (Task 5, covered by the executable spec "stays open on another page, where Undo still restores the meeting")
+4. **The generated shadcn file.** It must pass lint and typecheck without turning off rules, and its imports must point at this project's paths. (Task 4)
+5. **A list response that was in flight when a meeting was archived.** It must not bring the archived meeting back into the list. (Task 5, `meetings-page.test.tsx`)
+
+### Task 4: Add the toast component and the archive provider
+
+**Files:**
+- Create: `src/components/ui/toast.tsx` (generated), `src/components/toaster.tsx`
+- Create: `src/features/meetings/archive-provider.tsx`, `src/features/meetings/archive-provider.test.tsx`
+
+**Interfaces:**
+- Consumes: `archiveMeeting`, `unarchiveMeeting`, `displayName` from `src/lib/meetings.ts`.
+- Produces: `Toaster` in `src/components/toaster.tsx`: renders the toast portal and a viewport with `aria-label="Notifications"`, and one toast for each entry of Base UI's `useToastManager().toasts`, with its title, its action button, and a close button.
+- Produces: in `archive-provider.tsx`:
+  - `ArchiveProvider({ children }: { children: ReactNode })`. It must be inside the toast provider.
+  - `useArchive(): ArchiveApi`, where `type ArchiveApi = { archive: (meeting: { id: number; name: string }) => Promise<void>; version: number; restored: { id: number } | null }`.
+  - `archive` calls `archiveMeeting(id)`. If that fails, `archive` rejects, and the page shows its inline error. If it succeeds, `archive` closes the toast of the earlier archive, if one is open, adds a toast with the title `Archived "<displayName(name)>".`, the action `Undo`, and a timeout of 8000 milliseconds, and increments `version`.
+  - Undo calls `unarchiveMeeting(id)`, and ignores further clicks on the same toast while the call runs. On success, it closes the toast and increments `version`. If no newer archive happened since, it also sets `restored` to a new `{ id }` object. On failure, it updates the same toast: the title becomes `Couldn't restore the meeting. Try again.`, the action stays `Undo`, and the timeout is 8000 milliseconds again.
+  - `version` tells pages that the set of archived meetings changed. `restored` tells the Meetings page which link to focus.
+
+- [ ] **Step 1: Add the toast component**
+
+Run `bunx --bun shadcn@latest add toast`, then `bun run fmt`. In the generated `src/components/ui/toast.tsx`:
+- Import `cn` from `@/lib/utils` and `Button` from `@/components/ui/button`.
+- Replace each `IconPlaceholder` with the `lucide-react` icon it names, such as `XIcon`.
+- Give `ToastClose` the default `aria-label="Close"`.
+
+Then fix any lint or type errors in the file itself, without turning off rules.
+
+- [ ] **Step 2: Write the failing tests for the provider**
+
+In `archive-provider.test.tsx`, mock `@tauri-apps/api/core` as the other tests do. Render a small test component that calls `useArchive()` and shows `version` and `restored`, inside the toast provider, `ArchiveProvider`, and `Toaster`. Add these tests:
+- `it("shows a toast with the name and Undo after an archive")`
+- `it("rejects and shows no toast when archiving fails")`
+- `it("closes the earlier toast when another meeting is archived")`
+- `it("restores once when Undo is clicked twice quickly")`: hold the `unarchive_meeting` promise, click Undo twice, and expect one call.
+- `it("changes the toast to an error and keeps Undo when restoring fails")`
+- `it("increments version after an archive and after a restore")`
+- `it("does not set restored or touch the newer toast when an older restore finishes late")`
+
+- [ ] **Step 3: Run them to see them fail**
+
+Run: `bunx vitest run src/features/meetings/archive-provider.test.tsx`
+Expected: FAIL, because `archive-provider.tsx` does not exist.
+
+- [ ] **Step 4: Implement `Toaster` and `ArchiveProvider`**
+
+Use one toast manager from `Toast.createToastManager()`, which the generated file exports as `toast`, and pass it to the provider in tests and in Task 5. Keep the identifier of the open archive toast and a counter of archives in refs. The counter replaces `noticeGeneration` and decides whether a restore is stale.
+
+- [ ] **Step 5: Run the tests and the task check, then commit**
+
+Run: `bunx vitest run src/features/meetings/archive-provider.test.tsx`
+Expected: PASS.
+
+Run the task check. Expected: every command succeeds. `archive.spec.tsx` and `archive.browser.spec.tsx` are still excluded.
+
+```bash
+git add src/components/ui/toast.tsx src/components/toaster.tsx src/features/meetings/archive-provider.tsx src/features/meetings/archive-provider.test.tsx package.json bun.lock
+git commit -m "Add a toast component and an archive provider"
+git push
+```
+
+### Task 5: Show the archive toast from the Meetings page and the editor
+
+**Files:**
+- Modify: `src/App.tsx`, `src/App.test.tsx` (only if it needs the new providers)
+- Modify: `src/features/meetings/meetings-page.tsx`, `src/features/meetings/meetings-page.test.tsx`
+- Modify: `src/features/meetings/meeting-editor.tsx`, `src/features/meetings/meeting-editor-page.test.tsx`
+- Test: `archive.spec.tsx`, `archive.browser.spec.tsx` (already written, do not change)
+
+**Interfaces:**
+- Consumes: `Toaster`, the toast manager, `ArchiveProvider`, and `useArchive` from Task 4.
+- Removes: `ArchivedMeeting` and `MeetingsPageState` from `meetings-page.tsx`, the inline notice and its Undo button, the restore error, `noticeGeneration`, `archivedMeetingRef`, and the list filter. The editor no longer passes router state.
+
+- [ ] **Step 1: Update the unit tests**
+
+In `meetings-page.test.tsx`, render the page inside the toast provider, `ArchiveProvider`, and `Toaster`. Delete the tests of the inline notice, whose behavior now lives in the provider and its tests. These are the tests about the location state notice, Undo, the restore error, focus on Undo, and stale restores. Keep the tests of the list, creation, and the archive error. Add:
+- `it("moves focus to the archive button of the next meeting after an archive")`, and the same for the last meeting and for an empty list, with the focus targets that the spec gives.
+- `it("moves focus to the restored meeting's link after Undo")`
+- `it("ignores a list response that was in flight when a meeting was archived")`: hold the first `list_meetings` promise, then archive a meeting. Release the promise with the archived meeting still in it, and expect the meeting to stay out of the list.
+
+In `meeting-editor-page.test.tsx`, replace the test "gives the Meetings page the name that the user typed" with one that expects a toast with `Archived "Retro".`, and render with the providers. Remove the `location-state` element if nothing uses it any more.
+
+- [ ] **Step 2: Run the tests and the executable specs to see them fail**
+
+Run: `bunx vitest run src/features/meetings/meetings-page.test.tsx src/features/meetings/meeting-editor-page.test.tsx src/features/meetings/archive.spec.tsx`
+Expected: FAIL in the new tests and in the spec cases about the toast and focus.
+
+- [ ] **Step 3: Wire the providers and the pages**
+
+- `App.tsx`: wrap the router in the toast provider (with the shared manager) and `ArchiveProvider`, and render `<Toaster />` once, outside the routes.
+- `meetings-page.tsx`:
+  - The list effect depends on `[attempt, version]`, so a restore or an archive from any page reloads the list. The effect's existing `current` flag discards a response that an archive made stale.
+  - The row button calls `archive(meeting)`. On success, it removes the row and moves focus to the archive button at the same index, or at the index before, or to "New note" if the list is now empty. On failure, it shows the inline archive error. A successful archive clears that error.
+  - When `restored` changes and the loaded list contains that meeting, focus its link.
+- `meeting-editor.tsx`: call `archive({ id: meeting.id, name: draft.name })`, then `navigate("/meetings")` without state. Keep the disabled state and the inline error.
+
+- [ ] **Step 4: Run the full check**
+
+Run: `bun run check`
+Expected: every command succeeds, including `archive.spec.tsx` and `archive.browser.spec.tsx`. Run `bunx vitest run` two more times and expect no failures.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add src/App.tsx src/App.test.tsx src/features/meetings
+git commit -m "Show the archive notice as a toast"
+git push
+```
+
+After Task 5, check by hand with `bun run tauri dev`:
+- The toast's 8 seconds stop while the pointer is over it, and they start again after a failed restore.
+- F6 moves focus to the toast.
+
