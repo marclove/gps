@@ -6,13 +6,13 @@ Executable specs: `src/features/meetings/archive.spec.tsx` and `src/features/mee
 
 ## Summary
 
-A user who creates a meeting by mistake can archive it, from the list of meetings or from the meeting's editor page. An archived meeting no longer appears in the list of meetings. Right after archiving, the Meetings page offers an "Undo" button that restores the meeting. Archived meetings and their notes are kept in the database.
+A user who creates a meeting by mistake can archive it, from the list of meetings or from the meeting's editor page. An archived meeting no longer appears in the list of meetings. Right after archiving, a toast names the archived meeting and offers an "Undo" button that restores it. Archived meetings and their notes are kept in the database.
 
 ## Terms
 
 - **Archive**: to hide a meeting from the list of meetings without deleting it.
 - **Restore**: to make an archived meeting appear in the list of meetings again.
-- **Archive notice**: a message near the top of the Meetings page that names the meeting that was just archived and has an "Undo" button.
+- **Archive toast**: a small box at the bottom right of the window, above the page content, that names the meeting that was just archived and has an "Undo" button and a "Close" button. Toasts are inside a region named "Notifications". See [ADR 0009](../adrs/0009-show-brief-notifications-as-toasts.md).
 
 The terms "meeting", "Meetings page", and "editor page" are defined in [Spec 0001](0001-take-meeting-notes.md).
 
@@ -25,25 +25,35 @@ The terms "meeting", "Meetings page", and "editor page" are defined in [Spec 000
 - When the user clicks the button, the meeting is archived and removed from the list. The other meetings stay in the same order. There is no confirmation dialog, because the action can be undone.
 - If the archived meeting was the only meeting, the page says "No meetings yet".
 - If the meeting cannot be archived, it stays in the list, and the page says "Couldn't archive the meeting. Try again."
+- After an archive, keyboard focus moves to the archive button of the meeting that is now in the same position in the list, which is the next meeting. If the archived meeting was the last one in the list, focus moves to the archive button of the meeting before it. If the list is now empty, focus moves to the "New note" button. Focus does not move to the archive toast.
 
 ### Archiving from the editor page
 
 - The page header of the editor page has a button named "Archive", next to the save status.
-- When the user clicks it, the meeting is archived and the Meetings page opens. The archived meeting is not in the list, and the page shows the archive notice for it.
+- When the user clicks it, the meeting is archived, the Meetings page opens, and the archive toast appears. The archived meeting is not in the list.
 - A change to the name, date, or notes that was not yet saved is saved when the editor page closes, as for any other way of leaving the editor page. The change is not lost.
 - If the meeting cannot be archived, the editor page stays open with the user's text, and the page says "Couldn't archive the meeting. Try again."
 
-### Undo
+### Archive toast and Undo
 
-- After a meeting is archived, the Meetings page shows the archive notice `Archived "<name>".` with a button named "Undo". The name is the name of the meeting at the time it was archived.
-- When the user clicks "Undo", the meeting is restored. It appears in the list again, in its usual place in the order, and the archive notice disappears.
-- If the meeting cannot be restored, the archive notice stays, and the page says "Couldn't restore the meeting. Try again."
-- The archive notice has no time limit. It disappears when the user opens another page, and it is replaced when the user archives another meeting. After it is replaced, "Undo" restores only the meeting that was archived last.
+- After a meeting is archived, from the Meetings page or from the editor page, the archive toast appears with the text `Archived "<name>".`, a button named "Undo", and a button named "Close". The name is the name of the meeting at the time it was archived, even if that name was not yet saved.
+- The toast closes by itself 8 seconds after it appears. The time does not count while the pointer is over the toast or while the toast has keyboard focus.
+- The toast is at the bottom right of the window.
+- When the user clicks "Close", the toast closes, and the meeting stays archived.
+- The toast stays open when the user opens another page.
+- When the user clicks "Undo", on any page, the meeting is restored and the toast closes. If the Meetings page is open, the meeting appears in the list again, in its usual place in the order, and keyboard focus moves to the meeting's link. If the Meetings page is not open, the meeting is in the list the next time the Meetings page opens.
+- If the meeting cannot be restored, the toast stays open, its text changes to `Couldn't restore the meeting. Try again.`, and its "Undo" button tries again. The 8 seconds start again.
+- Only one archive toast is open at a time. When the user archives another meeting, the toast for the earlier meeting closes and a toast for the new meeting appears. "Undo" restores only the meeting that was archived last.
+- After the toast has closed, the meeting stays archived.
 
 ### Archived meetings stay hidden
 
 - An archived meeting does not appear in the list of meetings when the user opens the Meetings page again, or after the application is closed and opened again.
 - Archiving a meeting does not change its name, date, notes, or the time it was last changed.
+
+## Not checked by the executable specs
+
+The executable specs do not check that the 8 seconds stop while the pointer is over the toast or the toast has focus, or that they start again after a failed restore. Base UI's toast provides this behavior. Check it by hand with `bun run tauri dev`.
 
 ## Backend contract
 
@@ -64,7 +74,7 @@ The executable spec replaces the Tauri backend with an in-memory fake. It relies
 ## Out of scope
 
 - A page or filter that shows archived meetings.
-- Restoring a meeting after the archive notice has disappeared.
+- Restoring a meeting after the archive toast has closed.
 - Deleting meetings permanently.
 - Archiving several meetings at once.
 - Showing the archive button on a touch screen, where there is no pointer to rest on a row.

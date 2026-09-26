@@ -4,9 +4,9 @@ import { page, userEvent } from "vitest/browser";
 import App from "@/App";
 
 // Feature spec for docs/specs/0004-archive-meeting-notes.md, for the visibility of
-// the archive button, which depends on the application's CSS. It runs in WebKit at
-// the default window size of 1200 by 800 pixels. The Tauri backend is replaced by a
-// fake with two meetings.
+// the archive button and the position of the archive toast, which depend on the
+// application's CSS. It runs in WebKit at the default window size of 1200 by 800
+// pixels. The Tauri backend is replaced by a fake with two meetings.
 
 const invoke = vi.hoisted(() => vi.fn());
 
@@ -32,6 +32,7 @@ beforeEach(async () => {
                 },
             ];
         }
+        if (command === "archive_meeting") return null;
         throw `unexpected command ${command}`;
     });
 });
@@ -76,5 +77,27 @@ describe("Archive button visibility", () => {
         expect(archive).toHaveFocus();
         await expect.poll(() => opacity(archive)).toBe(1);
         expect(opacity(other)).toBe(0);
+    });
+});
+
+/** The largest distance, in pixels, from the toast to the window edges. */
+const TOAST_EDGE_DISTANCE = 32;
+
+describe("Archive toast position", () => {
+    it("is at the bottom right of the window", async () => {
+        const archive = await renderApp();
+
+        await userEvent.click(archive);
+        const text = await screen.findByText('Archived "Weekly sync".');
+        const toast = text.closest("[data-slot='toast']") ?? text;
+
+        await expect
+            .poll(() => toast.getBoundingClientRect().bottom)
+            .toBeGreaterThanOrEqual(800 - TOAST_EDGE_DISTANCE);
+        const box = toast.getBoundingClientRect();
+        expect(box.bottom).toBeLessThanOrEqual(800);
+        expect(box.right).toBeGreaterThanOrEqual(1200 - TOAST_EDGE_DISTANCE);
+        expect(box.right).toBeLessThanOrEqual(1200);
+        expect(box.left).toBeGreaterThan(600);
     });
 });

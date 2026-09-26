@@ -1,4 +1,11 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import {
+    act,
+    fireEvent,
+    render,
+    screen,
+    waitFor,
+    within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "@/App";
@@ -168,6 +175,21 @@ function seedThreeMeetings() {
     return { standup };
 }
 
+/** The region that holds the toasts. */
+function notifications() {
+    return screen.getByRole("region", { name: "Notifications" });
+}
+
+/** The Undo button of the archive toast. */
+function undoButton() {
+    return within(notifications()).getByRole("button", { name: "Undo" });
+}
+
+/** Lets pending promises and timers of the given length run while fake timers are in use. */
+async function advance(milliseconds: number) {
+    await act(() => vi.advanceTimersByTimeAsync(milliseconds));
+}
+
 async function openMeetingsPage(user: ReturnType<typeof userEvent.setup>) {
     await user.click(
         within(sidebarNavigation()).getByRole("link", { name: "Meetings" }),
@@ -176,7 +198,7 @@ async function openMeetingsPage(user: ReturnType<typeof userEvent.setup>) {
 
 describe("Archive meetings", () => {
     describe("from the Meetings page", () => {
-        it("removes the meeting from the list and offers Undo", async () => {
+        it("removes the meeting from the list and shows a toast with Undo", async () => {
             const { standup } = seedThreeMeetings();
             const user = renderApp();
 
@@ -190,19 +212,20 @@ describe("Archive meetings", () => {
                 id: standup.id,
             });
             await waitFor(() =>
-                expect(
-                    screen.queryByRole("link", { name: /Standup/ }),
-                ).not.toBeInTheDocument(),
+                expect(listedMeetingNames()).toEqual([
+                    "Weekly sync",
+                    "Kickoff",
+                ]),
             );
+            const toasts = notifications();
             expect(
-                screen.getByRole("link", { name: /Weekly sync/ }),
+                await within(toasts).findByText('Archived "Standup".'),
             ).toBeInTheDocument();
             expect(
-                screen.getByRole("link", { name: /Kickoff/ }),
+                within(toasts).getByRole("button", { name: "Undo" }),
             ).toBeInTheDocument();
-            expect(screen.getByText('Archived "Standup".')).toBeInTheDocument();
             expect(
-                screen.getByRole("button", { name: "Undo" }),
+                within(toasts).getByRole("button", { name: "Close" }),
             ).toBeInTheDocument();
         });
 
@@ -217,7 +240,9 @@ describe("Archive meetings", () => {
             );
 
             expect(
-                await screen.findByText('Archived "Untitled meeting".'),
+                await within(notifications()).findByText(
+                    'Archived "Untitled meeting".',
+                ),
             ).toBeInTheDocument();
         });
 
@@ -235,7 +260,7 @@ describe("Archive meetings", () => {
                 await screen.findByText("No meetings yet"),
             ).toBeInTheDocument();
             expect(
-                screen.getByText('Archived "Weekly sync".'),
+                within(notifications()).getByText('Archived "Weekly sync".'),
             ).toBeInTheDocument();
         });
 
@@ -252,6 +277,57 @@ describe("Archive meetings", () => {
             expect(
                 screen.getByRole("button", { name: 'Archive "Weekly sync"' }),
             ).toHaveFocus();
+        });
+
+        it("moves focus to the archive button of the next meeting", async () => {
+            seedThreeMeetings();
+            const user = renderApp();
+
+            await user.click(
+                await screen.findByRole("button", {
+                    name: 'Archive "Standup"',
+                }),
+            );
+
+            await waitFor(() =>
+                expect(
+                    screen.getByRole("button", { name: 'Archive "Kickoff"' }),
+                ).toHaveFocus(),
+            );
+        });
+
+        it("moves focus to the meeting before when the last meeting is archived", async () => {
+            seedThreeMeetings();
+            const user = renderApp();
+
+            await user.click(
+                await screen.findByRole("button", {
+                    name: 'Archive "Kickoff"',
+                }),
+            );
+
+            await waitFor(() =>
+                expect(
+                    screen.getByRole("button", { name: 'Archive "Standup"' }),
+                ).toHaveFocus(),
+            );
+        });
+
+        it("moves focus to New note when the list becomes empty", async () => {
+            backend.seed({ name: "Weekly sync", date: "2026-09-24" });
+            const user = renderApp();
+
+            await user.click(
+                await screen.findByRole("button", {
+                    name: 'Archive "Weekly sync"',
+                }),
+            );
+
+            await waitFor(() =>
+                expect(
+                    screen.getByRole("button", { name: "New note" }),
+                ).toHaveFocus(),
+            );
         });
 
         it("keeps the meeting and reports the problem when archiving fails", async () => {
@@ -274,13 +350,13 @@ describe("Archive meetings", () => {
                 screen.getByRole("link", { name: /Standup/ }),
             ).toBeInTheDocument();
             expect(
-                screen.queryByRole("button", { name: "Undo" }),
+                within(notifications()).queryByRole("button", { name: "Undo" }),
             ).not.toBeInTheDocument();
         });
     });
 
     describe("from the editor page", () => {
-        it("archives the meeting and shows the Meetings page with Undo", async () => {
+        it("archives the meeting, opens the Meetings page, and shows the toast", async () => {
             const { standup } = seedThreeMeetings();
             const user = renderApp();
 
@@ -294,18 +370,40 @@ describe("Archive meetings", () => {
                 id: standup.id,
             });
             expect(
-                await screen.findByText('Archived "Standup".'),
+                await screen.findByRole("heading", {
+                    level: 1,
+                    name: "Meetings",
+                }),
             ).toBeInTheDocument();
-            expect(
-                screen.getByRole("heading", { level: 1, name: "Meetings" }),
-            ).toBeInTheDocument();
-            // The notice appears before the list has loaded.
             await waitFor(() =>
                 expect(listedMeetingNames()).toEqual([
                     "Weekly sync",
                     "Kickoff",
                 ]),
             );
+            expect(
+                within(notifications()).getByText('Archived "Standup".'),
+            ).toBeInTheDocument();
+            expect(undoButton()).toBeInTheDocument();
+        });
+
+        it("names the meeting in the toast with the name the user typed", async () => {
+            seedThreeMeetings();
+            const user = renderApp();
+
+            await user.click(
+                await screen.findByRole("link", { name: /Standup/ }),
+            );
+            const name = await screen.findByRole("textbox", {
+                name: "Meeting name",
+            });
+            await user.clear(name);
+            await user.type(name, "Retro");
+            await user.click(screen.getByRole("button", { name: "Archive" }));
+
+            expect(
+                await within(notifications()).findByText('Archived "Retro".'),
+            ).toBeInTheDocument();
         });
 
         it("saves a change that was not yet saved", async () => {
@@ -352,8 +450,8 @@ describe("Archive meetings", () => {
         });
     });
 
-    describe("Undo", () => {
-        it("restores the meeting to its place in the list", async () => {
+    describe("the archive toast", () => {
+        it("restores the meeting to its place in the list and focuses its link", async () => {
             const { standup } = seedThreeMeetings();
             const user = renderApp();
 
@@ -362,9 +460,8 @@ describe("Archive meetings", () => {
                     name: 'Archive "Standup"',
                 }),
             );
-            await user.click(
-                await screen.findByRole("button", { name: "Undo" }),
-            );
+            await within(notifications()).findByText('Archived "Standup".');
+            await user.click(undoButton());
 
             expect(invoke).toHaveBeenCalledWith("unarchive_meeting", {
                 id: standup.id,
@@ -376,15 +473,117 @@ describe("Archive meetings", () => {
                     "Kickoff",
                 ]),
             );
-            expect(
-                screen.queryByText('Archived "Standup".'),
-            ).not.toBeInTheDocument();
-            expect(
-                screen.queryByRole("button", { name: "Undo" }),
-            ).not.toBeInTheDocument();
+            await waitFor(() =>
+                expect(
+                    screen.getByRole("link", { name: /Standup/ }),
+                ).toHaveFocus(),
+            );
+            await waitFor(() =>
+                expect(
+                    within(notifications()).queryByText('Archived "Standup".'),
+                ).not.toBeInTheDocument(),
+            );
         });
 
-        it("keeps the notice and reports the problem when restoring fails", async () => {
+        it("stays open on another page, where Undo still restores the meeting", async () => {
+            const { standup } = seedThreeMeetings();
+            const user = renderApp();
+
+            await user.click(
+                await screen.findByRole("button", {
+                    name: 'Archive "Standup"',
+                }),
+            );
+            await within(notifications()).findByText('Archived "Standup".');
+            await user.click(screen.getByRole("link", { name: /Kickoff/ }));
+            await screen.findByRole("textbox", { name: "Notes" });
+
+            expect(
+                within(notifications()).getByText('Archived "Standup".'),
+            ).toBeInTheDocument();
+            await user.click(undoButton());
+
+            await waitFor(() =>
+                expect(backend.find(standup.id)?.archivedAt).toBeNull(),
+            );
+            await waitFor(() =>
+                expect(
+                    within(notifications()).queryByText('Archived "Standup".'),
+                ).not.toBeInTheDocument(),
+            );
+            await openMeetingsPage(user);
+            await waitFor(() =>
+                expect(listedMeetingNames()).toEqual([
+                    "Weekly sync",
+                    "Standup",
+                    "Kickoff",
+                ]),
+            );
+        });
+
+        it("closes with Close and leaves the meeting archived", async () => {
+            const { standup } = seedThreeMeetings();
+            const user = renderApp();
+
+            await user.click(
+                await screen.findByRole("button", {
+                    name: 'Archive "Standup"',
+                }),
+            );
+            const toasts = notifications();
+            await within(toasts).findByText('Archived "Standup".');
+            await user.click(
+                within(toasts).getByRole("button", { name: "Close" }),
+            );
+
+            await waitFor(() =>
+                expect(
+                    within(toasts).queryByText('Archived "Standup".'),
+                ).not.toBeInTheDocument(),
+            );
+            expect(backend.find(standup.id)?.archivedAt).not.toBeNull();
+            expect(
+                invoke.mock.calls.some(
+                    ([command]) => command === "unarchive_meeting",
+                ),
+            ).toBe(false);
+        });
+
+        it("closes by itself after 8 seconds and leaves the meeting archived", async () => {
+            vi.useFakeTimers({
+                toFake: [
+                    "Date",
+                    "setTimeout",
+                    "clearTimeout",
+                    "setInterval",
+                    "clearInterval",
+                ],
+            });
+            const { standup } = seedThreeMeetings();
+            render(<App />);
+            await advance(0);
+
+            fireEvent.click(
+                screen.getByRole("button", { name: 'Archive "Standup"' }),
+            );
+            await advance(0);
+            expect(
+                within(notifications()).getByText('Archived "Standup".'),
+            ).toBeInTheDocument();
+
+            await advance(7000);
+            expect(
+                within(notifications()).getByText('Archived "Standup".'),
+            ).toBeInTheDocument();
+
+            await advance(2000);
+            expect(
+                within(notifications()).queryByText('Archived "Standup".'),
+            ).not.toBeInTheDocument();
+            expect(backend.find(standup.id)?.archivedAt).not.toBeNull();
+        });
+
+        it("changes to an error and keeps Undo when restoring fails", async () => {
             seedThreeMeetings();
             backend.failUnarchive = true;
             const user = renderApp();
@@ -394,23 +593,33 @@ describe("Archive meetings", () => {
                     name: 'Archive "Standup"',
                 }),
             );
-            await user.click(
-                await screen.findByRole("button", { name: "Undo" }),
-            );
+            const toasts = notifications();
+            await within(toasts).findByText('Archived "Standup".');
+            await user.click(undoButton());
 
             expect(
-                await screen.findByText(
+                await within(toasts).findByText(
                     "Couldn't restore the meeting. Try again.",
                 ),
             ).toBeInTheDocument();
-            expect(screen.getByText('Archived "Standup".')).toBeInTheDocument();
             expect(
-                screen.getByRole("button", { name: "Undo" }),
-            ).toBeInTheDocument();
+                within(toasts).queryByText('Archived "Standup".'),
+            ).not.toBeInTheDocument();
             expect(listedMeetingNames()).toEqual(["Weekly sync", "Kickoff"]);
+
+            backend.failUnarchive = false;
+            await user.click(undoButton());
+
+            await waitFor(() =>
+                expect(listedMeetingNames()).toEqual([
+                    "Weekly sync",
+                    "Standup",
+                    "Kickoff",
+                ]),
+            );
         });
 
-        it("restores only the meeting that was archived last", async () => {
+        it("shows only the meeting that was archived last, and Undo restores only it", async () => {
             seedThreeMeetings();
             const user = renderApp();
 
@@ -419,20 +628,25 @@ describe("Archive meetings", () => {
                     name: 'Archive "Standup"',
                 }),
             );
+            await within(notifications()).findByText('Archived "Standup".');
             await user.click(
-                await screen.findByRole("button", {
-                    name: 'Archive "Kickoff"',
-                }),
+                screen.getByRole("button", { name: 'Archive "Kickoff"' }),
             );
 
+            const toasts = notifications();
             expect(
-                await screen.findByText('Archived "Kickoff".'),
+                await within(toasts).findByText('Archived "Kickoff".'),
             ).toBeInTheDocument();
+            await waitFor(() =>
+                expect(
+                    within(toasts).queryByText('Archived "Standup".'),
+                ).not.toBeInTheDocument(),
+            );
             expect(
-                screen.queryByText('Archived "Standup".'),
-            ).not.toBeInTheDocument();
+                within(toasts).getAllByRole("button", { name: "Undo" }),
+            ).toHaveLength(1);
 
-            await user.click(screen.getByRole("button", { name: "Undo" }));
+            await user.click(undoButton());
 
             await waitFor(() =>
                 expect(listedMeetingNames()).toEqual([
@@ -440,30 +654,6 @@ describe("Archive meetings", () => {
                     "Kickoff",
                 ]),
             );
-        });
-
-        it("disappears when the user opens another page", async () => {
-            seedThreeMeetings();
-            const user = renderApp();
-
-            await user.click(
-                await screen.findByRole("button", {
-                    name: 'Archive "Standup"',
-                }),
-            );
-            await screen.findByText('Archived "Standup".');
-
-            await user.click(screen.getByRole("link", { name: /Kickoff/ }));
-            await screen.findByRole("textbox", { name: "Notes" });
-            await openMeetingsPage(user);
-
-            await screen.findByRole("link", { name: /Kickoff/ });
-            expect(
-                screen.queryByText('Archived "Standup".'),
-            ).not.toBeInTheDocument();
-            expect(
-                screen.queryByRole("button", { name: "Undo" }),
-            ).not.toBeInTheDocument();
         });
     });
 
@@ -477,7 +667,7 @@ describe("Archive meetings", () => {
                     name: 'Archive "Standup"',
                 }),
             );
-            await screen.findByText('Archived "Standup".');
+            await within(notifications()).findByText('Archived "Standup".');
             await user.click(screen.getByRole("button", { name: "New note" }));
             await screen.findByRole("textbox", { name: "Notes" });
             await openMeetingsPage(user);
@@ -504,7 +694,7 @@ describe("Archive meetings", () => {
                     name: 'Archive "Standup"',
                 }),
             );
-            await screen.findByText('Archived "Standup".');
+            await within(notifications()).findByText('Archived "Standup".');
 
             expect(backend.find(standup.id)).toMatchObject({
                 name: "Standup",
