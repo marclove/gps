@@ -112,12 +112,18 @@ describe("Compact navigation between sections", () => {
 });
 
 describe("Window", () => {
-    it("uses the standard macOS title bar", () => {
+    it("keeps the macOS title bar above the content, with its own background color", () => {
         const [mainWindow] = tauriConfig.app.windows;
 
-        expect(mainWindow).not.toHaveProperty("titleBarStyle");
+        expect(mainWindow.titleBarStyle).toBe("Transparent");
         expect(mainWindow).not.toHaveProperty("hiddenTitle");
         expect(mainWindow).not.toHaveProperty("trafficLightPosition");
         expect(mainWindow.title).toBe("gps");
+    });
+
+    it("uses the light appearance, so the title stays readable on the light title bar", () => {
+        const [mainWindow] = tauriConfig.app.windows;
+
+        expect(mainWindow.theme).toBe("Light");
     });
 });

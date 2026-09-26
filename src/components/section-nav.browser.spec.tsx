@@ -2,6 +2,7 @@ import { render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import App from "@/App";
+import tauriConfig from "../../src-tauri/tauri.conf.json";
 
 // Feature spec for docs/specs/0003-compact-section-nav.md, for the parts that
 // depend on layout. It runs in WebKit with the application's CSS, at the default
@@ -80,5 +81,28 @@ describe("Compact navigation between sections", () => {
         expect(navigation()).toBeVisible();
         expect(pageHeader().getBoundingClientRect().left).toBe(headerLeft);
         expectCompactNavigation();
+    });
+});
+
+/** Converts any CSS color that the browser can draw to `#rrggbb`. */
+function toHex(color: string) {
+    const context = document.createElement("canvas").getContext("2d");
+    if (!context) throw new Error("The canvas has no 2D context");
+    context.fillStyle = color;
+    context.fillRect(0, 0, 1, 1);
+    const [red, green, blue] = context.getImageData(0, 0, 1, 1).data;
+    return `#${[red, green, blue].map((value) => value.toString(16).padStart(2, "0")).join("")}`;
+}
+
+describe("Window", () => {
+    it("gives the title bar the color of the navigation's border", async () => {
+        await renderApp();
+        const sidebar = navigation().closest('[data-slot="sidebar"]');
+        if (!sidebar) throw new Error("The navigation is not in the sidebar");
+
+        const [mainWindow] = tauriConfig.app.windows;
+        expect(toHex(getComputedStyle(sidebar).borderRightColor)).toBe(
+            mainWindow.backgroundColor,
+        );
     });
 });

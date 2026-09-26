@@ -6,7 +6,7 @@ Executable specs: `src/components/section-nav.spec.tsx` and `src/components/sect
 
 ## Summary
 
-The navigation between sections is a narrow column of icons at the left side of the window. It cannot be hidden. Each section is one icon, the name of the section appears when the pointer rests on its icon, and the icon of the current section is highlighted. The window has the standard macOS title bar, so the window controls do not cover any part of the application.
+The navigation between sections is a narrow column of icons at the left side of the window. It cannot be hidden. Each section is one icon, the name of the section appears when the pointer rests on its icon, and the icon of the current section is highlighted. The window has the standard macOS title bar, in the color of the border of the section navigation, so the window controls do not cover any part of the application.
 
 ## Terms
 
@@ -40,13 +40,15 @@ The behavior below is described for a window of 1200 by 800 pixels, the default 
 
 ### Window
 
-- The window uses the standard macOS title bar. It shows the title "gps", and the window controls are in the title bar, not on top of the application's content. In `src-tauri/tauri.conf.json`, the main window has none of the settings `titleBarStyle`, `hiddenTitle`, or `trafficLightPosition`.
+- The window uses the standard macOS title bar. It shows the title "gps", and the window controls are in the title bar, not on top of the application's content. In `src-tauri/tauri.conf.json`, the main window has `titleBarStyle` set to `"Transparent"` and none of the settings `hiddenTitle` or `trafficLightPosition`.
+- The title bar has the same color as the border at the right side of the section navigation. The window's `backgroundColor` in `src-tauri/tauri.conf.json` is the color that the border is drawn with.
+- The window uses the light appearance, so the title "gps" is dark on the light title bar even when macOS uses the dark appearance.
 
 This replaces the parts of [Spec 0001](0001-take-meeting-notes.md) and [Spec 0002](0002-scrollable-editor-with-chrome.md) that describe a sidebar the user can hide and a button in the page header that shows or hides it.
 
 ## Manual verification
 
-The executable specs check the window settings, but not how macOS draws the window. Run `bun run tauri dev` on macOS and check that the title bar shows "gps", that the window controls are in the title bar above the section navigation, and that dragging the title bar moves the window.
+The executable specs check the window settings, but not how macOS draws the window. Run `bun run tauri dev` on macOS and check that the title bar shows "gps", that the title bar is the same gray as the border of the section navigation, with no line between them, that the window controls are in the title bar above the section navigation, and that dragging the title bar moves the window.
 
 ## Backend contract
 

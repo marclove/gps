@@ -24,13 +24,17 @@ shadcn publishes another block, `sidebar-09`. Its first panel is a narrow column
 - `NavLink` marks its link with `aria-current="page"` when the current route is its path or a route inside it, such as `/meetings/3` for `/meetings`. The highlight of the current section is styled from that state, so the highlight and what assistive technology reports cannot disagree.
 - The tooltip popup (`TooltipContent` in `src/components/ui/tooltip.tsx`) gets the accessible role `tooltip`. The Base UI library under shadcn does not set a role on tooltips, and without one, assistive technology and our tests cannot identify a tooltip.
 - The sidebar cannot be hidden. The page header no longer has a button to show or hide it, and the keyboard shortcut Ctrl+Cmd+S is removed from `SidebarProvider`. `SidebarProvider` stays, because the shadcn sidebar components read their settings from it.
-- The window uses the standard macOS title bar. The settings `titleBarStyle`, `hiddenTitle`, and `trafficLightPosition` are removed from `tauri.conf.json`, so the title bar shows the window title, "gps", and the window controls sit in the title bar, above the content.
+- The window uses the standard macOS title bar, above the content. The settings `hiddenTitle` and `trafficLightPosition` are removed from `tauri.conf.json`, so the title bar shows the window title, "gps", and the window controls sit in the title bar.
+- The title bar has the color of the border at the right side of the section column, `#e5e5e5` (the `--sidebar-border` value in `src/index.css`). A standard title bar is drawn by macOS in its own color, which looks white next to the column. To color it, the window uses `titleBarStyle: "Transparent"`, which keeps the title bar in its normal place above the content but draws it without a background, so the window's `backgroundColor` shows through. Unlike the overlay title bar, the content does not go under it.
+- The window uses the light appearance (`theme: "Light"`). The application has only light colors, and in the dark appearance macOS would draw the title in white on the light gray title bar.
 - Only the title bar moves the window, as in other Mac applications. The `data-tauri-drag-region` attributes and the `core:window:allow-start-dragging` permission are removed.
 
 ## Consequences
 
 - The main area gains about 256 pixels of width at every window size.
 - The page header and the sidebar no longer need extra space for the window controls, and the page header no longer changes its layout depending on the sidebar.
+- The title bar color is written twice: as `backgroundColor` in `tauri.conf.json` and as `--sidebar-border` in `src/index.css`. A browser spec checks that they are the same.
+- The web view also gets the `backgroundColor`, so the window can show gray for a moment while the page loads, before the page paints its own background.
 - The content area is shorter by the height of the title bar, about 28 pixels. Pages already fit their content into the height that they have (see ADR 0005), so no page needs to change for this.
 - A section's name is not visible until the pointer rests on its icon. Icons must be distinct enough to recognize after the user has learned them.
 - The `SidebarTrigger` and `SidebarRail` components stay in the generated file `src/components/ui/sidebar.tsx` but are not used.
