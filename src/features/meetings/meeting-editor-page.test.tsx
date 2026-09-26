@@ -1,9 +1,28 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+    fireEvent,
+    render,
+    screen,
+    waitFor,
+    within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router";
+import { Toaster } from "@/components/toaster";
+import { toast } from "@/components/ui/toast";
+import { ArchiveProvider } from "./archive-provider";
 import type { Meeting } from "@/lib/meetings";
 import { MeetingEditorPage } from "./meeting-editor-page";
+
+/** Shows the Meetings list route the editor page opens after an archive. */
+function MeetingsListRoute() {
+    return <p>Meetings list</p>;
+}
+
+/** The region that holds the toasts. */
+function notifications() {
+    return screen.getByRole("region", { name: "Notifications" });
+}
 
 const invoke = vi.hoisted(() => vi.fn());
 
@@ -29,10 +48,20 @@ function serveMeeting() {
 function renderPage(path: string) {
     render(
         <MemoryRouter initialEntries={[path]}>
-            <Routes>
-                <Route path="/meetings" element={<p>Meetings list</p>} />
-                <Route path="/meetings/:id" element={<MeetingEditorPage />} />
-            </Routes>
+            <Toaster toastManager={toast}>
+                <ArchiveProvider>
+                    <Routes>
+                        <Route
+                            path="/meetings"
+                            element={<MeetingsListRoute />}
+                        />
+                        <Route
+                            path="/meetings/:id"
+                            element={<MeetingEditorPage />}
+                        />
+                    </Routes>
+                </ArchiveProvider>
+            </Toaster>
         </MemoryRouter>,
     );
 }
@@ -178,5 +207,62 @@ describe("MeetingEditorPage", () => {
             { timeout: 2000 },
         );
         expect(await screen.findByText("Saved")).toBeInTheDocument();
+    });
+
+    it("archives once when Archive is clicked twice quickly", async () => {
+        let resolveArchive: (() => void) | undefined;
+        invoke.mockImplementation(
+            async (command: string, args?: Record<string, unknown>) => {
+                if (command === "get_meeting") return MEETING;
+                if (command === "archive_meeting") {
+                    return new Promise<void>((resolve) => {
+                        resolveArchive = resolve;
+                    });
+                }
+                return { ...MEETING, ...args };
+            },
+        );
+        const user = userEvent.setup();
+        renderPage("/meetings/42");
+        const archiveButton = await screen.findByRole("button", {
+            name: "Archive",
+        });
+
+        await user.click(archiveButton);
+        await user.click(archiveButton);
+
+        expect(
+            invoke.mock.calls.filter(
+                ([command]) => command === "archive_meeting",
+            ),
+        ).toHaveLength(1);
+        expect(invoke).toHaveBeenCalledWith("archive_meeting", { id: 42 });
+
+        resolveArchive?.();
+
+        expect(await screen.findByText("Meetings list")).toBeInTheDocument();
+    });
+
+    it("shows a toast naming the meeting with the name that the user typed", async () => {
+        invoke.mockImplementation(
+            async (command: string, args?: Record<string, unknown>) => {
+                if (command === "get_meeting") return MEETING;
+                if (command === "archive_meeting") return null;
+                return { ...MEETING, ...args };
+            },
+        );
+        const user = userEvent.setup();
+        renderPage("/meetings/42");
+
+        fireEvent.change(
+            await screen.findByRole("textbox", { name: "Meeting name" }),
+            { target: { value: "Retro" } },
+        );
+        await user.click(screen.getByRole("button", { name: "Archive" }));
+
+        expect(await screen.findByText("Meetings list")).toBeInTheDocument();
+        expect(
+            within(notifications()).getByText('Archived "Retro".'),
+        ).toBeInTheDocument();
     });
 });

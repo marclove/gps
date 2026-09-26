@@ -1,6 +1,9 @@
+import { ArchiveIcon } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useNavigate } from "react-router";
 import { PageHeader } from "@/components/page-header";
 import { PAGE_TITLE_CLASSES } from "@/components/page-title";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import {
@@ -9,8 +12,10 @@ import {
     type Meeting,
     type MeetingChanges,
 } from "@/lib/meetings";
+import type { MeetingsPageState } from "./meetings-page";
 import { NotesEditor } from "./notes-editor";
 import { SaveStatus } from "./save-status";
+import { useArchive } from "./use-archive";
 import { useAutosave } from "./use-autosave";
 
 /** Matches a complete calendar date in the `YYYY-MM-DD` format that the backend accepts. */
@@ -39,6 +44,10 @@ export function MeetingEditor({
     );
     const { status, retry } = useAutosave(draft, save);
     const nameInput = useRef<HTMLInputElement>(null);
+    const navigate = useNavigate();
+    const { archive: archiveInProvider } = useArchive();
+    const [archiving, setArchiving] = useState(false);
+    const [archiveFailed, setArchiveFailed] = useState(false);
 
     useEffect(() => {
         if (!isNew) return;
@@ -52,6 +61,22 @@ export function MeetingEditor({
         [],
     );
 
+    async function archive() {
+        setArchiving(true);
+        setArchiveFailed(false);
+        try {
+            await archiveInProvider({
+                id: meeting.id,
+                name: draft.name,
+            });
+            const state: MeetingsPageState = { focusNewNote: true };
+            navigate("/meetings", { state });
+        } catch {
+            setArchiveFailed(true);
+            setArchiving(false);
+        }
+    }
+
     return (
         // The header and the name and date row stay in place. The notes editor gets
         // the remaining height and scrolls its notes itself.
@@ -62,7 +87,21 @@ export function MeetingEditor({
                     { label: displayName(draft.name) },
                 ]}
             >
+                {archiveFailed && (
+                    <p role="alert" className="text-sm text-destructive">
+                        Couldn't archive the meeting. Try again.
+                    </p>
+                )}
                 <SaveStatus status={status} onRetry={retry} />
+                <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={archiving}
+                    onClick={archive}
+                >
+                    <ArchiveIcon />
+                    Archive
+                </Button>
             </PageHeader>
             <div className="flex items-center gap-2 px-4 pb-4">
                 <Input
