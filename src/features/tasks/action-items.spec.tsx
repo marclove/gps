@@ -416,6 +416,25 @@ describe("Meeting action items", () => {
     });
 
     describe("adding", () => {
+        it("replaces line breaks in pasted text with spaces", async () => {
+            const sync = backend.seedMeeting("Weekly sync");
+            const user = await openMeeting("Weekly sync");
+            await within(panel()).findByText("No action items yet");
+
+            await user.click(addField());
+            await user.paste("Call Sam\nabout the deck");
+
+            expect(addField()).toHaveValue("Call Sam about the deck");
+
+            await user.keyboard("{Enter}");
+
+            await expectItems(["Call Sam about the deck"]);
+            expect(backend.callsOf("create_task")).toEqual([
+                { meetingId: sync.id, description: "Call Sam about the deck" },
+            ]);
+            expect(addField()).toHaveValue("");
+        });
+
         it("adds the item at the bottom, empties the field, and keeps the focus there", async () => {
             const sync = backend.seedMeeting("Weekly sync");
             backend.seedTask(sync.id, "Send the deck");

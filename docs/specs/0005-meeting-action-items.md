@@ -55,6 +55,8 @@ The terms "meeting", "Meetings page", and "editor page" are defined in [Spec 000
 - When the user types text in the "Add action item" field and presses Enter, a new item with that text is added at the bottom of the list. It is not checked. The field becomes empty and keeps the focus, so the user can type the next item at once.
 - Spaces at the start and at the end of the text are removed.
 - When the field is empty or has only spaces, Enter does nothing.
+- Enter never adds a line break to the "Add action item" field. When the user pastes text with line breaks, each line break becomes a space.
+- A long text in the "Add action item" field wraps onto more lines, and the field grows so that the whole text is visible without scrolling. After the item is added, the empty field has the height of one line again.
 - If the item cannot be added, the list does not change, the field keeps the text, and a failure toast says "Couldn't add the action item. Try again."
 
 ### Checking off an action item

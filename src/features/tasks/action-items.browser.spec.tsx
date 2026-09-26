@@ -55,6 +55,10 @@ async function handle(command: string, args: Record<string, unknown> = {}) {
             return MEETING;
         case "list_meeting_tasks":
             return tasks.map((t) => ({ ...t }));
+        case "create_task": {
+            seedTask(args.description as string);
+            return { ...tasks[tasks.length - 1] };
+        }
         case "set_task_completed": {
             const task = tasks.find((t) => t.id === args.id);
             if (!task) throw `task ${String(args.id)} not found`;
@@ -117,6 +121,38 @@ function isFullyVisible(element: Element) {
 }
 
 describe("Action items panel", () => {
+    it("grows the Add action item field for a long text, and shrinks it after the item is added", async () => {
+        const panel = await openMeeting();
+        const add = within(panel).getByRole("textbox", {
+            name: "Add action item",
+        });
+        await expect
+            .poll(() => (add as HTMLTextAreaElement).disabled)
+            .toBe(false);
+        const oneLine = add.getBoundingClientRect().height;
+
+        await userEvent.click(add);
+        await userEvent.keyboard(
+            "Here is my really long task that needs several lines to be read in full",
+        );
+
+        await expect
+            .poll(() => add.getBoundingClientRect().height)
+            .toBeGreaterThan(oneLine * 1.5);
+        expect(add.scrollWidth).toBeLessThanOrEqual(add.clientWidth);
+        expect(add.scrollHeight).toBeLessThanOrEqual(add.clientHeight + 1);
+
+        await userEvent.keyboard("{Enter}");
+
+        await findItemField(
+            panel,
+            "Here is my really long task that needs several lines to be read in full",
+        );
+        await expect
+            .poll(() => add.getBoundingClientRect().height)
+            .toBe(oneLine);
+    });
+
     it("wraps a long item text so that the whole text is visible", async () => {
         seedTask("Short");
         seedTask(
