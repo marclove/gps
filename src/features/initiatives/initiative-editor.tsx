@@ -1,14 +1,19 @@
+import { ArchiveIcon } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useNavigate } from "react-router";
 import { DetailsSidebar } from "@/components/details-sidebar";
 import { MarkdownEditor } from "@/components/markdown-editor/markdown-editor";
 import { PageHeader } from "@/components/page-header";
 import { PAGE_TITLE_CLASSES } from "@/components/page-title";
 import { SaveStatus } from "@/components/save-status";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
     NativeSelect,
     NativeSelectOption,
 } from "@/components/ui/native-select";
+import { useArchive } from "@/components/use-archive";
+import { useFailureToast } from "@/components/use-failure-toast";
 import { useAutosave } from "@/hooks/use-autosave";
 import {
     initiativeDisplayName,
@@ -19,11 +24,13 @@ import {
     type RaciRole,
 } from "@/lib/initiatives";
 import { cn } from "@/lib/utils";
+import type { InitiativesPageState } from "./initiatives-page";
 
 /**
  * The editor for one initiative: its name and its description at the left, and a sidebar
- * with the role of the user at the right. Changes are saved automatically. If `isNew` is
- * true, the name field gets the focus and its text is selected.
+ * with the role of the user and the Archive button at the right. Changes are saved
+ * automatically. If `isNew` is true, the name field gets the focus and its text is
+ * selected.
  */
 export function InitiativeEditor({
     initiative,
@@ -45,6 +52,10 @@ export function InitiativeEditor({
     const { status, retry } = useAutosave(draft, save);
     const nameInput = useRef<HTMLInputElement>(null);
     const roleId = useId();
+    const navigate = useNavigate();
+    const { archive: archiveInProvider } = useArchive();
+    const [archiving, setArchiving] = useState(false);
+    const failureToast = useFailureToast();
 
     useEffect(() => {
         if (!isNew) return;
@@ -58,6 +69,23 @@ export function InitiativeEditor({
             setDraft((current) => ({ ...current, description })),
         [],
     );
+
+    async function archive() {
+        setArchiving(true);
+        try {
+            await archiveInProvider({
+                kind: "initiative",
+                id: initiative.id,
+                name: draft.name,
+            });
+            failureToast.clear();
+            const state: InitiativesPageState = { focusNewInitiative: true };
+            navigate("/initiatives", { state });
+        } catch {
+            failureToast.show("Couldn't archive the initiative. Try again.");
+            setArchiving(false);
+        }
+    }
 
     return (
         // The description is at the left, and the initiative details sidebar is at the
@@ -130,7 +158,17 @@ export function InitiativeEditor({
                         </NativeSelect>
                     </div>
                 }
-                actions={null}
+                actions={
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={archiving}
+                        onClick={archive}
+                    >
+                        <ArchiveIcon />
+                        Archive
+                    </Button>
+                }
             />
         </div>
     );
