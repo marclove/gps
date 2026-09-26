@@ -1,6 +1,6 @@
 import { ArchiveIcon, PlusIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router";
+import { Link, useLocation, useNavigate } from "react-router";
 import { PageHeader } from "@/components/page-header";
 import { PAGE_TITLE_CLASSES } from "@/components/page-title";
 import { Button } from "@/components/ui/button";
@@ -25,15 +25,21 @@ export type NewMeetingState = { isNew: true };
 /** A meeting that was just archived. The Meetings page shows its name in the archive notice. */
 export type ArchivedMeeting = { id: number; name: string };
 
+/** State that the editor page gives the Meetings page when it archives a meeting. */
+export type MeetingsPageState = { archived: ArchivedMeeting };
+
 /** The page that lists all meetings and creates new ones. */
 export function MeetingsPage() {
     const navigate = useNavigate();
+    const location = useLocation();
     const [list, setList] = useState<ListState>({ kind: "loading" });
     const [attempt, setAttempt] = useState(0);
     const [creating, setCreating] = useState(false);
     const [createFailed, setCreateFailed] = useState(false);
     const [archivedMeeting, setArchivedMeeting] =
-        useState<ArchivedMeeting | null>(null);
+        useState<ArchivedMeeting | null>(
+            (location.state as MeetingsPageState | null)?.archived ?? null,
+        );
     const [archiveFailed, setArchiveFailed] = useState(false);
     const [restoring, setRestoring] = useState(false);
     const [restoreFailed, setRestoreFailed] = useState(false);

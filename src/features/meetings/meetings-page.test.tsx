@@ -306,6 +306,29 @@ describe("MeetingsPage", () => {
         expect(screen.getByRole("button", { name: "Undo" })).toBeEnabled();
     });
 
+    it("shows the archive notice that the location state gives", async () => {
+        invoke.mockResolvedValue([]);
+        render(
+            <MemoryRouter
+                initialEntries={[
+                    {
+                        pathname: "/meetings",
+                        state: { archived: { id: 7, name: "Standup" } },
+                    },
+                ]}
+            >
+                <MeetingsPage />
+            </MemoryRouter>,
+        );
+
+        expect(
+            await screen.findByText('Archived "Standup".'),
+        ).toBeInTheDocument();
+        expect(
+            screen.getByRole("button", { name: "Undo" }),
+        ).toBeInTheDocument();
+    });
+
     it("keeps the newer archive notice and shows no restore error when an older restore fails after another archive", async () => {
         let rejectUnarchive: ((reason: unknown) => void) | undefined;
         invoke.mockImplementation((command: string) => {

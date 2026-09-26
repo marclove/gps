@@ -1,9 +1,22 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { MemoryRouter, Route, Routes } from "react-router";
+import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import type { Meeting } from "@/lib/meetings";
 import { MeetingEditorPage } from "./meeting-editor-page";
+
+/** Shows the Meetings list route and, for the new tests, the location state it was given. */
+function MeetingsListRoute() {
+    const location = useLocation();
+    return (
+        <>
+            <p>Meetings list</p>
+            <pre data-testid="location-state">
+                {JSON.stringify(location.state)}
+            </pre>
+        </>
+    );
+}
 
 const invoke = vi.hoisted(() => vi.fn());
 
@@ -30,7 +43,7 @@ function renderPage(path: string) {
     render(
         <MemoryRouter initialEntries={[path]}>
             <Routes>
-                <Route path="/meetings" element={<p>Meetings list</p>} />
+                <Route path="/meetings" element={<MeetingsListRoute />} />
                 <Route path="/meetings/:id" element={<MeetingEditorPage />} />
             </Routes>
         </MemoryRouter>,
@@ -178,5 +191,61 @@ describe("MeetingEditorPage", () => {
             { timeout: 2000 },
         );
         expect(await screen.findByText("Saved")).toBeInTheDocument();
+    });
+
+    it("archives once when Archive is clicked twice quickly", async () => {
+        let resolveArchive: (() => void) | undefined;
+        invoke.mockImplementation(
+            async (command: string, args?: Record<string, unknown>) => {
+                if (command === "get_meeting") return MEETING;
+                if (command === "archive_meeting") {
+                    return new Promise<void>((resolve) => {
+                        resolveArchive = resolve;
+                    });
+                }
+                return { ...MEETING, ...args };
+            },
+        );
+        const user = userEvent.setup();
+        renderPage("/meetings/42");
+        const archiveButton = await screen.findByRole("button", {
+            name: "Archive",
+        });
+
+        await user.click(archiveButton);
+        await user.click(archiveButton);
+
+        expect(
+            invoke.mock.calls.filter(
+                ([command]) => command === "archive_meeting",
+            ),
+        ).toHaveLength(1);
+        expect(invoke).toHaveBeenCalledWith("archive_meeting", { id: 42 });
+
+        resolveArchive?.();
+
+        expect(await screen.findByText("Meetings list")).toBeInTheDocument();
+    });
+
+    it("gives the Meetings page the name that the user typed", async () => {
+        invoke.mockImplementation(
+            async (command: string, args?: Record<string, unknown>) => {
+                if (command === "get_meeting") return MEETING;
+                if (command === "archive_meeting") return null;
+                return { ...MEETING, ...args };
+            },
+        );
+        const user = userEvent.setup();
+        renderPage("/meetings/42");
+
+        fireEvent.change(
+            await screen.findByRole("textbox", { name: "Meeting name" }),
+            { target: { value: "Retro" } },
+        );
+        await user.click(screen.getByRole("button", { name: "Archive" }));
+
+        expect((await screen.findByTestId("location-state")).textContent).toBe(
+            JSON.stringify({ archived: { id: 42, name: "Retro" } }),
+        );
     });
 });
