@@ -47,17 +47,58 @@ export function MeetingsPage() {
     // starts and compares it again when the restore finishes, so a restore for a meeting
     // whose notice a later archive has already replaced does not touch that later notice.
     const noticeGeneration = useRef(0);
+    // Tracks the meeting the archive notice currently names, so a list result that was
+    // already in flight when that meeting was archived does not bring it back.
+    const archivedMeetingRef = useRef(archivedMeeting);
+    useEffect(() => {
+        archivedMeetingRef.current = archivedMeeting;
+    }, [archivedMeeting]);
+    const undoButtonRef = useRef<HTMLButtonElement>(null);
+    const meetingLinkRefs = useRef(new Map<number, HTMLAnchorElement>());
+    // What to move focus to once the DOM catches up: the Undo button right after it
+    // appears, or the link of a meeting that a restore just brought back once the
+    // reloaded list shows it. `null` means nothing is waiting for focus.
+    const pendingFocus = useRef<"undo" | { restoredId: number } | null>(
+        archivedMeeting ? "undo" : null,
+    );
 
     useEffect(() => {
         let current = true;
         listMeetings().then(
-            (meetings) => current && setList({ kind: "loaded", meetings }),
+            (meetings) =>
+                current &&
+                setList({
+                    kind: "loaded",
+                    meetings: archivedMeetingRef.current
+                        ? meetings.filter(
+                              (meeting) =>
+                                  meeting.id !== archivedMeetingRef.current?.id,
+                          )
+                        : meetings,
+                }),
             () => current && setList({ kind: "error" }),
         );
         return () => {
             current = false;
         };
     }, [attempt]);
+
+    useEffect(() => {
+        if (pendingFocus.current === "undo") {
+            undoButtonRef.current?.focus();
+            pendingFocus.current = null;
+            return;
+        }
+        if (pendingFocus.current && list.kind === "loaded") {
+            const link = meetingLinkRefs.current.get(
+                pendingFocus.current.restoredId,
+            );
+            if (link) {
+                link.focus();
+                pendingFocus.current = null;
+            }
+        }
+    }, [list]);
 
     function retry() {
         setList({ kind: "loading" });
@@ -97,6 +138,7 @@ export function MeetingsPage() {
             });
             setArchiveFailed(false);
             setRestoreFailed(false);
+            pendingFocus.current = "undo";
         } catch {
             setArchiveFailed(true);
         }
@@ -114,7 +156,9 @@ export function MeetingsPage() {
             if (noticeGeneration.current === generation) {
                 noticeGeneration.current += 1;
                 setArchivedMeeting(null);
+                setArchiveFailed(false);
                 setRestoreFailed(false);
+                pendingFocus.current = { restoredId: meeting.id };
             }
         } catch {
             if (noticeGeneration.current === generation) {
@@ -137,22 +181,24 @@ export function MeetingsPage() {
             </PageHeader>
             <div className="flex flex-col gap-4 px-4 pb-2">
                 <h1 className={PAGE_TITLE_CLASSES}>Meetings</h1>
-                {archivedMeeting && (
-                    <div
-                        role="status"
-                        className="flex items-center gap-2 text-sm"
-                    >
-                        <p>Archived "{archivedMeeting.name}".</p>
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            disabled={restoring}
-                            onClick={() => restore(archivedMeeting)}
-                        >
-                            Undo
-                        </Button>
-                    </div>
-                )}
+                {/* Always mounted, so a screen reader announces a notice that appears
+                    together with this container rather than missing it. */}
+                <div role="status" className="flex items-center gap-2 text-sm">
+                    {archivedMeeting && (
+                        <>
+                            <p>Archived "{archivedMeeting.name}".</p>
+                            <Button
+                                ref={undoButtonRef}
+                                variant="outline"
+                                size="sm"
+                                disabled={restoring}
+                                onClick={() => restore(archivedMeeting)}
+                            >
+                                Undo
+                            </Button>
+                        </>
+                    )}
+                </div>
                 {archiveFailed && (
                     <p role="alert" className="text-sm text-destructive">
                         Couldn't archive the meeting. Try again.
@@ -198,6 +244,18 @@ export function MeetingsPage() {
                             >
                                 <Link
                                     to={`/meetings/${meeting.id}`}
+                                    ref={(link) => {
+                                        if (link) {
+                                            meetingLinkRefs.current.set(
+                                                meeting.id,
+                                                link,
+                                            );
+                                        } else {
+                                            meetingLinkRefs.current.delete(
+                                                meeting.id,
+                                            );
+                                        }
+                                    }}
                                     className="flex flex-1 items-center justify-between rounded-lg px-3 py-2"
                                 >
                                     <span className="font-medium">

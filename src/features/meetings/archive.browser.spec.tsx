@@ -62,11 +62,19 @@ describe("Archive button visibility", () => {
 
     it("is visible when it has keyboard focus", async () => {
         const archive = await renderApp();
+        const other = screen.getByRole("button", { name: 'Archive "Kickoff"' });
+        // Move the pointer off the row first. Otherwise a leftover hover from an
+        // earlier test could keep the row's hover style active and make this test
+        // pass even if focus-visible:opacity-100 were broken.
+        await userEvent.unhover(
+            screen.getByRole("link", { name: /Weekly sync/ }),
+        );
 
         screen.getByRole("link", { name: /Weekly sync/ }).focus();
         await userEvent.tab();
 
         expect(archive).toHaveFocus();
         await expect.poll(() => opacity(archive)).toBe(1);
+        expect(opacity(other)).toBe(0);
     });
 });
