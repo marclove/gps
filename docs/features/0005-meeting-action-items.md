@@ -28,6 +28,6 @@ erDiagram
         TEXT description
         TEXT created_at "Not null. RFC 3339 timestamp in UTC"
         TEXT updated_at "Not null. RFC 3339 timestamp in UTC"
-        TEXT completed_at "Null until the meeting is archived. RFC 3339 timestamp in UTC"
+        TEXT completed_at "Null until the task is checked off. RFC 3339 timestamp in UTC"
     }
 ```
