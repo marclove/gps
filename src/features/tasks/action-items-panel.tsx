@@ -35,6 +35,10 @@ export function ActionItemsPanel({ meetingId }: { meetingId: number }) {
     const [completed, setCompleted] = useState(new Map<number, boolean>());
     // The number of the latest click on the checkbox of each item, by task identifier.
     const completeClicks = useRef(new Map<number, number>());
+    // The value that was saved last for each item, with the number of its click, by task identifier.
+    const savedCompleted = useRef(
+        new Map<number, { click: number; value: boolean }>(),
+    );
     // The text field of each item, by task identifier, so that the focus can move to an item.
     const itemFields = useRef(new Map<number, HTMLInputElement>());
 
@@ -76,21 +80,25 @@ export function ActionItemsPanel({ meetingId }: { meetingId: number }) {
     }
 
     async function changeCompleted(task: Task, value: boolean) {
-        const before = isCompleted(task);
         const click = (completeClicks.current.get(task.id) ?? 0) + 1;
         completeClicks.current.set(task.id, click);
         setCompleted((current) => new Map(current).set(task.id, value));
         try {
             // Do not show the returned task, because a later click may have changed the item since.
             await setTaskCompleted(task.id, value);
+            const saved = savedCompleted.current.get(task.id);
+            if (saved === undefined || saved.click < click) {
+                savedCompleted.current.set(task.id, { click, value });
+            }
             setMessage(null);
         } catch {
             setMessage("save");
-            // Put the value back, unless the user has clicked the checkbox again since.
+            // Show the value that was saved last, unless the user has clicked the checkbox again since.
             if (completeClicks.current.get(task.id) === click) {
-                setCompleted((current) =>
-                    new Map(current).set(task.id, before),
-                );
+                const saved =
+                    savedCompleted.current.get(task.id)?.value ??
+                    task.completedAt !== null;
+                setCompleted((current) => new Map(current).set(task.id, saved));
             }
         }
     }

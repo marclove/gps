@@ -227,4 +227,77 @@ describe("ActionItemsPanel", () => {
             { id: 1, completed: false },
         ]);
     });
+
+    /**
+     * Answers `set_task_completed` by hand. Each call gets the task as the fake stores it
+     * at that call, and waits until the test resolves or rejects it.
+     */
+    function answerCompleteByHand() {
+        let stored = task(1, "Send the deck");
+        const calls: {
+            resolve: () => void;
+            reject: (reason: unknown) => void;
+        }[] = [];
+        answer({
+            tasks: [stored],
+            complete: (_id, completed) => {
+                stored = {
+                    ...stored,
+                    completedAt: completed ? "2026-09-24T11:00:00.000Z" : null,
+                };
+                const answerTask = stored;
+                return new Promise<Task>((resolve, reject) =>
+                    calls.push({ resolve: () => resolve(answerTask), reject }),
+                );
+            },
+        });
+        return calls;
+    }
+
+    async function clickTwice() {
+        const user = userEvent.setup();
+        render(<ActionItemsPanel meetingId={1} />);
+        const checkbox = await screen.findByRole("checkbox", {
+            name: 'Complete "Send the deck"',
+        });
+        await user.click(checkbox);
+        await user.click(checkbox);
+        return checkbox;
+    }
+
+    it("ends unchecked when the answer to the check comes after the answer to the uncheck", async () => {
+        const calls = answerCompleteByHand();
+        const checkbox = await clickTwice();
+
+        expect(calls).toHaveLength(2);
+        await act(async () => calls[1].resolve());
+        await act(async () => calls[0].resolve());
+
+        expect(checkbox).not.toBeChecked();
+    });
+
+    it("ends unchecked when the check fails after the uncheck was saved", async () => {
+        const calls = answerCompleteByHand();
+        const checkbox = await clickTwice();
+
+        expect(calls).toHaveLength(2);
+        await act(async () => calls[1].resolve());
+        await act(async () => calls[0].reject("database is locked"));
+
+        expect(checkbox).not.toBeChecked();
+    });
+
+    it("shows the saved value when a check and an uncheck both fail", async () => {
+        const calls = answerCompleteByHand();
+        const checkbox = await clickTwice();
+
+        expect(calls).toHaveLength(2);
+        await act(async () => calls[0].reject("database is locked"));
+        await act(async () => calls[1].reject("database is locked"));
+
+        expect(checkbox).not.toBeChecked();
+        expect(screen.getByRole("alert")).toHaveTextContent(
+            "Couldn't save the action item. Try again.",
+        );
+    });
 });
