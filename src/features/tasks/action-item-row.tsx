@@ -35,6 +35,8 @@ export function ActionItemRow({
     const [text, setText] = useState(task.description);
     // The delete that the user started last, until a save finds that it failed.
     const removal = useRef<Promise<boolean> | null>(null);
+    // Whether a delete is in progress or has succeeded.
+    const removing = useRef(false);
     // Use the latest callback from the panel when a save finishes.
     const onSaveResultRef = useRef(onSaveResult);
     useEffect(() => {
@@ -81,7 +83,14 @@ export function ActionItemRow({
                 aria-label={`Remove "${actionItemName(text)}"`}
                 className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
                 onClick={() => {
-                    removal.current = onRemove();
+                    // Ignore a click while the delete of an earlier click is in progress.
+                    if (removing.current) return;
+                    removing.current = true;
+                    const current = onRemove();
+                    removal.current = current;
+                    void current.then((ok) => {
+                        if (!ok) removing.current = false;
+                    });
                 }}
             >
                 <XIcon />

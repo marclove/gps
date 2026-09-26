@@ -416,4 +416,60 @@ describe("ActionItemsPanel", () => {
             "Couldn't save the action item. Try again.",
         );
     });
+
+    it("deletes once and reports nothing when the remove button is clicked twice quickly", async () => {
+        let resolveDelete: () => void = () => {};
+        answer({
+            tasks: [task(1, "Send the deck"), task(2, "Book a room")],
+            remove: () =>
+                new Promise<void>((resolve) => {
+                    resolveDelete = resolve;
+                }),
+        });
+        const user = userEvent.setup();
+        render(<ActionItemsPanel meetingId={1} />);
+        await waitFor(() =>
+            expect(itemValues()).toEqual(["Send the deck", "Book a room"]),
+        );
+
+        await user.click(
+            screen.getAllByRole("textbox", { name: "Action item" })[1],
+        );
+        await user.keyboard("{End} for Friday");
+        const button = screen.getByRole("button", {
+            name: 'Remove "Book a room for Friday"',
+        });
+        await user.click(button);
+        await user.click(button);
+        await act(async () => resolveDelete());
+
+        await waitFor(() => expect(itemValues()).toEqual(["Send the deck"]));
+        // Wait longer than the pause before an automatic save.
+        await new Promise((resolve) => setTimeout(resolve, 800));
+        expect(
+            invoke.mock.calls.filter(([command]) => command === "delete_task"),
+        ).toEqual([["delete_task", { id: 2 }]]);
+        expect(updateCalls()).toEqual([]);
+        expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    });
+
+    it("reports nothing when a check fails after its item was removed", async () => {
+        const calls = answerCompleteByHand();
+        const user = userEvent.setup();
+        render(<ActionItemsPanel meetingId={1} />);
+        await user.click(
+            await screen.findByRole("checkbox", {
+                name: 'Complete "Send the deck"',
+            }),
+        );
+        expect(calls).toHaveLength(1);
+
+        await user.click(
+            screen.getByRole("button", { name: 'Remove "Send the deck"' }),
+        );
+        await screen.findByText("No action items yet");
+        await act(async () => calls[0].reject("database is locked"));
+
+        expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    });
 });

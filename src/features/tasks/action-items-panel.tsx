@@ -109,6 +109,8 @@ export function ActionItemsPanel({ meetingId }: { meetingId: number }) {
             }
             setMessage(null);
         } catch {
+            // A failure for an item that was removed since the click is not reported.
+            if (!completeClicks.current.has(task.id)) return;
             setMessage("save");
             // Show the value that was saved last, unless the user has clicked the checkbox again since.
             if (completeClicks.current.get(task.id) === click) {
