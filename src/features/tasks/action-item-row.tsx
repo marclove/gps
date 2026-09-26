@@ -61,7 +61,7 @@ export function ActionItemRow({
     useAutosave(text, save);
 
     return (
-        <li className="group flex items-center gap-2">
+        <li className="group flex items-center gap-1">
             <Checkbox
                 aria-label={`Complete "${actionItemName(text)}"`}
                 checked={completed}
@@ -73,7 +73,7 @@ export function ActionItemRow({
                 value={text}
                 onChange={(event) => setText(event.target.value)}
                 className={cn(
-                    "border-transparent shadow-none",
+                    "border-transparent px-1.5 shadow-none",
                     completed ? "text-muted-foreground" : "text-foreground",
                 )}
             />

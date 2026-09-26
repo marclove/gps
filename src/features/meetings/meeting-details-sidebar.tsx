@@ -24,13 +24,13 @@ export function MeetingDetailsSidebar({
             aria-label="Meeting details"
             className="grid min-h-0 grid-rows-[auto_auto_minmax(0,1fr)] border-l"
         >
-            <div className="flex flex-col gap-4 p-4">
+            <div className="flex flex-col gap-4 px-6 pt-4 pb-6">
                 <div className="flex flex-col gap-2">{properties}</div>
                 {/* The buttons are as wide as their content, in a row that wraps. */}
                 <div className="flex flex-wrap gap-2">{actions}</div>
             </div>
             <Separator />
-            <div className="grid min-h-0 grid-rows-[minmax(0,1fr)] pt-4">
+            <div className="grid min-h-0 grid-rows-[minmax(0,1fr)] pt-6">
                 {lists}
             </div>
         </aside>

@@ -172,15 +172,15 @@ export function ActionItemsPanel({ meetingId }: { meetingId: number }) {
             aria-labelledby={headingId}
             className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)_auto]"
         >
-            <h2 id={headingId} className="px-4 pt-1 pb-2 text-sm font-medium">
+            <h2 id={headingId} className="px-6 pb-2 text-sm font-medium">
                 Action items
             </h2>
-            <div className="min-h-0 overflow-y-auto px-2 text-sm">
+            <div className="min-h-0 overflow-y-auto px-6 text-sm">
                 {load.kind === "loading" && (
-                    <p className="px-2 text-muted-foreground">Loading…</p>
+                    <p className="text-muted-foreground">Loading…</p>
                 )}
                 {load.kind === "error" && (
-                    <div className="flex items-center gap-2 px-2">
+                    <div className="flex items-center gap-2">
                         <p>Couldn't load action items</p>
                         <Button
                             variant="outline"
@@ -195,9 +195,7 @@ export function ActionItemsPanel({ meetingId }: { meetingId: number }) {
                     </div>
                 )}
                 {load.kind === "loaded" && load.tasks.length === 0 && (
-                    <p className="px-2 text-muted-foreground">
-                        No action items yet
-                    </p>
+                    <p className="text-muted-foreground">No action items yet</p>
                 )}
                 {load.kind === "loaded" && load.tasks.length > 0 && (
                     <ul className="flex flex-col gap-1">
@@ -221,7 +219,7 @@ export function ActionItemsPanel({ meetingId }: { meetingId: number }) {
                     </ul>
                 )}
             </div>
-            <div className="p-4">
+            <div className="px-6 pt-4 pb-6">
                 <Input
                     ref={addFieldRef}
                     aria-label="Add action item"

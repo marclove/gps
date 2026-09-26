@@ -96,7 +96,7 @@ export function MeetingEditor({
                 >
                     <SaveStatus status={status} onRetry={retry} />
                 </PageHeader>
-                <div className="px-4 pb-4">
+                <div className="px-6 pb-4">
                     <Input
                         ref={nameInput}
                         aria-label="Meeting name"
