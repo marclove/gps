@@ -43,7 +43,7 @@ export function ActionItemsPanel({ meetingId }: { meetingId: number }) {
         new Map<number, { click: number; value: boolean }>(),
     );
     // The text field of each item, by task identifier, so that the focus can move to an item.
-    const itemFields = useRef(new Map<number, HTMLInputElement>());
+    const itemFields = useRef(new Map<number, HTMLTextAreaElement>());
     const addFieldRef = useRef<HTMLInputElement>(null);
     // The position of the item that was removed last, until the focus has moved after the removal.
     const removedIndex = useRef<number | null>(null);
@@ -161,7 +161,7 @@ export function ActionItemsPanel({ meetingId }: { meetingId: number }) {
     }
 
     function itemFieldRef(id: number) {
-        return (element: HTMLInputElement | null) => {
+        return (element: HTMLTextAreaElement | null) => {
             if (element) itemFields.current.set(id, element);
             else itemFields.current.delete(id);
         };

@@ -2,14 +2,16 @@ import { useEffect, useRef, useState } from "react";
 import { XIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { useAutosave } from "@/features/meetings/use-autosave";
 import { cn } from "@/lib/utils";
 import { actionItemName, updateTaskDescription, type Task } from "@/lib/tasks";
 
 /**
  * One action item in the list of the action items panel. The user can change the
- * text of the item, and the row saves it automatically. `onSaveResult` gets `true`
+ * text of the item, and the row saves it automatically. A long text wraps onto more
+ * lines, and the field grows to show all of it. The text is one paragraph: Enter adds
+ * no line break, and a line break in pasted text becomes a space. `onSaveResult` gets `true`
  * when a save of the text succeeds and `false` when it fails. `inputRef` gets the
  * text field of the item, so that the panel can move the focus to it. `completed`
  * sets the checkbox, and `onCompletedChange` gets the new value when the user clicks it.
@@ -29,7 +31,7 @@ export function ActionItemRow({
     onCompletedChange: (completed: boolean) => void;
     onSaveResult: (ok: boolean) => void;
     onRemove: () => Promise<boolean>;
-    inputRef: (element: HTMLInputElement | null) => void;
+    inputRef: (element: HTMLTextAreaElement | null) => void;
 }) {
     // The row owns the text after the first render, so that an answer from the backend never replaces what the user typed.
     const [text, setText] = useState(task.description);
@@ -61,19 +63,33 @@ export function ActionItemRow({
     useAutosave(text, save);
 
     return (
-        <li className="group flex items-center gap-1">
+        <li className="group flex items-start gap-1">
             <Checkbox
+                // Centers the box on the first line of the text.
+                className="mt-2"
                 aria-label={`Complete "${actionItemName(text)}"`}
                 checked={completed}
                 onCheckedChange={(checked) => onCompletedChange(checked)}
             />
-            <Input
+            <Textarea
                 ref={inputRef}
                 aria-label="Action item"
                 value={text}
-                onChange={(event) => setText(event.target.value)}
+                rows={1}
+                onChange={(event) =>
+                    setText(event.target.value.replace(/\r?\n/g, " "))
+                }
+                onKeyDown={(event) => {
+                    // Enter that confirms an input method composition must still work.
+                    // WebKit sends it with the key code 229 after the composition ends.
+                    const composing =
+                        event.nativeEvent.isComposing || event.keyCode === 229;
+                    if (event.key === "Enter" && !composing) {
+                        event.preventDefault();
+                    }
+                }}
                 className={cn(
-                    "border-transparent px-1.5 shadow-none",
+                    "min-h-0 resize-none border-transparent px-1.5 py-1 shadow-none",
                     completed ? "text-muted-foreground" : "text-foreground",
                 )}
             />
