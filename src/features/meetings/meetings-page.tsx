@@ -1,5 +1,5 @@
 import { ArchiveIcon, PlusIcon } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { PageHeader } from "@/components/page-header";
 import { PAGE_TITLE_CLASSES } from "@/components/page-title";
@@ -37,6 +37,10 @@ export function MeetingsPage() {
     const [archiveFailed, setArchiveFailed] = useState(false);
     const [restoring, setRestoring] = useState(false);
     const [restoreFailed, setRestoreFailed] = useState(false);
+    // Counts how many times the archive notice has changed. `restore` reads this when it
+    // starts and compares it again when the restore finishes, so a restore for a meeting
+    // whose notice a later archive has already replaced does not touch that later notice.
+    const noticeGeneration = useRef(0);
 
     useEffect(() => {
         let current = true;
@@ -80,6 +84,7 @@ export function MeetingsPage() {
                       }
                     : current,
             );
+            noticeGeneration.current += 1;
             setArchivedMeeting({
                 id: meeting.id,
                 name: displayName(meeting.name),
@@ -92,14 +97,23 @@ export function MeetingsPage() {
     }
 
     async function restore(meeting: ArchivedMeeting) {
+        const generation = noticeGeneration.current;
         setRestoring(true);
         try {
             await unarchiveMeeting(meeting.id);
-            setArchivedMeeting(null);
-            setRestoreFailed(false);
+            // Reload the list so the restored meeting reappears, even if a later archive
+            // has already replaced the notice. Only touch the notice itself if it still
+            // names this meeting.
             setAttempt((value) => value + 1);
+            if (noticeGeneration.current === generation) {
+                noticeGeneration.current += 1;
+                setArchivedMeeting(null);
+                setRestoreFailed(false);
+            }
         } catch {
-            setRestoreFailed(true);
+            if (noticeGeneration.current === generation) {
+                setRestoreFailed(true);
+            }
         } finally {
             setRestoring(false);
         }

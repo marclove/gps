@@ -253,4 +253,103 @@ describe("MeetingsPage", () => {
             screen.queryByText("Couldn't restore the meeting. Try again."),
         ).toBeNull();
     });
+
+    it("keeps the newer archive notice when an older restore resolves after another archive", async () => {
+        let resolveUnarchive: (() => void) | undefined;
+        invoke.mockImplementation((command: string) => {
+            if (command === "list_meetings") {
+                return Promise.resolve([
+                    summary(2, "Kickoff", "2026-09-24"),
+                    summary(1, "Standup", "2026-09-18"),
+                ]);
+            }
+            if (command === "archive_meeting") {
+                return Promise.resolve(null);
+            }
+            if (command === "unarchive_meeting") {
+                return new Promise<void>((resolve) => {
+                    resolveUnarchive = resolve;
+                });
+            }
+            return Promise.resolve(null);
+        });
+        const user = userEvent.setup();
+        renderPage();
+
+        await user.click(
+            await screen.findByRole("button", { name: 'Archive "Standup"' }),
+        );
+        await user.click(await screen.findByRole("button", { name: "Undo" }));
+        await user.click(
+            screen.getByRole("button", { name: 'Archive "Kickoff"' }),
+        );
+
+        expect(
+            await screen.findByText('Archived "Kickoff".'),
+        ).toBeInTheDocument();
+
+        resolveUnarchive?.();
+
+        // Give the resolved restore a chance to run its `then`/`catch` handlers.
+        await waitFor(() => {
+            expect(
+                invoke.mock.calls.filter(
+                    ([command]) => command === "list_meetings",
+                ).length,
+            ).toBeGreaterThan(1);
+        });
+        expect(screen.getByText('Archived "Kickoff".')).toBeInTheDocument();
+        expect(screen.queryByText('Archived "Standup".')).toBeNull();
+        expect(
+            screen.queryByText("Couldn't restore the meeting. Try again."),
+        ).toBeNull();
+        expect(screen.getByRole("button", { name: "Undo" })).toBeEnabled();
+    });
+
+    it("keeps the newer archive notice and shows no restore error when an older restore fails after another archive", async () => {
+        let rejectUnarchive: ((reason: unknown) => void) | undefined;
+        invoke.mockImplementation((command: string) => {
+            if (command === "list_meetings") {
+                return Promise.resolve([
+                    summary(2, "Kickoff", "2026-09-24"),
+                    summary(1, "Standup", "2026-09-18"),
+                ]);
+            }
+            if (command === "archive_meeting") {
+                return Promise.resolve(null);
+            }
+            if (command === "unarchive_meeting") {
+                return new Promise<void>((_resolve, reject) => {
+                    rejectUnarchive = reject;
+                });
+            }
+            return Promise.resolve(null);
+        });
+        const user = userEvent.setup();
+        renderPage();
+
+        await user.click(
+            await screen.findByRole("button", { name: 'Archive "Standup"' }),
+        );
+        await user.click(await screen.findByRole("button", { name: "Undo" }));
+        await user.click(
+            screen.getByRole("button", { name: 'Archive "Kickoff"' }),
+        );
+
+        expect(
+            await screen.findByText('Archived "Kickoff".'),
+        ).toBeInTheDocument();
+
+        rejectUnarchive?.("database is locked");
+
+        // Give the rejected restore a chance to run its `catch` handler.
+        await waitFor(() => {
+            expect(screen.getByRole("button", { name: "Undo" })).toBeEnabled();
+        });
+        expect(screen.getByText('Archived "Kickoff".')).toBeInTheDocument();
+        expect(screen.queryByText('Archived "Standup".')).toBeNull();
+        expect(
+            screen.queryByText("Couldn't restore the meeting. Try again."),
+        ).toBeNull();
+    });
 });
