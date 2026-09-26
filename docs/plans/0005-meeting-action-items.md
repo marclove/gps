@@ -350,7 +350,7 @@ Tasks 1 to 5 are done. After a design review, the right column became a sidebar 
 - Sidebar order from top to bottom: a row with the visible label "Date" and the date field (accessible name "Meeting date"); the "Archive" button; a separator; the action items panel (region "Action items").
 - The meeting name is alone on its row in the left column. The page header keeps the breadcrumb and the save status, and no longer has the Archive button.
 - Only the action items list scrolls. The date, the Archive button, the heading, and the "Add action item" field stay in place.
-- Failure toasts: "Couldn't archive the meeting. Try again.", "Couldn't add the action item. Try again.", "Couldn't save the action item. Try again.", "Couldn't remove the action item. Try again." Each has only a "Close" button, a timeout of 8000 milliseconds, and high priority, and it does not take focus.
+- Failure toasts: "Couldn't archive the meeting. Try again.", "Couldn't add the action item. Try again.", "Couldn't save the action item. Try again.", "Couldn't remove the action item. Try again." Each has only a "Close" button, a timeout of 8000 milliseconds, and Base UI's default priority, and it does not take focus.
 - At most one failure toast is open. `show` closes the open one first. A successful archive, add, check or uncheck, text save, or removal calls `clear()`.
 - "Couldn't load action items" with Retry, and the meeting's "Couldn't save" status with Retry, stay where they are.
 
@@ -397,7 +397,7 @@ Tasks 1 to 5 are done. After a design review, the right column became a sidebar 
 
 **Interfaces:**
 - Produces (`use-failure-toast.ts`, a separate file for the same reason as `use-archive.ts`): `export function useFailureToast(): { show: (message: string) => void; clear: () => void }`.
-- Produces (`failure-toast-provider.tsx`): `export function FailureToastProvider({ children }: { children: ReactNode })`. It uses `useToastManager()` from the toast provider around it, and keeps the id of the open failure toast in a ref. `show` closes that toast if there is one, then calls `add({ title: message, timeout: 8000, priority: "high" })`. `clear` closes it. Mount it in `App.tsx` inside `Toaster`, next to `ArchiveProvider`.
+- Produces (`failure-toast-provider.tsx`): `export function FailureToastProvider({ children }: { children: ReactNode })`. It uses `useToastManager()` from the toast provider around it, and keeps the id of the open failure toast in a ref. `show` closes that toast if there is one, then calls `add({ title: message, timeout: 8000 })`. `clear` closes it. Mount it in `App.tsx` inside `Toaster`, next to `ArchiveProvider`.
 
 - [ ] **Step 1: Write the failing tests** in `failure-toast-provider.test.tsx`, using a component that calls the hook:
   - `shows the message in the Notifications region with only a Close button`.
