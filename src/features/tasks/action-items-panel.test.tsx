@@ -25,16 +25,22 @@ function task(id: number, description: string): Task {
     };
 }
 
-/** Answers the task commands. `create` answers `create_task`, and `complete` answers `set_task_completed`. */
+/**
+ * Answers the task commands. `create` answers `create_task`, `complete` answers
+ * `set_task_completed`, and `update` answers `update_task_description`.
+ */
 function answer({
     tasks = [],
     create = (description: string) => Promise.resolve(task(99, description)),
     complete = (id: number) =>
         Promise.resolve(tasks.find((stored) => stored.id === id) as Task),
+    update = (id: number, description: string) =>
+        Promise.resolve(task(id, description)),
 }: {
     tasks?: Task[];
     create?: (description: string) => Promise<Task>;
     complete?: (id: number, completed: boolean) => Promise<Task>;
+    update?: (id: number, description: string) => Promise<Task>;
 } = {}) {
     invoke.mockImplementation(
         async (command: string, args: Record<string, unknown> = {}) => {
@@ -47,6 +53,11 @@ function answer({
                     return complete(
                         args.id as number,
                         args.completed as boolean,
+                    );
+                case "update_task_description":
+                    return update(
+                        args.id as number,
+                        args.description as string,
                     );
                 default:
                     throw `unexpected command ${command}`;
@@ -68,6 +79,12 @@ function itemValues() {
 function completeCalls() {
     return invoke.mock.calls.filter(
         ([command]) => command === "set_task_completed",
+    );
+}
+
+function updateCalls() {
+    return invoke.mock.calls.filter(
+        ([command]) => command === "update_task_description",
     );
 }
 
@@ -299,5 +316,32 @@ describe("ActionItemsPanel", () => {
         expect(screen.getByRole("alert")).toHaveTextContent(
             "Couldn't save the action item. Try again.",
         );
+    });
+
+    it("keeps the typed text when the item is checked before the text is saved", async () => {
+        // The answer to the check has the description that was stored before the change.
+        answer({ tasks: [task(1, "Send the deck")] });
+        const user = userEvent.setup();
+        render(<ActionItemsPanel meetingId={1} />);
+        const checkbox = await screen.findByRole("checkbox", {
+            name: 'Complete "Send the deck"',
+        });
+        const field = screen.getByRole("textbox", { name: "Action item" });
+
+        await user.click(field);
+        await user.keyboard("{End} to Alex");
+        await user.click(checkbox);
+
+        await waitFor(() => expect(completeCalls()).toHaveLength(1));
+        expect(field).toHaveValue("Send the deck to Alex");
+        await waitFor(() =>
+            expect(updateCalls()).toEqual([
+                [
+                    "update_task_description",
+                    { id: 1, description: "Send the deck to Alex" },
+                ],
+            ]),
+        );
+        expect(field).toHaveValue("Send the deck to Alex");
     });
 });

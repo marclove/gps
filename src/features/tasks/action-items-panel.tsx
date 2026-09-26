@@ -152,6 +152,9 @@ export function ActionItemsPanel({ meetingId }: { meetingId: number }) {
                                 onCompletedChange={(value) =>
                                     changeCompleted(task, value)
                                 }
+                                onSaveResult={(ok) =>
+                                    setMessage(ok ? null : "save")
+                                }
                                 inputRef={itemFieldRef(task.id)}
                             />
                         ))}
