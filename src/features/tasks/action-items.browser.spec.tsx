@@ -117,6 +117,41 @@ function isFullyVisible(element: Element) {
 }
 
 describe("Action items panel", () => {
+    it("wraps a long item text so that the whole text is visible", async () => {
+        seedTask("Short");
+        seedTask(
+            "Here is my really long task that needs several lines to be read in full, because it describes a lot of work",
+        );
+        const panel = await openMeeting();
+        const short = await findItemField(panel, "Short");
+        const long = await findItemField(
+            panel,
+            "Here is my really long task that needs several lines to be read in full, because it describes a lot of work",
+        );
+        const aside = screen.getByRole("complementary", {
+            name: "Meeting details",
+        });
+
+        // The whole text is visible: nothing is hidden sideways or below the field.
+        expect(long.scrollWidth).toBeLessThanOrEqual(long.clientWidth);
+        expect(long.scrollHeight).toBeLessThanOrEqual(long.clientHeight + 1);
+        // The text wraps onto more lines, so the field is taller than a one-line item.
+        expect(long.getBoundingClientRect().height).toBeGreaterThan(
+            short.getBoundingClientRect().height * 1.5,
+        );
+        expect(long.getBoundingClientRect().right).toBeLessThanOrEqual(
+            aside.getBoundingClientRect().right,
+        );
+        // The checkbox lines up with the first line of the text.
+        const checkbox = within(panel).getByRole("checkbox", {
+            name: /^Complete "Here is my really long task/,
+        });
+        expect(checkbox.getBoundingClientRect().top).toBeLessThan(
+            long.getBoundingClientRect().top +
+                short.getBoundingClientRect().height,
+        );
+    });
+
     it("is a sidebar as tall as the main area, at the right of the header, name, and notes", async () => {
         seedTask("Send the deck");
         const panel = await openMeeting();

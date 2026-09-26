@@ -44,7 +44,7 @@ The terms "meeting", "Meetings page", and "editor page" are defined in [Spec 000
 - Items are shown in the order in which they were added, the oldest first.
 - Each item has, from left to right:
   - a checkbox named `Complete "<text>"`, such as `Complete "Send the deck"`, which is checked when the item is done,
-  - a text field named "Action item" that holds the item's text,
+  - a text field named "Action item" that holds the item's text. A long text wraps onto more lines, and the field grows so that the whole text is visible without scrolling. The checkbox and the remove button line up with the first line of the text,
   - a button named `Remove "<text>"`.
 - For an item whose text is empty, `<text>` in these names is "Untitled action item".
 - When the meeting has no action items, the panel says "No action items yet".
@@ -70,6 +70,7 @@ The terms "meeting", "Meetings page", and "editor page" are defined in [Spec 000
 - The change is saved automatically after the user pauses for about half a second. If the user leaves the editor page before the pause ends, the change is saved at once.
 - If the change cannot be saved, the user's text stays in the field, and a failure toast says "Couldn't save the action item. Try again." The next change to that item tries to save again.
 - The names of the item's checkbox and remove button use the item's new text.
+- The text of an action item is one paragraph. Pressing Enter in an "Action item" field does not add a line break. When the user pastes text with line breaks, each line break becomes a space.
 
 ### Removing an action item
 

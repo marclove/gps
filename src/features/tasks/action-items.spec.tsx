@@ -541,6 +541,37 @@ describe("Meeting action items", () => {
     });
 
     describe("changing the text", () => {
+        it("does not add a line break when the user presses Enter", async () => {
+            const sync = backend.seedMeeting("Weekly sync");
+            const deck = backend.seedTask(sync.id, "Send the deck");
+            const user = await openMeeting("Weekly sync");
+            await expectItems(["Send the deck"]);
+
+            await user.click(itemField("Send the deck"));
+            await user.keyboard("{Enter} today");
+
+            expect(listedItems()).toEqual(["Send the deck today"]);
+            await waitFor(
+                () =>
+                    expect(backend.findTask(deck.id)?.description).toBe(
+                        "Send the deck today",
+                    ),
+                SAVE_TIMEOUT,
+            );
+        });
+
+        it("replaces line breaks in pasted text with spaces", async () => {
+            const sync = backend.seedMeeting("Weekly sync");
+            backend.seedTask(sync.id, "Send the deck");
+            const user = await openMeeting("Weekly sync");
+            await expectItems(["Send the deck"]);
+
+            await user.click(itemField("Send the deck"));
+            await user.paste(" to Alex\nand Sam");
+
+            expect(listedItems()).toEqual(["Send the deck to Alex and Sam"]);
+        });
+
         it("saves the new text after a pause and renames the item's controls", async () => {
             const sync = backend.seedMeeting("Weekly sync");
             const deck = backend.seedTask(sync.id, "Send the deck");
