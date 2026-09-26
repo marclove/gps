@@ -7,15 +7,14 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import {
-    archiveMeeting,
     displayName,
     updateMeeting,
     type Meeting,
     type MeetingChanges,
 } from "@/lib/meetings";
-import type { MeetingsPageState } from "./meetings-page";
 import { NotesEditor } from "./notes-editor";
 import { SaveStatus } from "./save-status";
+import { useArchive } from "./use-archive";
 import { useAutosave } from "./use-autosave";
 
 /** Matches a complete calendar date in the `YYYY-MM-DD` format that the backend accepts. */
@@ -45,6 +44,7 @@ export function MeetingEditor({
     const { status, retry } = useAutosave(draft, save);
     const nameInput = useRef<HTMLInputElement>(null);
     const navigate = useNavigate();
+    const { archive: archiveInProvider } = useArchive();
     const [archiving, setArchiving] = useState(false);
     const [archiveFailed, setArchiveFailed] = useState(false);
 
@@ -64,11 +64,11 @@ export function MeetingEditor({
         setArchiving(true);
         setArchiveFailed(false);
         try {
-            await archiveMeeting(meeting.id);
-            const state: MeetingsPageState = {
-                archived: { id: meeting.id, name: displayName(draft.name) },
-            };
-            navigate("/meetings", { state });
+            await archiveInProvider({
+                id: meeting.id,
+                name: displayName(draft.name),
+            });
+            navigate("/meetings");
         } catch {
             setArchiveFailed(true);
             setArchiving(false);

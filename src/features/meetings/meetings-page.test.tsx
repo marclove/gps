@@ -1,20 +1,47 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router";
+import { Toaster } from "@/components/toaster";
+import { toast } from "@/components/ui/toast";
 import { formatMeetingDate } from "@/lib/dates";
+import { ArchiveProvider } from "./archive-provider";
 import { MeetingsPage } from "./meetings-page";
+import { useArchive, type ArchiveApi } from "./use-archive";
 
 const invoke = vi.hoisted(() => vi.fn());
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke }));
 
-function renderPage() {
+/** Calls `onReady` with the archive action, so a test can archive a meeting without a
+ *  rendered row, for example while the Meetings page's own list is still loading. */
+function ArchiveHarness({
+    onReady,
+}: {
+    onReady: (archive: ArchiveApi["archive"]) => void;
+}) {
+    const { archive } = useArchive();
+    onReady(archive);
+    return null;
+}
+
+function renderPage(extra?: ReactNode) {
     render(
         <MemoryRouter>
-            <MeetingsPage />
+            <Toaster toastManager={toast}>
+                <ArchiveProvider>
+                    {extra}
+                    <MeetingsPage />
+                </ArchiveProvider>
+            </Toaster>
         </MemoryRouter>,
     );
+}
+
+/** The region that holds the toasts. */
+function notifications() {
+    return screen.getByRole("region", { name: "Notifications" });
 }
 
 function summary(id: number, name: string, date: string) {
@@ -168,218 +195,21 @@ describe("MeetingsPage", () => {
         );
 
         expect(
-            await screen.findByText('Archived "Weekly sync".'),
+            await within(notifications()).findByText('Archived "Weekly sync".'),
         ).toBeInTheDocument();
         expect(
             screen.queryByText("Couldn't archive the meeting. Try again."),
         ).toBeNull();
     });
 
-    it("restores only once when Undo is clicked twice quickly", async () => {
-        let resolveUnarchive: (() => void) | undefined;
-        invoke.mockImplementation((command: string) => {
-            if (command === "list_meetings") {
-                return Promise.resolve([summary(1, "Kickoff", "2026-09-18")]);
-            }
-            if (command === "archive_meeting") {
-                return Promise.resolve(null);
-            }
-            if (command === "unarchive_meeting") {
-                return new Promise<void>((resolve) => {
-                    resolveUnarchive = resolve;
-                });
-            }
-            return Promise.resolve(null);
-        });
-        const user = userEvent.setup();
-        renderPage();
-        await user.click(
-            await screen.findByRole("button", { name: 'Archive "Kickoff"' }),
-        );
-        const undoButton = await screen.findByRole("button", { name: "Undo" });
-
-        await user.click(undoButton);
-        await user.click(undoButton);
-
-        expect(
-            invoke.mock.calls.filter(
-                ([command]) => command === "unarchive_meeting",
-            ),
-        ).toHaveLength(1);
-
-        resolveUnarchive?.();
-
-        await waitFor(() =>
-            expect(screen.queryByText('Archived "Kickoff".')).toBeNull(),
-        );
-    });
-
-    it("hides the restore error when another meeting is archived", async () => {
+    it("moves focus to the archive button of the next meeting after an archive", async () => {
         invoke.mockImplementation((command: string) => {
             if (command === "list_meetings") {
                 return Promise.resolve([
-                    summary(2, "Kickoff", "2026-09-24"),
-                    summary(1, "Standup", "2026-09-18"),
+                    summary(3, "Weekly sync", "2026-09-24"),
+                    summary(2, "Standup", "2026-09-22"),
+                    summary(1, "Kickoff", "2026-09-18"),
                 ]);
-            }
-            if (command === "archive_meeting") {
-                return Promise.resolve(null);
-            }
-            if (command === "unarchive_meeting") {
-                return Promise.reject("database is locked");
-            }
-            return Promise.resolve(null);
-        });
-        const user = userEvent.setup();
-        renderPage();
-
-        await user.click(
-            await screen.findByRole("button", { name: 'Archive "Standup"' }),
-        );
-        await user.click(await screen.findByRole("button", { name: "Undo" }));
-
-        expect(
-            await screen.findByText("Couldn't restore the meeting. Try again."),
-        ).toBeInTheDocument();
-
-        await user.click(
-            screen.getByRole("button", { name: 'Archive "Kickoff"' }),
-        );
-
-        expect(
-            await screen.findByText('Archived "Kickoff".'),
-        ).toBeInTheDocument();
-        expect(
-            screen.queryByText("Couldn't restore the meeting. Try again."),
-        ).toBeNull();
-    });
-
-    it("keeps the newer archive notice when an older restore resolves after another archive", async () => {
-        let resolveUnarchive: (() => void) | undefined;
-        invoke.mockImplementation((command: string) => {
-            if (command === "list_meetings") {
-                return Promise.resolve([
-                    summary(2, "Kickoff", "2026-09-24"),
-                    summary(1, "Standup", "2026-09-18"),
-                ]);
-            }
-            if (command === "archive_meeting") {
-                return Promise.resolve(null);
-            }
-            if (command === "unarchive_meeting") {
-                return new Promise<void>((resolve) => {
-                    resolveUnarchive = resolve;
-                });
-            }
-            return Promise.resolve(null);
-        });
-        const user = userEvent.setup();
-        renderPage();
-
-        await user.click(
-            await screen.findByRole("button", { name: 'Archive "Standup"' }),
-        );
-        await user.click(await screen.findByRole("button", { name: "Undo" }));
-        await user.click(
-            screen.getByRole("button", { name: 'Archive "Kickoff"' }),
-        );
-
-        expect(
-            await screen.findByText('Archived "Kickoff".'),
-        ).toBeInTheDocument();
-
-        resolveUnarchive?.();
-
-        // Give the resolved restore a chance to run its `then`/`catch` handlers.
-        await waitFor(() => {
-            expect(
-                invoke.mock.calls.filter(
-                    ([command]) => command === "list_meetings",
-                ).length,
-            ).toBeGreaterThan(1);
-        });
-        expect(screen.getByText('Archived "Kickoff".')).toBeInTheDocument();
-        expect(screen.queryByText('Archived "Standup".')).toBeNull();
-        expect(
-            screen.queryByText("Couldn't restore the meeting. Try again."),
-        ).toBeNull();
-        expect(screen.getByRole("button", { name: "Undo" })).toBeEnabled();
-    });
-
-    it("shows the archive notice that the location state gives", async () => {
-        invoke.mockResolvedValue([]);
-        render(
-            <MemoryRouter
-                initialEntries={[
-                    {
-                        pathname: "/meetings",
-                        state: { archived: { id: 7, name: "Standup" } },
-                    },
-                ]}
-            >
-                <MeetingsPage />
-            </MemoryRouter>,
-        );
-
-        expect(
-            await screen.findByText('Archived "Standup".'),
-        ).toBeInTheDocument();
-        expect(
-            screen.getByRole("button", { name: "Undo" }),
-        ).toBeInTheDocument();
-    });
-
-    it("keeps the newer archive notice and shows no restore error when an older restore fails after another archive", async () => {
-        let rejectUnarchive: ((reason: unknown) => void) | undefined;
-        invoke.mockImplementation((command: string) => {
-            if (command === "list_meetings") {
-                return Promise.resolve([
-                    summary(2, "Kickoff", "2026-09-24"),
-                    summary(1, "Standup", "2026-09-18"),
-                ]);
-            }
-            if (command === "archive_meeting") {
-                return Promise.resolve(null);
-            }
-            if (command === "unarchive_meeting") {
-                return new Promise<void>((_resolve, reject) => {
-                    rejectUnarchive = reject;
-                });
-            }
-            return Promise.resolve(null);
-        });
-        const user = userEvent.setup();
-        renderPage();
-
-        await user.click(
-            await screen.findByRole("button", { name: 'Archive "Standup"' }),
-        );
-        await user.click(await screen.findByRole("button", { name: "Undo" }));
-        await user.click(
-            screen.getByRole("button", { name: 'Archive "Kickoff"' }),
-        );
-
-        expect(
-            await screen.findByText('Archived "Kickoff".'),
-        ).toBeInTheDocument();
-
-        rejectUnarchive?.("database is locked");
-
-        // Give the rejected restore a chance to run its `catch` handler.
-        await waitFor(() => {
-            expect(screen.getByRole("button", { name: "Undo" })).toBeEnabled();
-        });
-        expect(screen.getByText('Archived "Kickoff".')).toBeInTheDocument();
-        expect(screen.queryByText('Archived "Standup".')).toBeNull();
-        expect(
-            screen.queryByText("Couldn't restore the meeting. Try again."),
-        ).toBeNull();
-    });
-
-    it("moves focus to Undo after a row archive", async () => {
-        invoke.mockImplementation((command: string) => {
-            if (command === "list_meetings") {
-                return Promise.resolve([summary(1, "Kickoff", "2026-09-18")]);
             }
             if (command === "archive_meeting") return Promise.resolve(null);
             return Promise.resolve(null);
@@ -388,32 +218,70 @@ describe("MeetingsPage", () => {
         renderPage();
 
         await user.click(
-            await screen.findByRole("button", { name: 'Archive "Kickoff"' }),
+            await screen.findByRole("button", {
+                name: 'Archive "Standup"',
+            }),
         );
 
-        expect(
-            await screen.findByRole("button", { name: "Undo" }),
-        ).toHaveFocus();
+        await waitFor(() =>
+            expect(
+                screen.getByRole("button", { name: 'Archive "Kickoff"' }),
+            ).toHaveFocus(),
+        );
     });
 
-    it("moves focus to Undo when the page opens with a notice from location state", async () => {
-        invoke.mockResolvedValue([]);
-        render(
-            <MemoryRouter
-                initialEntries={[
-                    {
-                        pathname: "/meetings",
-                        state: { archived: { id: 7, name: "Standup" } },
-                    },
-                ]}
-            >
-                <MeetingsPage />
-            </MemoryRouter>,
+    it("moves focus to the meeting before it when the last meeting is archived", async () => {
+        invoke.mockImplementation((command: string) => {
+            if (command === "list_meetings") {
+                return Promise.resolve([
+                    summary(3, "Weekly sync", "2026-09-24"),
+                    summary(2, "Standup", "2026-09-22"),
+                    summary(1, "Kickoff", "2026-09-18"),
+                ]);
+            }
+            if (command === "archive_meeting") return Promise.resolve(null);
+            return Promise.resolve(null);
+        });
+        const user = userEvent.setup();
+        renderPage();
+
+        await user.click(
+            await screen.findByRole("button", {
+                name: 'Archive "Kickoff"',
+            }),
         );
 
-        expect(
-            await screen.findByRole("button", { name: "Undo" }),
-        ).toHaveFocus();
+        await waitFor(() =>
+            expect(
+                screen.getByRole("button", { name: 'Archive "Standup"' }),
+            ).toHaveFocus(),
+        );
+    });
+
+    it("moves focus to New note when the list becomes empty", async () => {
+        invoke.mockImplementation((command: string) => {
+            if (command === "list_meetings") {
+                return Promise.resolve([
+                    summary(1, "Weekly sync", "2026-09-24"),
+                ]);
+            }
+            if (command === "archive_meeting") return Promise.resolve(null);
+            return Promise.resolve(null);
+        });
+        const user = userEvent.setup();
+        renderPage();
+
+        await user.click(
+            await screen.findByRole("button", {
+                name: 'Archive "Weekly sync"',
+            }),
+        );
+
+        await waitFor(() =>
+            expect(
+                screen.getByRole("button", { name: "New note" }),
+            ).toHaveFocus(),
+        );
     });
 
     it("moves focus to the restored meeting's link after Undo", async () => {
@@ -431,105 +299,47 @@ describe("MeetingsPage", () => {
         await user.click(
             await screen.findByRole("button", { name: 'Archive "Kickoff"' }),
         );
-        await user.click(await screen.findByRole("button", { name: "Undo" }));
+        await user.click(
+            within(notifications()).getByRole("button", { name: "Undo" }),
+        );
 
         expect(
             await screen.findByRole("link", { name: /Kickoff/ }),
         ).toHaveFocus();
     });
 
-    it("does not let a stale reload bring back the meeting the current notice names", async () => {
-        let resolveSecondList: ((meetings: unknown[]) => void) | undefined;
+    it("ignores a list response that was in flight when a meeting was archived", async () => {
+        let resolveFirstList: ((meetings: unknown[]) => void) | undefined;
         let listCalls = 0;
         invoke.mockImplementation((command: string) => {
             if (command === "list_meetings") {
                 listCalls += 1;
                 if (listCalls === 1) {
-                    return Promise.resolve([
-                        summary(2, "Kickoff", "2026-09-24"),
-                        summary(1, "Standup", "2026-09-18"),
-                    ]);
+                    return new Promise((resolve) => {
+                        resolveFirstList = resolve;
+                    });
                 }
-                // The reload that Undo starts. Held back to arrive after another
-                // meeting has been archived, with server data from before that.
-                return new Promise((resolve) => {
-                    resolveSecondList = resolve;
-                });
+                return Promise.resolve([]);
             }
             if (command === "archive_meeting") return Promise.resolve(null);
-            if (command === "unarchive_meeting") return Promise.resolve(null);
             return Promise.resolve(null);
         });
-        const user = userEvent.setup();
-        renderPage();
-
-        await user.click(
-            await screen.findByRole("button", { name: 'Archive "Kickoff"' }),
+        let archiveFn: ArchiveApi["archive"] | undefined;
+        renderPage(
+            <ArchiveHarness
+                onReady={(archive) => {
+                    archiveFn = archive;
+                }}
+            />,
         );
-        await user.click(await screen.findByRole("button", { name: "Undo" }));
-        await user.click(
-            screen.getByRole("button", { name: 'Archive "Standup"' }),
+        expect(screen.getByText("Loading…")).toBeInTheDocument();
+
+        await act(() => archiveFn!({ id: 1, name: "Kickoff" }));
+        resolveFirstList?.([summary(1, "Kickoff", "2026-09-18")]);
+
+        await waitFor(() =>
+            expect(screen.getByText("No meetings yet")).toBeInTheDocument(),
         );
-        expect(
-            await screen.findByText('Archived "Standup".'),
-        ).toBeInTheDocument();
-
-        resolveSecondList?.([
-            summary(2, "Kickoff", "2026-09-24"),
-            summary(1, "Standup", "2026-09-18"),
-        ]);
-
-        await waitFor(() => {
-            expect(
-                screen.getByRole("link", { name: /Kickoff/ }),
-            ).toBeInTheDocument();
-        });
-        expect(screen.queryByRole("link", { name: /Standup/ })).toBeNull();
-    });
-
-    it("clears a leftover archive error when Undo succeeds", async () => {
-        let archiveCalls = 0;
-        invoke.mockImplementation((command: string) => {
-            if (command === "list_meetings") {
-                return Promise.resolve([
-                    summary(2, "Kickoff", "2026-09-24"),
-                    summary(1, "Standup", "2026-09-18"),
-                ]);
-            }
-            if (command === "archive_meeting") {
-                archiveCalls += 1;
-                return archiveCalls === 1
-                    ? Promise.resolve(null)
-                    : Promise.reject("database is locked");
-            }
-            if (command === "unarchive_meeting") return Promise.resolve(null);
-            return Promise.resolve(null);
-        });
-        const user = userEvent.setup();
-        renderPage();
-
-        await user.click(
-            await screen.findByRole("button", { name: 'Archive "Standup"' }),
-        );
-        expect(
-            await screen.findByText('Archived "Standup".'),
-        ).toBeInTheDocument();
-
-        await user.click(
-            screen.getByRole("button", { name: 'Archive "Kickoff"' }),
-        );
-        expect(
-            await screen.findByText("Couldn't archive the meeting. Try again."),
-        ).toBeInTheDocument();
-        expect(screen.getByText('Archived "Standup".')).toBeInTheDocument();
-
-        await user.click(screen.getByRole("button", { name: "Undo" }));
-
-        await waitFor(() => {
-            expect(screen.queryByText('Archived "Standup".')).toBeNull();
-        });
-        expect(
-            screen.queryByText("Couldn't archive the meeting. Try again."),
-        ).toBeNull();
+        expect(screen.queryByRole("link", { name: /Kickoff/ })).toBeNull();
     });
 });

@@ -45,8 +45,13 @@ function Toast({ className, ...props }: ToastPrimitive.Root.Props) {
                 "h-(--height) [transform:translateX(var(--toast-swipe-movement-x))_translateY(calc(var(--toast-swipe-movement-y)-(var(--toast-index)*var(--peek))-(var(--shrink)*var(--height))))_scale(var(--scale))] [transition:transform_500ms_cubic-bezier(0.22,1,0.36,1),opacity_500ms,height_150ms]",
                 "after:absolute after:top-full after:left-0 after:h-[calc(var(--gap)+1px)] after:w-full after:content-['']",
                 "data-expanded:h-(--toast-height) data-expanded:[transform:translateX(var(--toast-swipe-movement-x))_translateY(var(--offset-y))]",
-                "data-limited:opacity-0 data-starting-style:[transform:translateY(150%)]",
-                "[&[data-ending-style]:not([data-limited]):not([data-swipe-direction])]:[transform:translateY(150%)]",
+                // The plain (not swiped) entrance and exit use a small, fixed slide
+                // instead of the 150% of the toast's own height that the generated
+                // component used, because this application shows at most one toast at
+                // a time: a slide sized for a stack peeking out from behind other
+                // toasts would carry a lone toast far below the window instead.
+                "data-limited:opacity-0 data-starting-style:[transform:translateY(0.5rem)]",
+                "[&[data-ending-style]:not([data-limited]):not([data-swipe-direction])]:[transform:translateY(0.5rem)]",
                 "data-ending-style:data-[swipe-direction=down]:[transform:translateY(calc(var(--toast-swipe-movement-y)+150%))]",
                 "data-ending-style:data-[swipe-direction=left]:[transform:translateX(calc(var(--toast-swipe-movement-x)-150%))_translateY(var(--offset-y))]",
                 "data-ending-style:data-[swipe-direction=right]:[transform:translateX(calc(var(--toast-swipe-movement-x)+150%))_translateY(var(--offset-y))]",
@@ -123,6 +128,11 @@ function ToastClose({
         <ToastPrimitive.Close
             data-slot="toast-close"
             aria-label="Close"
+            // Base UI hides the close button from the accessibility tree until the
+            // toast stack expands, which only happens on hover or focus. This
+            // application shows one toast at a time, so the close button stays
+            // reachable at all times instead.
+            aria-hidden={false}
             render={render}
             className={cn(
                 "relative shrink-0 text-muted-foreground after:absolute after:-inset-2 after:content-[''] hover:text-foreground",

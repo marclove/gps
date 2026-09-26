@@ -1,21 +1,27 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+    fireEvent,
+    render,
+    screen,
+    waitFor,
+    within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { MemoryRouter, Route, Routes, useLocation } from "react-router";
+import { MemoryRouter, Route, Routes } from "react-router";
+import { Toaster } from "@/components/toaster";
+import { toast } from "@/components/ui/toast";
+import { ArchiveProvider } from "./archive-provider";
 import type { Meeting } from "@/lib/meetings";
 import { MeetingEditorPage } from "./meeting-editor-page";
 
-/** Shows the Meetings list route and, for the new tests, the location state it was given. */
+/** Shows the Meetings list route the editor page opens after an archive. */
 function MeetingsListRoute() {
-    const location = useLocation();
-    return (
-        <>
-            <p>Meetings list</p>
-            <pre data-testid="location-state">
-                {JSON.stringify(location.state)}
-            </pre>
-        </>
-    );
+    return <p>Meetings list</p>;
+}
+
+/** The region that holds the toasts. */
+function notifications() {
+    return screen.getByRole("region", { name: "Notifications" });
 }
 
 const invoke = vi.hoisted(() => vi.fn());
@@ -42,10 +48,20 @@ function serveMeeting() {
 function renderPage(path: string) {
     render(
         <MemoryRouter initialEntries={[path]}>
-            <Routes>
-                <Route path="/meetings" element={<MeetingsListRoute />} />
-                <Route path="/meetings/:id" element={<MeetingEditorPage />} />
-            </Routes>
+            <Toaster toastManager={toast}>
+                <ArchiveProvider>
+                    <Routes>
+                        <Route
+                            path="/meetings"
+                            element={<MeetingsListRoute />}
+                        />
+                        <Route
+                            path="/meetings/:id"
+                            element={<MeetingEditorPage />}
+                        />
+                    </Routes>
+                </ArchiveProvider>
+            </Toaster>
         </MemoryRouter>,
     );
 }
@@ -227,7 +243,7 @@ describe("MeetingEditorPage", () => {
         expect(await screen.findByText("Meetings list")).toBeInTheDocument();
     });
 
-    it("gives the Meetings page the name that the user typed", async () => {
+    it("shows a toast naming the meeting with the name that the user typed", async () => {
         invoke.mockImplementation(
             async (command: string, args?: Record<string, unknown>) => {
                 if (command === "get_meeting") return MEETING;
@@ -244,8 +260,9 @@ describe("MeetingEditorPage", () => {
         );
         await user.click(screen.getByRole("button", { name: "Archive" }));
 
-        expect((await screen.findByTestId("location-state")).textContent).toBe(
-            JSON.stringify({ archived: { id: 42, name: "Retro" } }),
-        );
+        expect(await screen.findByText("Meetings list")).toBeInTheDocument();
+        expect(
+            within(notifications()).getByText('Archived "Retro".'),
+        ).toBeInTheDocument();
     });
 });
