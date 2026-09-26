@@ -8,6 +8,7 @@ import {
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router";
+import { FailureToastProvider } from "@/components/failure-toast-provider";
 import { Toaster } from "@/components/toaster";
 import { toast } from "@/components/ui/toast";
 import { ArchiveProvider } from "./archive-provider";
@@ -37,11 +38,22 @@ const MEETING: Meeting = {
     updatedAt: "2026-09-24T17:00:00.000Z",
 };
 
-/** Makes the fake backend return MEETING and accept every update. */
-function serveMeeting() {
+type Answer = (args?: Record<string, unknown>) => unknown;
+
+/**
+ * Makes the fake backend answer each command by its name. A command in `answers`
+ * gets that answer. Otherwise `get_meeting` returns MEETING, `list_meeting_tasks`
+ * returns no tasks, and every other command returns MEETING with its arguments.
+ */
+function serveMeeting(answers: Record<string, Answer> = {}) {
     invoke.mockImplementation(
-        async (command: string, args?: Record<string, unknown>) =>
-            command === "get_meeting" ? MEETING : { ...MEETING, ...args },
+        async (command: string, args?: Record<string, unknown>) => {
+            const answer = answers[command];
+            if (answer) return answer(args);
+            if (command === "get_meeting") return MEETING;
+            if (command === "list_meeting_tasks") return [];
+            return { ...MEETING, ...args };
+        },
     );
 }
 
@@ -49,18 +61,20 @@ function renderPage(path: string) {
     render(
         <MemoryRouter initialEntries={[path]}>
             <Toaster toastManager={toast}>
-                <ArchiveProvider>
-                    <Routes>
-                        <Route
-                            path="/meetings"
-                            element={<MeetingsListRoute />}
-                        />
-                        <Route
-                            path="/meetings/:id"
-                            element={<MeetingEditorPage />}
-                        />
-                    </Routes>
-                </ArchiveProvider>
+                <FailureToastProvider>
+                    <ArchiveProvider>
+                        <Routes>
+                            <Route
+                                path="/meetings"
+                                element={<MeetingsListRoute />}
+                            />
+                            <Route
+                                path="/meetings/:id"
+                                element={<MeetingEditorPage />}
+                            />
+                        </Routes>
+                    </ArchiveProvider>
+                </FailureToastProvider>
             </Toaster>
         </MemoryRouter>,
     );
@@ -94,8 +108,14 @@ describe("MeetingEditorPage", () => {
     });
 
     it("shows an error with a Retry button when the meeting cannot be loaded", async () => {
-        invoke.mockRejectedValueOnce("database is locked");
-        invoke.mockResolvedValueOnce(MEETING);
+        let loads = 0;
+        serveMeeting({
+            get_meeting: () => {
+                loads += 1;
+                if (loads === 1) throw "database is locked";
+                return MEETING;
+            },
+        });
         const user = userEvent.setup();
         renderPage("/meetings/42");
 
@@ -182,12 +202,9 @@ describe("MeetingEditorPage", () => {
     });
 
     it("carries the stored notes along unchanged when the name changes", async () => {
-        invoke.mockImplementation(
-            async (command: string, args?: Record<string, unknown>) =>
-                command === "get_meeting"
-                    ? { ...MEETING, notes: "- [ ] Send notes\n" }
-                    : { ...MEETING, ...args },
-        );
+        serveMeeting({
+            get_meeting: () => ({ ...MEETING, notes: "- [ ] Send notes\n" }),
+        });
         const user = userEvent.setup();
         renderPage("/meetings/42");
 
@@ -211,17 +228,12 @@ describe("MeetingEditorPage", () => {
 
     it("archives once when Archive is clicked twice quickly", async () => {
         let resolveArchive: (() => void) | undefined;
-        invoke.mockImplementation(
-            async (command: string, args?: Record<string, unknown>) => {
-                if (command === "get_meeting") return MEETING;
-                if (command === "archive_meeting") {
-                    return new Promise<void>((resolve) => {
-                        resolveArchive = resolve;
-                    });
-                }
-                return { ...MEETING, ...args };
-            },
-        );
+        serveMeeting({
+            archive_meeting: () =>
+                new Promise<void>((resolve) => {
+                    resolveArchive = resolve;
+                }),
+        });
         const user = userEvent.setup();
         renderPage("/meetings/42");
         const archiveButton = await screen.findByRole("button", {
@@ -244,13 +256,7 @@ describe("MeetingEditorPage", () => {
     });
 
     it("shows a toast naming the meeting with the name that the user typed", async () => {
-        invoke.mockImplementation(
-            async (command: string, args?: Record<string, unknown>) => {
-                if (command === "get_meeting") return MEETING;
-                if (command === "archive_meeting") return null;
-                return { ...MEETING, ...args };
-            },
-        );
+        serveMeeting({ archive_meeting: () => null });
         const user = userEvent.setup();
         renderPage("/meetings/42");
 
@@ -264,5 +270,21 @@ describe("MeetingEditorPage", () => {
         expect(
             within(notifications()).getByText('Archived "Retro".'),
         ).toBeInTheDocument();
+    });
+
+    it("moves focus from the date to Archive to the action items with Tab", async () => {
+        serveMeeting();
+        const user = userEvent.setup();
+        renderPage("/meetings/42");
+        await screen.findByText("No action items yet");
+
+        screen.getByLabelText("Meeting date").focus();
+        await user.tab();
+        expect(screen.getByRole("button", { name: "Archive" })).toHaveFocus();
+
+        await user.tab();
+        expect(
+            screen.getByRole("region", { name: "Action items" }),
+        ).toContainElement(document.activeElement as HTMLElement);
     });
 });
