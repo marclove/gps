@@ -1,7 +1,12 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { createTask, listMeetingTasks, type Task } from "@/lib/tasks";
+import {
+    createTask,
+    listMeetingTasks,
+    setTaskCompleted,
+    type Task,
+} from "@/lib/tasks";
 import { ActionItemRow } from "./action-item-row";
 
 type LoadState =
@@ -26,6 +31,10 @@ export function ActionItemsPanel({ meetingId }: { meetingId: number }) {
     const [attempt, setAttempt] = useState(0);
     const [newText, setNewText] = useState("");
     const [message, setMessage] = useState<Message>(null);
+    // Whether each item is done, by task identifier. An item that is not here uses its stored value.
+    const [completed, setCompleted] = useState(new Map<number, boolean>());
+    // The number of the latest click on the checkbox of each item, by task identifier.
+    const completeClicks = useRef(new Map<number, number>());
     // The text field of each item, by task identifier, so that the focus can move to an item.
     const itemFields = useRef(new Map<number, HTMLInputElement>());
 
@@ -59,6 +68,30 @@ export function ActionItemsPanel({ meetingId }: { meetingId: number }) {
             setMessage("add");
             // Put the text back, unless the user has typed a new text since.
             setNewText((current) => (current === "" ? text : current));
+        }
+    }
+
+    function isCompleted(task: Task) {
+        return completed.get(task.id) ?? task.completedAt !== null;
+    }
+
+    async function changeCompleted(task: Task, value: boolean) {
+        const before = isCompleted(task);
+        const click = (completeClicks.current.get(task.id) ?? 0) + 1;
+        completeClicks.current.set(task.id, click);
+        setCompleted((current) => new Map(current).set(task.id, value));
+        try {
+            // Do not show the returned task, because a later click may have changed the item since.
+            await setTaskCompleted(task.id, value);
+            setMessage(null);
+        } catch {
+            setMessage("save");
+            // Put the value back, unless the user has clicked the checkbox again since.
+            if (completeClicks.current.get(task.id) === click) {
+                setCompleted((current) =>
+                    new Map(current).set(task.id, before),
+                );
+            }
         }
     }
 
@@ -107,6 +140,10 @@ export function ActionItemsPanel({ meetingId }: { meetingId: number }) {
                             <ActionItemRow
                                 key={task.id}
                                 task={task}
+                                completed={isCompleted(task)}
+                                onCompletedChange={(value) =>
+                                    changeCompleted(task, value)
+                                }
                                 inputRef={itemFieldRef(task.id)}
                             />
                         ))}

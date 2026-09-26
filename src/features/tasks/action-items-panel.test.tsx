@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+    act,
+    fireEvent,
+    render,
+    screen,
+    waitFor,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Task } from "@/lib/tasks";
@@ -19,13 +25,16 @@ function task(id: number, description: string): Task {
     };
 }
 
-/** Answers the task commands. `create` answers `create_task`. */
+/** Answers the task commands. `create` answers `create_task`, and `complete` answers `set_task_completed`. */
 function answer({
     tasks = [],
     create = (description: string) => Promise.resolve(task(99, description)),
+    complete = (id: number) =>
+        Promise.resolve(tasks.find((stored) => stored.id === id) as Task),
 }: {
     tasks?: Task[];
     create?: (description: string) => Promise<Task>;
+    complete?: (id: number, completed: boolean) => Promise<Task>;
 } = {}) {
     invoke.mockImplementation(
         async (command: string, args: Record<string, unknown> = {}) => {
@@ -34,6 +43,11 @@ function answer({
                     return tasks;
                 case "create_task":
                     return create(args.description as string);
+                case "set_task_completed":
+                    return complete(
+                        args.id as number,
+                        args.completed as boolean,
+                    );
                 default:
                     throw `unexpected command ${command}`;
             }
@@ -49,6 +63,12 @@ function itemValues() {
     return screen
         .queryAllByRole("textbox", { name: "Action item" })
         .map((field) => (field as HTMLInputElement).value);
+}
+
+function completeCalls() {
+    return invoke.mock.calls.filter(
+        ([command]) => command === "set_task_completed",
+    );
 }
 
 function createCalls() {
@@ -167,5 +187,44 @@ describe("ActionItemsPanel", () => {
 
         await screen.findByRole("alert");
         expect(addField()).toHaveValue("Book");
+    });
+
+    it("ends unchecked after a quick check and uncheck", async () => {
+        let stored = task(1, "Send the deck");
+        const pending: (() => void)[] = [];
+        answer({
+            tasks: [stored],
+            complete: (_id, completed) => {
+                // The fake stores the change at once and answers when the test says so.
+                stored = {
+                    ...stored,
+                    completedAt: completed ? "2026-09-24T11:00:00.000Z" : null,
+                };
+                const answerTask = stored;
+                return new Promise<Task>((resolve) =>
+                    pending.push(() => resolve(answerTask)),
+                );
+            },
+        });
+        const user = userEvent.setup();
+        render(<ActionItemsPanel meetingId={1} />);
+
+        const checkbox = await screen.findByRole("checkbox", {
+            name: 'Complete "Send the deck"',
+        });
+        await user.click(checkbox);
+        await user.click(checkbox);
+        expect(pending).toHaveLength(2);
+        await act(async () => {
+            pending[0]();
+            pending[1]();
+        });
+
+        expect(checkbox).not.toBeChecked();
+        const calls = completeCalls();
+        expect(calls[calls.length - 1]).toEqual([
+            "set_task_completed",
+            { id: 1, completed: false },
+        ]);
     });
 });
