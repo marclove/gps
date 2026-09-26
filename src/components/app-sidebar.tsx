@@ -1,4 +1,4 @@
-import { NotebookPenIcon, type LucideIcon } from "lucide-react";
+import { NotebookPenIcon, TargetIcon, type LucideIcon } from "lucide-react";
 import { NavLink } from "react-router";
 import {
     Sidebar,
@@ -14,6 +14,7 @@ type Section = { title: string; path: string; icon: LucideIcon };
 
 const SECTIONS: Section[] = [
     { title: "Meetings", path: "/meetings", icon: NotebookPenIcon },
+    { title: "Initiatives", path: "/initiatives", icon: TargetIcon },
 ];
 
 /**

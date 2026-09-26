@@ -6,6 +6,8 @@ import { toast } from "@/components/ui/toast";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ArchiveProvider } from "@/components/archive-provider";
+import { InitiativeEditorPage } from "@/features/initiatives/initiative-editor-page";
+import { InitiativesPage } from "@/features/initiatives/initiatives-page";
 import { MeetingEditorPage } from "@/features/meetings/meeting-editor-page";
 import { MeetingsPage } from "@/features/meetings/meetings-page";
 
@@ -36,6 +38,14 @@ function App() {
                                         <Route
                                             path="/meetings/:id"
                                             element={<MeetingEditorPage />}
+                                        />
+                                        <Route
+                                            path="/initiatives"
+                                            element={<InitiativesPage />}
+                                        />
+                                        <Route
+                                            path="/initiatives/:id"
+                                            element={<InitiativeEditorPage />}
                                         />
                                     </Routes>
                                 </SidebarInset>
