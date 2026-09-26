@@ -62,7 +62,7 @@ beforeEach(() => {
 });
 
 describe("MeetingInitiativeSelect", () => {
-    it("keeps the latest choice when an earlier save fails after it", async () => {
+    it("keeps the latest choice without a toast when an earlier save fails after it", async () => {
         let rejectFirst: (reason: unknown) => void = () => {};
         let assignCalls = 0;
         invoke.mockImplementation(
@@ -95,11 +95,12 @@ describe("MeetingInitiativeSelect", () => {
         await act(async () => rejectFirst("database is locked"));
 
         expect(select()).toHaveValue(String(PILOT.id));
+        // The newer choice is saved, so the failure of the older choice is not reported.
         expect(
-            await within(
+            within(
                 screen.getByRole("region", { name: "Notifications" }),
-            ).findByText("Couldn't assign the initiative. Try again."),
-        ).toBeInTheDocument();
+            ).queryByText("Couldn't assign the initiative. Try again."),
+        ).not.toBeInTheDocument();
 
         // A new render of the row, as when the editor page renders again, keeps the choice.
         rerender(element());
@@ -151,5 +152,42 @@ describe("MeetingInitiativeSelect", () => {
                 ).queryByText("Couldn't assign the initiative. Try again."),
             ).not.toBeInTheDocument(),
         );
+    });
+
+    it("shows an earlier choice that is saved after the latest save fails", async () => {
+        let resolveFirst: (meeting: Meeting) => void = () => {};
+        let rejectSecond: (reason: unknown) => void = () => {};
+        let assignCalls = 0;
+        invoke.mockImplementation((command: string) => {
+            switch (command) {
+                case "list_initiatives":
+                    return Promise.resolve([LAUNCH, PILOT]);
+                case "set_meeting_initiative":
+                    assignCalls += 1;
+                    if (assignCalls === 1) {
+                        return new Promise((resolve) => {
+                            resolveFirst = resolve;
+                        });
+                    }
+                    return new Promise((_, reject) => {
+                        rejectSecond = reject;
+                    });
+                default:
+                    return Promise.reject(`unexpected command ${command}`);
+            }
+        });
+        const user = userEvent.setup();
+        render(element());
+        await waitFor(() => expect(select()).toBeEnabled());
+
+        await user.selectOptions(select(), "Launch");
+        await user.selectOptions(select(), "Pilot");
+        await waitFor(() => expect(assignCalls).toBe(2));
+
+        await act(async () => rejectSecond("database is locked"));
+        await act(async () => resolveFirst(meeting(LAUNCH.id)));
+
+        // The database holds the first choice, so the select box shows it.
+        expect(select()).toHaveValue(String(LAUNCH.id));
     });
 });

@@ -45,6 +45,8 @@ export function MeetingInitiativeSelect({
     const latestRequest = useRef(0);
     // The number of the newest request that failed.
     const failedRequest = useRef(0);
+    // The numbers of the requests that have not ended.
+    const pendingRequests = useRef(new Set<number>());
     const failureToast = useFailureToast();
 
     useEffect(() => {
@@ -65,20 +67,32 @@ export function MeetingInitiativeSelect({
 
     async function assign(value: string) {
         const request = ++latestRequest.current;
+        pendingRequests.current.add(request);
         setShown(value);
         try {
             await setMeetingInitiative(
                 meetingId,
                 value === "" ? null : Number(value),
             );
-            // The requests are saved in order, so an older request that ends later does not
-            // replace the value of a newer one.
+            pendingRequests.current.delete(request);
+            // An older request that ends after a newer one does not replace the value
+            // of the newer one.
             if (request > saved.current.request) {
                 saved.current = { request, value };
+                // When all newer requests have failed, this value is the value in the
+                // database, so the select box shows it.
+                const newerPending = [...pendingRequests.current].some(
+                    (other) => other > request,
+                );
+                if (!newerPending) setShown(value);
             }
             // The toast of a newer request that failed stays open.
             if (request > failedRequest.current) failureToast.clear();
         } catch {
+            pendingRequests.current.delete(request);
+            // A newer request has already saved the choice that the select box shows, so
+            // this failure has no effect for the user.
+            if (request < saved.current.request) return;
             failedRequest.current = Math.max(failedRequest.current, request);
             // An older request that fails does not change the choice, because the user
             // has already made a newer choice.
@@ -90,9 +104,13 @@ export function MeetingInitiativeSelect({
 
     return (
         <div className="flex items-center justify-between gap-2">
-            <label htmlFor={selectId} className="text-sm font-medium">
-                Initiative
-            </label>
+            {load.kind === "error" ? (
+                <span className="text-sm font-medium">Initiative</span>
+            ) : (
+                <label htmlFor={selectId} className="text-sm font-medium">
+                    Initiative
+                </label>
+            )}
             {load.kind === "error" ? (
                 <div className="flex items-center gap-2 text-sm">
                     <p>Couldn't load initiatives</p>
