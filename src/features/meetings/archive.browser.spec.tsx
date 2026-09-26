@@ -91,13 +91,19 @@ describe("Archive toast position", () => {
         const text = await screen.findByText('Archived "Weekly sync".');
         const toast = text.closest("[data-slot='toast']") ?? text;
 
+        // Polls until the toast is fully settled at the bottom right, rather than
+        // checking its position once, because it slides in from below the window.
         await expect
-            .poll(() => toast.getBoundingClientRect().bottom)
-            .toBeGreaterThanOrEqual(800 - TOAST_EDGE_DISTANCE);
-        const box = toast.getBoundingClientRect();
-        expect(box.bottom).toBeLessThanOrEqual(800);
-        expect(box.right).toBeGreaterThanOrEqual(1200 - TOAST_EDGE_DISTANCE);
-        expect(box.right).toBeLessThanOrEqual(1200);
-        expect(box.left).toBeGreaterThan(600);
+            .poll(() => {
+                const box = toast.getBoundingClientRect();
+                return (
+                    box.bottom >= 800 - TOAST_EDGE_DISTANCE &&
+                    box.bottom <= 800 &&
+                    box.right >= 1200 - TOAST_EDGE_DISTANCE &&
+                    box.right <= 1200 &&
+                    box.left > 600
+                );
+            })
+            .toBe(true);
     });
 });

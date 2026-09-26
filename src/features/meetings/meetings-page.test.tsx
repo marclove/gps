@@ -202,6 +202,50 @@ describe("MeetingsPage", () => {
         ).toBeNull();
     });
 
+    it("archives once when a row's Archive button is clicked twice quickly", async () => {
+        let resolveArchive: (() => void) | undefined;
+        let archived = false;
+        invoke.mockImplementation((command: string) => {
+            if (command === "list_meetings") {
+                return Promise.resolve(
+                    archived ? [] : [summary(1, "Kickoff", "2026-09-18")],
+                );
+            }
+            if (command === "archive_meeting") {
+                return new Promise<void>((resolve) => {
+                    resolveArchive = () => {
+                        archived = true;
+                        resolve();
+                    };
+                });
+            }
+            return Promise.resolve(null);
+        });
+        const user = userEvent.setup();
+        renderPage();
+        const archiveButton = await screen.findByRole("button", {
+            name: 'Archive "Kickoff"',
+        });
+
+        await user.click(archiveButton);
+        await user.click(archiveButton);
+
+        expect(
+            invoke.mock.calls.filter(
+                ([command]) => command === "archive_meeting",
+            ),
+        ).toHaveLength(1);
+
+        await act(async () => {
+            resolveArchive?.();
+            await Promise.resolve();
+        });
+
+        await waitFor(() =>
+            expect(screen.getByText("No meetings yet")).toBeInTheDocument(),
+        );
+    });
+
     it("moves focus to the archive button of the next meeting after an archive", async () => {
         invoke.mockImplementation((command: string) => {
             if (command === "list_meetings") {

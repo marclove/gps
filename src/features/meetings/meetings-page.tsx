@@ -43,6 +43,9 @@ export function MeetingsPage() {
     // happened before this page opened, or one this page already reacted to, does not
     // move focus again.
     const handledRestored = useRef<RestoredMeeting | null>(restored);
+    // The identifiers of meetings with an archive in progress, so a second click on the
+    // same row before the first archive finishes has no effect.
+    const pendingArchiveIds = useRef(new Set<number>());
 
     useEffect(() => {
         let current = true;
@@ -101,30 +104,57 @@ export function MeetingsPage() {
     }
 
     async function handleArchive(meeting: MeetingSummary) {
+        // Ignore a second click on the same row while its archive is still in flight,
+        // so it cannot run twice.
+        if (pendingArchiveIds.current.has(meeting.id)) return;
+        pendingArchiveIds.current.add(meeting.id);
         try {
             await archive({ id: meeting.id, name: displayName(meeting.name) });
             setArchiveFailed(false);
-            setList((current) => {
-                if (current.kind !== "loaded") return current;
-                const index = current.meetings.findIndex(
+            // Computed here, from the list this render sees, rather than inside the
+            // `setList` updater below, which React may call more than once and so must
+            // stay free of side effects such as writing to a ref.
+            if (list.kind === "loaded") {
+                const index = list.meetings.findIndex(
                     (candidate) => candidate.id === meeting.id,
                 );
-                const remaining = current.meetings.filter(
-                    (candidate) => candidate.id !== meeting.id,
-                );
-                if (remaining.length === 0) {
-                    pendingFocus.current = "new-note";
-                } else {
-                    const nextIndex =
-                        index < remaining.length ? index : remaining.length - 1;
-                    pendingFocus.current = {
-                        archiveButtonId: remaining[nextIndex].id,
-                    };
+                if (index !== -1) {
+                    const remaining = list.meetings.filter(
+                        (candidate) => candidate.id !== meeting.id,
+                    );
+                    if (remaining.length === 0) {
+                        pendingFocus.current = "new-note";
+                    } else {
+                        const nextIndex =
+                            index < remaining.length
+                                ? index
+                                : remaining.length - 1;
+                        pendingFocus.current = {
+                            archiveButtonId: remaining[nextIndex].id,
+                        };
+                    }
                 }
-                return { kind: "loaded", meetings: remaining };
+            }
+            setList((current) => {
+                if (current.kind !== "loaded") return current;
+                if (
+                    !current.meetings.some(
+                        (candidate) => candidate.id === meeting.id,
+                    )
+                ) {
+                    return current;
+                }
+                return {
+                    kind: "loaded",
+                    meetings: current.meetings.filter(
+                        (candidate) => candidate.id !== meeting.id,
+                    ),
+                };
             });
         } catch {
             setArchiveFailed(true);
+        } finally {
+            pendingArchiveIds.current.delete(meeting.id);
         }
     }
 

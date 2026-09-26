@@ -22,7 +22,10 @@ function ToastList() {
             <ToastContent>
                 <ToastTitle />
                 <ToastAction />
-                <ToastClose />
+                {/* This application shows at most one toast at a time, so the close
+                    button stays reachable without a hover or focus, unlike Base UI's
+                    default, which hides it until a stack of several toasts expands. */}
+                <ToastClose aria-hidden={false} />
             </ToastContent>
         </Toast>
     ));
