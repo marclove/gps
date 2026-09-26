@@ -21,8 +21,16 @@ type ListState =
 /** State that the Meetings page gives the editor page when it opens a new meeting. */
 export type NewMeetingState = { isNew: true };
 
-/** Where keyboard focus goes once the DOM shows the effect of an archive. */
-type PendingFocus = "new-note" | { archiveButtonId: number } | null;
+/**
+ * Records an archive so the effect that watches the list can move focus once the
+ * backend truth catches up, even if another archive changes the list first.
+ */
+type ArchivedNeighbors = {
+    /** The identifier of the archived meeting. */
+    archivedId: number;
+    /** The identifiers of every meeting in the list, in order, as of the archive. */
+    orderedIds: number[];
+};
 
 /** The page that lists all meetings and creates new ones. */
 export function MeetingsPage() {
@@ -36,9 +44,9 @@ export function MeetingsPage() {
     const newNoteButtonRef = useRef<HTMLButtonElement>(null);
     const meetingLinkRefs = useRef(new Map<number, HTMLAnchorElement>());
     const archiveButtonRefs = useRef(new Map<number, HTMLButtonElement>());
-    // Where to move focus once the DOM catches up with the row an archive just
-    // removed. `null` means nothing is waiting for focus.
-    const pendingFocus = useRef<PendingFocus>(null);
+    // The most recent archive that is still waiting for the list to catch up, so the
+    // effect below can move focus once it does. `null` means nothing is waiting.
+    const archivedNeighbors = useRef<ArchivedNeighbors | null>(null);
     // The restored meeting this page has already moved focus for, so a restore that
     // happened before this page opened, or one this page already reacted to, does not
     // move focus again.
@@ -59,19 +67,38 @@ export function MeetingsPage() {
     }, [attempt, version]);
 
     useEffect(() => {
-        if (pendingFocus.current === "new-note") {
+        const neighbors = archivedNeighbors.current;
+        if (!neighbors || list.kind !== "loaded") return;
+        archivedNeighbors.current = null;
+
+        // Focus the first surviving meeting that was after the archived one, in the
+        // order the archive saw, or otherwise the nearest surviving one before it.
+        // Using that recorded order, rather than the current list's order, is what
+        // keeps the target correct when a second archive removed a meeting in
+        // between: a meeting between the archived one and its recorded neighbor can
+        // no longer be there to stand in for it. It does not wait for the archived
+        // meeting itself to disappear from `list` first: the row it is choosing
+        // between is the row after or before it, never its own.
+        const currentIds = new Set(list.meetings.map((meeting) => meeting.id));
+        const archivedIndex = neighbors.orderedIds.indexOf(
+            neighbors.archivedId,
+        );
+        const after =
+            archivedIndex === -1
+                ? []
+                : neighbors.orderedIds.slice(archivedIndex + 1);
+        const before =
+            archivedIndex === -1
+                ? []
+                : neighbors.orderedIds.slice(0, archivedIndex).reverse();
+        const nextId =
+            after.find((id) => currentIds.has(id)) ??
+            before.find((id) => currentIds.has(id));
+
+        if (nextId !== undefined) {
+            archiveButtonRefs.current.get(nextId)?.focus();
+        } else {
             newNoteButtonRef.current?.focus();
-            pendingFocus.current = null;
-            return;
-        }
-        if (pendingFocus.current && list.kind === "loaded") {
-            const button = archiveButtonRefs.current.get(
-                pendingFocus.current.archiveButtonId,
-            );
-            if (button) {
-                button.focus();
-                pendingFocus.current = null;
-            }
         }
     }, [list]);
 
@@ -111,29 +138,18 @@ export function MeetingsPage() {
         try {
             await archive({ id: meeting.id, name: displayName(meeting.name) });
             setArchiveFailed(false);
-            // Computed here, from the list this render sees, rather than inside the
-            // `setList` updater below, which React may call more than once and so must
-            // stay free of side effects such as writing to a ref.
+            // Recorded here, from the list this render sees, rather than computing
+            // the focus target itself inside the `setList` updater below: React may
+            // call that updater more than once, so it must stay pure, and by the time
+            // it runs another archive may already have changed the list, which would
+            // make an index computed from a stale snapshot point at the wrong row.
+            // The effect that watches `list` picks the actual target once the list
+            // catches up, from the always-current list at that later time.
             if (list.kind === "loaded") {
-                const index = list.meetings.findIndex(
-                    (candidate) => candidate.id === meeting.id,
-                );
-                if (index !== -1) {
-                    const remaining = list.meetings.filter(
-                        (candidate) => candidate.id !== meeting.id,
-                    );
-                    if (remaining.length === 0) {
-                        pendingFocus.current = "new-note";
-                    } else {
-                        const nextIndex =
-                            index < remaining.length
-                                ? index
-                                : remaining.length - 1;
-                        pendingFocus.current = {
-                            archiveButtonId: remaining[nextIndex].id,
-                        };
-                    }
-                }
+                archivedNeighbors.current = {
+                    archivedId: meeting.id,
+                    orderedIds: list.meetings.map((candidate) => candidate.id),
+                };
             }
             setList((current) => {
                 if (current.kind !== "loaded") return current;

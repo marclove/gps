@@ -246,6 +246,71 @@ describe("MeetingsPage", () => {
         );
     });
 
+    it("moves focus to the meeting that outlives two archives started at once", async () => {
+        // Archiving A and B while both are still in flight, with B finishing first,
+        // must still end with focus on C: the meeting that was after both of them.
+        let resolveArchiveA: (() => void) | undefined;
+        let resolveArchiveB: (() => void) | undefined;
+        const archivedIds = new Set<number>();
+        invoke.mockImplementation(
+            (command: string, args?: Record<string, unknown>) => {
+                if (command === "list_meetings") {
+                    return Promise.resolve(
+                        [
+                            summary(1, "A", "2026-09-18"),
+                            summary(2, "B", "2026-09-22"),
+                            summary(3, "C", "2026-09-24"),
+                        ].filter((meeting) => !archivedIds.has(meeting.id)),
+                    );
+                }
+                if (command === "archive_meeting") {
+                    const id = (args as { id: number }).id;
+                    return new Promise<void>((resolve) => {
+                        const resolveAndMark = () => {
+                            archivedIds.add(id);
+                            resolve();
+                        };
+                        if (id === 1) resolveArchiveA = resolveAndMark;
+                        if (id === 2) resolveArchiveB = resolveAndMark;
+                    });
+                }
+                return Promise.resolve(null);
+            },
+        );
+        const user = userEvent.setup();
+        renderPage();
+
+        await user.click(
+            await screen.findByRole("button", { name: 'Archive "A"' }),
+        );
+        await user.click(screen.getByRole("button", { name: 'Archive "B"' }));
+
+        await act(async () => {
+            resolveArchiveB?.();
+            await Promise.resolve();
+        });
+        await waitFor(() =>
+            expect(
+                screen.queryByRole("button", { name: 'Archive "B"' }),
+            ).toBeNull(),
+        );
+        // Moves focus away from where B's own archive left it, so the final check
+        // below only passes if resolving A's archive moves focus itself, rather than
+        // by coincidence leaving B's now-stale target in place.
+        screen.getByRole("button", { name: "New note" }).focus();
+
+        await act(async () => {
+            resolveArchiveA?.();
+            await Promise.resolve();
+        });
+
+        await waitFor(() =>
+            expect(
+                screen.getByRole("button", { name: 'Archive "C"' }),
+            ).toHaveFocus(),
+        );
+    });
+
     it("moves focus to the archive button of the next meeting after an archive", async () => {
         invoke.mockImplementation((command: string) => {
             if (command === "list_meetings") {
