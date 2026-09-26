@@ -1,4 +1,5 @@
 mod db;
+mod initiatives;
 mod meetings;
 mod tasks;
 
@@ -7,6 +8,7 @@ use std::sync::Mutex;
 use rusqlite::Connection;
 use tauri::{Manager, State};
 
+use crate::initiatives::{Initiative, InitiativeSummary};
 use crate::meetings::{Meeting, MeetingSummary};
 use crate::tasks::Task;
 
@@ -96,6 +98,84 @@ fn unarchive_meeting(database: State<'_, Database>, id: i64) -> Result<(), Strin
     clippy::needless_pass_by_value,
     reason = "Tauri gives managed state to commands by value"
 )]
+fn set_meeting_initiative(
+    database: State<'_, Database>,
+    id: i64,
+    initiative_id: Option<i64>,
+) -> Result<Meeting, String> {
+    database.run(|connection| meetings::set_initiative(connection, id, initiative_id))
+}
+
+#[tauri::command]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Tauri gives managed state to commands by value"
+)]
+fn list_initiatives(
+    database: State<'_, Database>,
+    include_archived: bool,
+) -> Result<Vec<InitiativeSummary>, String> {
+    database.run(|connection| initiatives::list(connection, include_archived))
+}
+
+#[tauri::command]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Tauri gives managed state to commands by value"
+)]
+fn create_initiative(database: State<'_, Database>) -> Result<Initiative, String> {
+    database.run(initiatives::create)
+}
+
+#[tauri::command]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Tauri gives managed state to commands by value"
+)]
+fn get_initiative(database: State<'_, Database>, id: i64) -> Result<Option<Initiative>, String> {
+    database.run(|connection| initiatives::get(connection, id))
+}
+
+#[tauri::command]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Tauri gives managed state to commands by value"
+)]
+fn update_initiative(
+    database: State<'_, Database>,
+    id: i64,
+    name: &str,
+    description: &str,
+    raci_role: Option<String>,
+) -> Result<Initiative, String> {
+    database.run(|connection| {
+        initiatives::update(connection, id, name, description, raci_role.as_deref())
+    })
+}
+
+#[tauri::command]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Tauri gives managed state to commands by value"
+)]
+fn archive_initiative(database: State<'_, Database>, id: i64) -> Result<(), String> {
+    database.run(|connection| initiatives::archive(connection, id))
+}
+
+#[tauri::command]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Tauri gives managed state to commands by value"
+)]
+fn unarchive_initiative(database: State<'_, Database>, id: i64) -> Result<(), String> {
+    database.run(|connection| initiatives::unarchive(connection, id))
+}
+
+#[tauri::command]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Tauri gives managed state to commands by value"
+)]
 fn list_meeting_tasks(database: State<'_, Database>, meeting_id: i64) -> Result<Vec<Task>, String> {
     database.run(|connection| tasks::list_for_meeting(connection, meeting_id))
 }
@@ -166,6 +246,13 @@ pub fn run() {
             update_meeting,
             archive_meeting,
             unarchive_meeting,
+            set_meeting_initiative,
+            list_initiatives,
+            create_initiative,
+            get_initiative,
+            update_initiative,
+            archive_initiative,
+            unarchive_initiative,
             list_meeting_tasks,
             create_task,
             update_task_description,
