@@ -136,7 +136,7 @@ export function MeetingsPage() {
         if (pendingArchiveIds.current.has(meeting.id)) return;
         pendingArchiveIds.current.add(meeting.id);
         try {
-            await archive({ id: meeting.id, name: displayName(meeting.name) });
+            await archive({ id: meeting.id, name: meeting.name });
             setArchiveFailed(false);
             // Recorded here, from the list this render sees, rather than computing
             // the focus target itself inside the `setList` updater below: React may

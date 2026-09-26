@@ -1,7 +1,14 @@
 import { createContext, useContext } from "react";
 
 /** The identifier and name of a meeting to archive. */
-export type MeetingToArchive = { id: number; name: string };
+export type MeetingToArchive = {
+    id: number;
+    /**
+     * The meeting's raw name, exactly as stored. It may be empty; the archive
+     * toast shows "Untitled meeting" for an empty name.
+     */
+    name: string;
+};
 
 /** The identifier of a meeting a restore just brought back. */
 export type RestoredMeeting = { id: number };

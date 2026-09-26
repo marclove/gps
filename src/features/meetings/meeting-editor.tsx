@@ -66,7 +66,7 @@ export function MeetingEditor({
         try {
             await archiveInProvider({
                 id: meeting.id,
-                name: displayName(draft.name),
+                name: draft.name,
             });
             navigate("/meetings");
         } catch {

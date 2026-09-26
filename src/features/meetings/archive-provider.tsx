@@ -5,7 +5,7 @@ import {
     useState,
     type ReactNode,
 } from "react";
-import { toast } from "@/components/ui/toast";
+import { useToastManager } from "@/components/ui/toast";
 import { archiveMeeting, displayName, unarchiveMeeting } from "@/lib/meetings";
 import {
     ArchiveContext,
@@ -24,6 +24,10 @@ const TOAST_TIMEOUT = 8000;
  * provider.
  */
 export function ArchiveProvider({ children }: { children: ReactNode }) {
+    // Bound to the toast provider that wraps this component, so the archive toast
+    // always reaches the viewport that provider renders, even if the application
+    // passes a different manager to a different toast provider elsewhere.
+    const { add, close, update } = useToastManager();
     const [version, setVersion] = useState(0);
     const [restored, setRestored] = useState<RestoredMeeting | null>(null);
     // The identifier of the toast for the meeting archived most recently, or `null`
@@ -54,7 +58,7 @@ export function ArchiveProvider({ children }: { children: ReactNode }) {
             unarchiveMeeting(meeting.id).then(
                 () => {
                     restoringToasts.current.delete(toastId);
-                    toast.close(toastId);
+                    close(toastId);
                     setVersion((value) => value + 1);
                     if (archiveCount.current === generation) {
                         setRestored({ id: meeting.id });
@@ -62,7 +66,7 @@ export function ArchiveProvider({ children }: { children: ReactNode }) {
                 },
                 () => {
                     restoringToasts.current.delete(toastId);
-                    toast.update(toastId, {
+                    update(toastId, {
                         title: "Couldn't restore the meeting. Try again.",
                         timeout: TOAST_TIMEOUT,
                         actionProps: {
@@ -78,7 +82,7 @@ export function ArchiveProvider({ children }: { children: ReactNode }) {
                 },
             );
         },
-        [],
+        [close, update],
     );
     useEffect(() => {
         restoreRef.current = restore;
@@ -87,10 +91,10 @@ export function ArchiveProvider({ children }: { children: ReactNode }) {
     const archive = useCallback(
         async (meeting: MeetingToArchive) => {
             await archiveMeeting(meeting.id);
-            if (openToastId.current) toast.close(openToastId.current);
+            if (openToastId.current) close(openToastId.current);
             archiveCount.current += 1;
             const generation = archiveCount.current;
-            const id = toast.add({
+            const id = add({
                 title: `Archived "${displayName(meeting.name)}".`,
                 timeout: TOAST_TIMEOUT,
                 actionProps: {
@@ -101,7 +105,7 @@ export function ArchiveProvider({ children }: { children: ReactNode }) {
             openToastId.current = id;
             setVersion((value) => value + 1);
         },
-        [restore],
+        [add, close, restore],
     );
 
     return (
