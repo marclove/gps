@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import App from "@/App";
@@ -102,6 +102,36 @@ describe("Archive toast position", () => {
                     box.right >= 1200 - TOAST_EDGE_DISTANCE &&
                     box.right <= 1200 &&
                     box.left > 600
+                );
+            })
+            .toBe(true);
+    });
+
+    it("has the text at the left and Undo and Close at the right", async () => {
+        const archive = await renderApp();
+
+        await userEvent.click(archive);
+        const text = await screen.findByText('Archived "Weekly sync".');
+        const toast = text.closest("[data-slot='toast']");
+        if (!toast) throw new Error("The text is not in a toast");
+        const undo = within(toast as HTMLElement).getByRole("button", {
+            name: "Undo",
+        });
+        const close = within(toast as HTMLElement).getByRole("button", {
+            name: "Close",
+        });
+
+        // Poll until the toast has finished sliding in, then compare the positions of
+        // its parts with the edges of the toast.
+        await expect
+            .poll(() => {
+                const box = toast.getBoundingClientRect();
+                const closeBox = close.getBoundingClientRect();
+                const undoBox = undo.getBoundingClientRect();
+                return (
+                    box.right - closeBox.right <= TOAST_EDGE_DISTANCE &&
+                    undoBox.right <= closeBox.left &&
+                    text.getBoundingClientRect().right <= undoBox.left
                 );
             })
             .toBe(true);

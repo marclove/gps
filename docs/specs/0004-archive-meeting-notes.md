@@ -39,6 +39,7 @@ The terms "meeting", "Meetings page", and "editor page" are defined in [Spec 000
 - After a meeting is archived, from the Meetings page or from the editor page, the archive toast appears with the text `Archived "<name>".`, a button named "Undo", and a button named "Close". The name is the name of the meeting at the time it was archived, even if that name was not yet saved.
 - The toast closes by itself 8 seconds after it appears. The time does not count while the pointer is over the toast or while the toast has keyboard focus.
 - The toast is at the bottom right of the window.
+- Inside the toast, the text is at the left, and the "Undo" and "Close" buttons are at the right side of the toast, with "Close" last.
 - When the user clicks "Close", the toast closes, and the meeting stays archived.
 - The toast stays open when the user opens another page.
 - When the user clicks "Undo", on any page, the meeting is restored and the toast closes. If the Meetings page is open, the meeting appears in the list again, in its usual place in the order, and keyboard focus moves to the meeting's link. If the Meetings page is not open, the meeting is in the list the next time the Meetings page opens.

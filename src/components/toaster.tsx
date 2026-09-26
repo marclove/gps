@@ -20,7 +20,8 @@ function ToastList() {
     return toasts.map((item) => (
         <Toast key={item.id} toast={item}>
             <ToastContent>
-                <ToastTitle />
+                {/* The title takes the free width, so the buttons sit at the right side. */}
+                <ToastTitle className="flex-1" />
                 <ToastAction />
                 {/* This application shows at most one toast at a time, so the close
                     button stays reachable without a hover or focus, unlike Base UI's
