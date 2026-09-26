@@ -26,7 +26,8 @@ export function MeetingDetailsSidebar({
         >
             <div className="flex flex-col gap-4 p-4">
                 <div className="flex flex-col gap-2">{properties}</div>
-                <div className="flex flex-col gap-2">{actions}</div>
+                {/* The buttons are as wide as their content, in a row that wraps. */}
+                <div className="flex flex-wrap gap-2">{actions}</div>
             </div>
             <Separator />
             <div className="grid min-h-0 grid-rows-[minmax(0,1fr)] pt-4">

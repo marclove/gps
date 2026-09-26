@@ -1,6 +1,6 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 
 const invoke = vi.hoisted(() =>
@@ -10,6 +10,13 @@ const invoke = vi.hoisted(() =>
 );
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke }));
+
+beforeEach(() => {
+    // Each test starts with a backend that answers every command with an empty list,
+    // so a test that sets its own answers cannot change the answers of a later test.
+    invoke.mockReset();
+    invoke.mockImplementation(async () => []);
+});
 
 /** The region that holds the toasts. */
 function notifications() {
