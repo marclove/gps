@@ -369,7 +369,7 @@ Tasks 1 to 5 are done. After a design review, the right column became a sidebar 
 - Test: `src/features/meetings/meeting-editor.browser.test.tsx` (Review Focus 1), `src/features/meetings/meeting-editor-page.test.tsx` (Review Focus 2)
 
 **Interfaces:**
-- Produces: `export function MeetingDetailsSidebar({ children }: { children: ReactNode })`. It renders the `<aside>` with the three parts as a grid with the rows `auto auto minmax(0,1fr)`: properties and actions, the separator, and the lists. The editor passes the date row, the Archive button, and `<ActionItemsPanel meetingId={meeting.id} />` in explicit slots. Use named props (`properties`, `actions`, `lists`), not an order that the caller must know.
+- Produces: `export function MeetingDetailsSidebar({ properties, actions, lists }: { properties: ReactNode; actions: ReactNode; lists: ReactNode })`. It renders the `<aside>` with the three parts as a grid with the rows `auto auto minmax(0,1fr)`: properties and actions, the separator, and the lists. The editor passes the date row, the Archive button, and `<ActionItemsPanel meetingId={meeting.id} />` in explicit slots. Use named props (`properties`, `actions`, `lists`), not an order that the caller must know.
 
 - [ ] **Step 1: Write the failing tests**
   - In `meeting-editor.browser.test.tsx`, add `shows the whole date in the sidebar`: open a meeting dated `2026-09-24`, and expect the "Meeting date" field's `scrollWidth` to be less than or equal to its `clientWidth`.

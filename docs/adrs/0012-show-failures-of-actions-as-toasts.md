@@ -21,6 +21,9 @@ Some messages describe the state of an area instead of the failure of one action
   - "Couldn't add the action item. Try again.",
   - "Couldn't save the action item. Try again.",
   - "Couldn't remove the action item. Try again."
+- Two messages about failed actions do not follow this rule yet:
+  - "Couldn't create a note. Try again." on the Meetings page stays next to the "New note" button. Feature 0005 does not change how notes are created. A later change can move it into a failure toast.
+  - "Couldn't restore the meeting. Try again." stays inside the archive toast, which replaces its text. That toast keeps its "Undo" button, so the user can try the restore again from the same place.
 - A message that describes the state of an area stays in that area. "Couldn't load action items" with its "Retry" button, and the "Couldn't save" status with its "Retry" button, do not change.
 - A failure toast shows the message and a "Close" button. It has no other button. It closes by itself after 8 seconds, like the archive toast, and the same pauses apply: the time does not count while the pointer is over the toast or while the toast has keyboard focus. It does not take keyboard focus. It has Base UI's default (low) priority, so a screen reader announces it after what it is reading now. Base UI's high priority hides the toast itself from assistive technology and announces a separate copy of its text, so the Close button of a failure toast could not be reached by its role, and the message would be in the page twice.
 - At most one failure toast is open at a time in the window. When another action fails, the open failure toast closes and a new one opens. When an action succeeds that could have shown a failure toast, the open failure toast closes. A failure toast and an archive toast can be open together.
