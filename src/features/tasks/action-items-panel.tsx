@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { useFailureToast } from "@/components/use-failure-toast";
 import {
     createTask,
@@ -44,7 +44,7 @@ export function ActionItemsPanel({ meetingId }: { meetingId: number }) {
     );
     // The text field of each item, by task identifier, so that the focus can move to an item.
     const itemFields = useRef(new Map<number, HTMLTextAreaElement>());
-    const addFieldRef = useRef<HTMLInputElement>(null);
+    const addFieldRef = useRef<HTMLTextAreaElement>(null);
     // The position of the item that was removed last, until the focus has moved after the removal.
     const removedIndex = useRef<number | null>(null);
 
@@ -70,7 +70,7 @@ export function ActionItemsPanel({ meetingId }: { meetingId: number }) {
         else itemFields.current.get(next.id)?.focus();
     }, [load]);
 
-    async function add(event: KeyboardEvent<HTMLInputElement>) {
+    async function add(event: KeyboardEvent<HTMLTextAreaElement>) {
         // Enter that confirms an input method composition does not add an item. WebKit ends the
         // composition before this keydown, so it sends `isComposing` as false and key code 229.
         if (
@@ -79,6 +79,8 @@ export function ActionItemsPanel({ meetingId }: { meetingId: number }) {
             event.keyCode === 229
         )
             return;
+        // The text is one paragraph, so Enter never adds a line break.
+        event.preventDefault();
         const text = newText.trim();
         if (text === "") return;
         // Clear the field at once, so the user can type the next item while this one saves.
@@ -220,14 +222,19 @@ export function ActionItemsPanel({ meetingId }: { meetingId: number }) {
                 )}
             </div>
             <div className="px-6 pt-4 pb-6">
-                <Input
+                <Textarea
                     ref={addFieldRef}
                     aria-label="Add action item"
                     placeholder="Add action item"
                     value={newText}
+                    rows={1}
                     disabled={load.kind !== "loaded"}
-                    onChange={(event) => setNewText(event.target.value)}
+                    onChange={(event) =>
+                        setNewText(event.target.value.replace(/\r?\n/g, " "))
+                    }
                     onKeyDown={add}
+                    // One line is as tall as the other fields of the sidebar.
+                    className="min-h-8 resize-none py-1"
                 />
             </div>
         </section>
