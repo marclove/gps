@@ -7,8 +7,9 @@ use rusqlite_migration::{Migrations, M};
 
 /// The changes to the database structure, in the order they are applied.
 /// Add new migrations to the end. Never change or remove a migration after it is released.
-const MIGRATIONS: &[M<'static>] = &[M::up(
-    "CREATE TABLE meetings (
+const MIGRATIONS: &[M<'static>] = &[
+    M::up(
+        "CREATE TABLE meetings (
         id         INTEGER PRIMARY KEY,
         name       TEXT NOT NULL,
         notes      TEXT NOT NULL DEFAULT '',
@@ -16,7 +17,9 @@ const MIGRATIONS: &[M<'static>] = &[M::up(
         created_at TEXT NOT NULL,
         updated_at TEXT NOT NULL
     );",
-)];
+    ),
+    M::up("ALTER TABLE meetings ADD COLUMN archived_at TEXT;"),
+];
 
 /// Opens the database file at `path`, and creates it if it does not exist.
 /// Applies all migrations that were not applied before.
@@ -60,5 +63,27 @@ mod tests {
             .unwrap();
         assert_eq!(count, 0);
         std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    #[test]
+    fn migration_keeps_existing_meetings_in_the_list() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        Migrations::from_slice(&MIGRATIONS[..1])
+            .to_latest(&mut connection)
+            .unwrap();
+        connection
+            .execute(
+                "INSERT INTO meetings (id, name, notes, date, created_at, updated_at)
+                 VALUES (1, 'Kickoff', '', '2026-09-24', '2026-09-24T10:00:00.000Z',
+                         '2026-09-24T10:00:00.000Z')",
+                [],
+            )
+            .unwrap();
+
+        migrate(&mut connection).unwrap();
+
+        let meetings = crate::meetings::list(&connection).unwrap();
+        assert_eq!(meetings.len(), 1);
+        assert_eq!(meetings[0].name, "Kickoff");
     }
 }

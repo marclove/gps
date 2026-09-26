@@ -124,4 +124,54 @@ describe("MeetingsPage", () => {
             ),
         ).toHaveLength(1);
     });
+
+    it("hides the error after a failed archive when the next archive succeeds", async () => {
+        invoke.mockImplementation((command: string) => {
+            if (command === "list_meetings") {
+                return Promise.resolve([
+                    summary(2, "Weekly sync", "2026-09-24"),
+                    summary(1, "Kickoff", "2026-09-18"),
+                ]);
+            }
+            if (command === "archive_meeting") {
+                return Promise.reject("database is locked");
+            }
+            return Promise.resolve(null);
+        });
+        const user = userEvent.setup();
+        renderPage();
+        const archiveButton = await screen.findByRole("button", {
+            name: 'Archive "Weekly sync"',
+        });
+
+        await user.click(archiveButton);
+
+        expect(
+            await screen.findByText("Couldn't archive the meeting. Try again."),
+        ).toBeInTheDocument();
+
+        invoke.mockImplementation((command: string) => {
+            if (command === "list_meetings") {
+                return Promise.resolve([
+                    summary(2, "Weekly sync", "2026-09-24"),
+                    summary(1, "Kickoff", "2026-09-18"),
+                ]);
+            }
+            if (command === "archive_meeting") {
+                return Promise.resolve(null);
+            }
+            return Promise.resolve(null);
+        });
+
+        await user.click(
+            screen.getByRole("button", { name: 'Archive "Weekly sync"' }),
+        );
+
+        expect(
+            await screen.findByText('Archived "Weekly sync".'),
+        ).toBeInTheDocument();
+        expect(
+            screen.queryByText("Couldn't archive the meeting. Try again."),
+        ).toBeNull();
+    });
 });

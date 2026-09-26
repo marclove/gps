@@ -1,4 +1,4 @@
-import { PlusIcon } from "lucide-react";
+import { ArchiveIcon, PlusIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router";
 import { PageHeader } from "@/components/page-header";
@@ -6,6 +6,7 @@ import { PAGE_TITLE_CLASSES } from "@/components/page-title";
 import { Button } from "@/components/ui/button";
 import { formatMeetingDate, toMeetingDate } from "@/lib/dates";
 import {
+    archiveMeeting,
     createMeeting,
     displayName,
     listMeetings,
@@ -20,6 +21,9 @@ type ListState =
 /** State that the Meetings page gives the editor page when it opens a new meeting. */
 export type NewMeetingState = { isNew: true };
 
+/** A meeting that was just archived. The Meetings page shows its name in the archive notice. */
+export type ArchivedMeeting = { id: number; name: string };
+
 /** The page that lists all meetings and creates new ones. */
 export function MeetingsPage() {
     const navigate = useNavigate();
@@ -27,6 +31,9 @@ export function MeetingsPage() {
     const [attempt, setAttempt] = useState(0);
     const [creating, setCreating] = useState(false);
     const [createFailed, setCreateFailed] = useState(false);
+    const [archivedMeeting, setArchivedMeeting] =
+        useState<ArchivedMeeting | null>(null);
+    const [archiveFailed, setArchiveFailed] = useState(false);
 
     useEffect(() => {
         let current = true;
@@ -57,6 +64,29 @@ export function MeetingsPage() {
         }
     }
 
+    async function archive(meeting: MeetingSummary) {
+        try {
+            await archiveMeeting(meeting.id);
+            setList((current) =>
+                current.kind === "loaded"
+                    ? {
+                          kind: "loaded",
+                          meetings: current.meetings.filter(
+                              (candidate) => candidate.id !== meeting.id,
+                          ),
+                      }
+                    : current,
+            );
+            setArchivedMeeting({
+                id: meeting.id,
+                name: displayName(meeting.name),
+            });
+            setArchiveFailed(false);
+        } catch {
+            setArchiveFailed(true);
+        }
+    }
+
     return (
         // The header and the title stay in place, and the last row, which gets the
         // remaining height, scrolls.
@@ -69,6 +99,19 @@ export function MeetingsPage() {
             </PageHeader>
             <div className="flex flex-col gap-4 px-4 pb-2">
                 <h1 className={PAGE_TITLE_CLASSES}>Meetings</h1>
+                {archivedMeeting && (
+                    <div
+                        role="status"
+                        className="flex items-center gap-2 text-sm"
+                    >
+                        <p>Archived "{archivedMeeting.name}".</p>
+                    </div>
+                )}
+                {archiveFailed && (
+                    <p role="alert" className="text-sm text-destructive">
+                        Couldn't archive the meeting. Try again.
+                    </p>
+                )}
                 {createFailed && (
                     <p role="alert" className="text-sm text-destructive">
                         Couldn't create a note. Try again.
@@ -98,10 +141,13 @@ export function MeetingsPage() {
                 {list.kind === "loaded" && list.meetings.length > 0 && (
                     <ul className="flex flex-col gap-1">
                         {list.meetings.map((meeting) => (
-                            <li key={meeting.id}>
+                            <li
+                                key={meeting.id}
+                                className="group flex items-center gap-1 rounded-lg hover:bg-muted"
+                            >
                                 <Link
                                     to={`/meetings/${meeting.id}`}
-                                    className="flex items-center justify-between rounded-lg px-3 py-2 hover:bg-muted"
+                                    className="flex flex-1 items-center justify-between rounded-lg px-3 py-2"
                                 >
                                     <span className="font-medium">
                                         {displayName(meeting.name)}
@@ -110,6 +156,15 @@ export function MeetingsPage() {
                                         {formatMeetingDate(meeting.date)}
                                     </span>
                                 </Link>
+                                <Button
+                                    variant="ghost"
+                                    size="icon-sm"
+                                    aria-label={`Archive "${displayName(meeting.name)}"`}
+                                    className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+                                    onClick={() => archive(meeting)}
+                                >
+                                    <ArchiveIcon />
+                                </Button>
                             </li>
                         ))}
                     </ul>

@@ -71,6 +71,15 @@ fn update_meeting(
     database.run(|connection| meetings::update(connection, id, name, date, notes))
 }
 
+#[tauri::command]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Tauri gives managed state to commands by value"
+)]
+fn archive_meeting(database: State<'_, Database>, id: i64) -> Result<(), String> {
+    database.run(|connection| meetings::archive(connection, id))
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -86,7 +95,8 @@ pub fn run() {
             list_meetings,
             create_meeting,
             get_meeting,
-            update_meeting
+            update_meeting,
+            archive_meeting
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

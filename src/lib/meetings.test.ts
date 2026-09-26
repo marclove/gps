@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
+    archiveMeeting,
     createMeeting,
     displayName,
     getMeeting,
@@ -26,6 +27,7 @@ describe("meeting commands", () => {
             date: "2026-09-25",
             notes: "- [ ] Send notes",
         });
+        await archiveMeeting(3);
 
         expect(invoke.mock.calls).toEqual([
             ["list_meetings"],
@@ -40,6 +42,7 @@ describe("meeting commands", () => {
                     notes: "- [ ] Send notes",
                 },
             ],
+            ["archive_meeting", { id: 3 }],
         ]);
     });
 });
