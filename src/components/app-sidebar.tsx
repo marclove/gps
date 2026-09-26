@@ -1,36 +1,30 @@
-import { NotebookPenIcon } from "lucide-react";
-import { Link, useLocation } from "react-router";
+import { NotebookPenIcon, type LucideIcon } from "lucide-react";
+import { NavLink } from "react-router";
 import {
     Sidebar,
     SidebarContent,
     SidebarGroup,
-    SidebarHeader,
     SidebarMenu,
     SidebarMenuButton,
     SidebarMenuItem,
 } from "@/components/ui/sidebar";
 
 /** A section of the application that the sidebar links to. */
-type Section = { title: string; path: string };
+type Section = { title: string; path: string; icon: LucideIcon };
 
-const SECTIONS: Section[] = [{ title: "Meetings", path: "/meetings" }];
+const SECTIONS: Section[] = [
+    { title: "Meetings", path: "/meetings", icon: NotebookPenIcon },
+];
 
-/** The floating sidebar with the application name and the navigation between sections. */
+/**
+ * The navigation between sections. It is a narrow column of section icons that is always shown.
+ */
 export function AppSidebar() {
-    const { pathname } = useLocation();
-
     return (
-        <Sidebar variant="floating">
-            {/* The top padding leaves room for the macOS window controls, which the
-                window draws over the web content. */}
-            <SidebarHeader data-tauri-drag-region="deep" className="pt-9">
-                <div className="flex items-center gap-2 p-2">
-                    <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-                        <NotebookPenIcon className="size-4" />
-                    </div>
-                    <span className="font-medium">gps</span>
-                </div>
-            </SidebarHeader>
+        <Sidebar
+            collapsible="none"
+            className="w-[calc(var(--sidebar-width-icon)+1px)] border-r border-sidebar-border"
+        >
             <SidebarContent>
                 <nav aria-label="Main">
                     <SidebarGroup>
@@ -38,17 +32,24 @@ export function AppSidebar() {
                             {SECTIONS.map((section) => (
                                 <SidebarMenuItem key={section.path}>
                                     <SidebarMenuButton
-                                        isActive={pathname.startsWith(
-                                            section.path,
-                                        )}
+                                        className="aria-[current=page]:bg-sidebar-accent aria-[current=page]:font-medium aria-[current=page]:text-sidebar-accent-foreground"
                                         render={
-                                            <Link
+                                            <NavLink
                                                 to={section.path}
-                                                className="font-medium"
+                                                // WebKit on macOS leaves links out of the Tab order by
+                                                // default. An explicit tab index puts the link back in it.
+                                                tabIndex={0}
                                             />
                                         }
+                                        tooltip={{
+                                            children: section.title,
+                                            hidden: false,
+                                        }}
                                     >
-                                        {section.title}
+                                        <section.icon />
+                                        <span className="sr-only">
+                                            {section.title}
+                                        </span>
                                     </SidebarMenuButton>
                                 </SidebarMenuItem>
                             ))}

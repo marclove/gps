@@ -2,7 +2,6 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router";
-import { SidebarProvider } from "@/components/ui/sidebar";
 import type { Meeting } from "@/lib/meetings";
 import { MeetingEditorPage } from "./meeting-editor-page";
 
@@ -30,15 +29,10 @@ function serveMeeting() {
 function renderPage(path: string) {
     render(
         <MemoryRouter initialEntries={[path]}>
-            <SidebarProvider>
-                <Routes>
-                    <Route path="/meetings" element={<p>Meetings list</p>} />
-                    <Route
-                        path="/meetings/:id"
-                        element={<MeetingEditorPage />}
-                    />
-                </Routes>
-            </SidebarProvider>
+            <Routes>
+                <Route path="/meetings" element={<p>Meetings list</p>} />
+                <Route path="/meetings/:id" element={<MeetingEditorPage />} />
+            </Routes>
         </MemoryRouter>,
     );
 }

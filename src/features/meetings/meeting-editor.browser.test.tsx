@@ -141,37 +141,6 @@ describe("MeetingEditor layout", () => {
         );
     });
 
-    it("keeps the chrome in place when the sidebar is hidden", async () => {
-        seed("Weekly sync", longNotes(150));
-        render(<App />);
-        const notes = await openMeeting("Weekly sync");
-
-        const toolbar = screen.getByRole("toolbar", { name: "Formatting" });
-        const leftBefore = toolbar.getBoundingClientRect().left;
-
-        await userEvent.click(
-            screen.getByRole("button", { name: "Toggle Sidebar" }),
-        );
-        // Wait for the sidebar to finish sliding away: it is collapsed, the toolbar
-        // has moved to the left, and no transition is still running.
-        await expect
-            .poll(() =>
-                document
-                    .querySelector('[data-slot="sidebar"]')
-                    ?.getAttribute("data-state"),
-            )
-            .toBe("collapsed");
-        await expect
-            .poll(
-                () =>
-                    toolbar.getBoundingClientRect().left < leftBefore &&
-                    document.getAnimations().length === 0,
-            )
-            .toBe(true);
-
-        await expectChromeStaysWhileNotesScroll(notes);
-    });
-
     it("shows the start of the notes when the user opens another meeting after scrolling", async () => {
         seed("Weekly sync", longNotes(150));
         seed("Planning", longNotes(150));
