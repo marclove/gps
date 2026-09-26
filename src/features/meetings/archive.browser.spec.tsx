@@ -93,18 +93,26 @@ describe("Archive toast position", () => {
 
         // Polls until the toast is fully settled at the bottom right, rather than
         // checking its position once, because it slides in from below the window.
+        // The poll returns the measurements, so a failure shows where the toast was.
         await expect
             .poll(() => {
-                const box = toast.getBoundingClientRect();
-                return (
-                    box.bottom >= 800 - TOAST_EDGE_DISTANCE &&
-                    box.bottom <= 800 &&
-                    box.right >= 1200 - TOAST_EDGE_DISTANCE &&
-                    box.right <= 1200 &&
-                    box.left > 600
-                );
+                const { left, right, bottom } = toast.getBoundingClientRect();
+                return {
+                    left,
+                    right,
+                    bottom,
+                    windowWidth: window.innerWidth,
+                    windowHeight: window.innerHeight,
+                };
             })
-            .toBe(true);
+            .toSatisfy(
+                ({ left, right, bottom }) =>
+                    bottom >= 800 - TOAST_EDGE_DISTANCE &&
+                    bottom <= 800 &&
+                    right >= 1200 - TOAST_EDGE_DISTANCE &&
+                    right <= 1200 &&
+                    left > 600,
+            );
     });
 
     it("has the text at the left and Undo and Close at the right", async () => {
