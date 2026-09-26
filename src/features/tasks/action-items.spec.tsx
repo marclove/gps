@@ -1,4 +1,10 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import {
+    fireEvent,
+    render,
+    screen,
+    waitFor,
+    within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "@/App";
@@ -252,14 +258,91 @@ function removeButton(text: string) {
     return within(panel()).getByRole("button", { name: `Remove "${text}"` });
 }
 
-/** Waits until the panel shows the alert `text`. */
-async function findAlert(text: string) {
-    await waitFor(
-        () =>
-            expect(within(panel()).getByRole("alert")).toHaveTextContent(text),
-        SAVE_TIMEOUT,
+/** The region that holds the toasts. */
+function notifications() {
+    return screen.getByRole("region", { name: "Notifications" });
+}
+
+/** The texts of the failure toasts that are open. */
+function failureToasts(): string[] {
+    return within(notifications())
+        .queryAllByText(/^Couldn't .* Try again\.$/)
+        .map((element) => element.textContent ?? "");
+}
+
+/**
+ * Waits until the only failure toast says `text`, and checks that the panel shows no
+ * alert of its own.
+ */
+async function findFailureToast(text: string) {
+    await waitFor(() => expect(failureToasts()).toEqual([text]), SAVE_TIMEOUT);
+    expect(within(panel()).queryByRole("alert")).not.toBeInTheDocument();
+}
+
+/** Waits until no failure toast is open. */
+async function expectNoFailureToast() {
+    await waitFor(() => expect(failureToasts()).toEqual([]));
+}
+
+function sidebar() {
+    return screen.getByRole("complementary", { name: "Meeting details" });
+}
+
+/** Returns true if `first` comes before `second` in the page. */
+function isBefore(first: Element, second: Element) {
+    return Boolean(
+        first.compareDocumentPosition(second) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
     );
 }
+
+describe("Meeting details sidebar", () => {
+    it("shows the date and the Archive button above the action items", async () => {
+        backend.seedMeeting("Weekly sync");
+        await openMeeting("Weekly sync");
+
+        const aside = await screen.findByRole("complementary", {
+            name: "Meeting details",
+        });
+        const date = within(aside).getByLabelText("Meeting date");
+        const archive = within(aside).getByRole("button", { name: "Archive" });
+        const actionItems = within(aside).getByRole("region", {
+            name: "Action items",
+        });
+        expect(date).toHaveValue("2026-09-24");
+        expect(within(aside).getByText("Date")).toBeInTheDocument();
+        expect(isBefore(date, archive)).toBe(true);
+        expect(isBefore(archive, actionItems)).toBe(true);
+        // The page has one Archive button, so the page header no longer has one.
+        expect(screen.getAllByRole("button", { name: "Archive" })).toHaveLength(
+            1,
+        );
+        // The meeting name stays in the main area, outside the sidebar.
+        expect(
+            within(aside).queryByRole("textbox", { name: "Meeting name" }),
+        ).not.toBeInTheDocument();
+        expect(
+            screen.getByRole("textbox", { name: "Meeting name" }),
+        ).toHaveValue("Weekly sync");
+    });
+
+    it("saves a change to the date made in the sidebar", async () => {
+        const sync = backend.seedMeeting("Weekly sync");
+        await openMeeting("Weekly sync");
+
+        fireEvent.change(within(sidebar()).getByLabelText("Meeting date"), {
+            target: { value: "2026-09-25" },
+        });
+
+        await waitFor(
+            () =>
+                expect(
+                    backend.meetings.find((m) => m.id === sync.id)?.date,
+                ).toBe("2026-09-25"),
+            SAVE_TIMEOUT,
+        );
+    });
+});
 
 describe("Meeting action items", () => {
     describe("panel", () => {
@@ -376,7 +459,7 @@ describe("Meeting action items", () => {
             await user.click(addField());
             await user.keyboard("Call Sam{Enter}");
 
-            await findAlert("Couldn't add the action item. Try again.");
+            await findFailureToast("Couldn't add the action item. Try again.");
             expect(itemFields()).toEqual([]);
             expect(addField()).toHaveValue("Call Sam");
         });
@@ -452,7 +535,7 @@ describe("Meeting action items", () => {
 
             await user.click(checkbox("Send the deck"));
 
-            await findAlert("Couldn't save the action item. Try again.");
+            await findFailureToast("Couldn't save the action item. Try again.");
             expect(checkbox("Send the deck")).not.toBeChecked();
         });
     });
@@ -532,7 +615,7 @@ describe("Meeting action items", () => {
             await user.click(itemField("Send the deck"));
             await user.keyboard(" to Alex");
 
-            await findAlert("Couldn't save the action item. Try again.");
+            await findFailureToast("Couldn't save the action item. Try again.");
             expect(listedItems()).toEqual(["Send the deck to Alex"]);
 
             backend.failing.delete("update_task_description");
@@ -545,11 +628,7 @@ describe("Meeting action items", () => {
                     ),
                 SAVE_TIMEOUT,
             );
-            await waitFor(() =>
-                expect(
-                    within(panel()).queryByRole("alert"),
-                ).not.toBeInTheDocument(),
-            );
+            await expectNoFailureToast();
         });
     });
 
@@ -614,9 +693,7 @@ describe("Meeting action items", () => {
             // Wait longer than the pause before an automatic save.
             await new Promise((resolve) => setTimeout(resolve, 800));
             expect(backend.findTask(room.id)).toBeUndefined();
-            expect(
-                within(panel()).queryByRole("alert"),
-            ).not.toBeInTheDocument();
+            expect(failureToasts()).toEqual([]);
         });
 
         it("keeps the item and reports the problem when removing fails", async () => {
@@ -627,7 +704,9 @@ describe("Meeting action items", () => {
 
             await user.click(removeButton("Book a room"));
 
-            await findAlert("Couldn't remove the action item. Try again.");
+            await findFailureToast(
+                "Couldn't remove the action item. Try again.",
+            );
             expect(listedItems()).toEqual([
                 "Send the deck",
                 "Book a room",
@@ -647,19 +726,44 @@ describe("Meeting action items", () => {
 
             await user.click(addField());
             await user.keyboard("Call Sam{Enter}");
-            await findAlert("Couldn't add the action item. Try again.");
+            await findFailureToast("Couldn't add the action item. Try again.");
 
             await user.click(removeButton("Send the deck"));
-            await findAlert("Couldn't remove the action item. Try again.");
-            expect(within(panel()).getAllByRole("alert")).toHaveLength(1);
+            await findFailureToast(
+                "Couldn't remove the action item. Try again.",
+            );
 
             await user.click(checkbox("Send the deck"));
 
-            await waitFor(() =>
-                expect(
-                    within(panel()).queryByRole("alert"),
-                ).not.toBeInTheDocument(),
+            await expectNoFailureToast();
+        });
+
+        it("shows a failure toast with only a Close button, which closes it", async () => {
+            backend.seedMeeting("Weekly sync");
+            backend.failing.add("create_task");
+            const user = await openMeeting("Weekly sync");
+            await within(panel()).findByText("No action items yet");
+
+            await user.click(addField());
+            await user.keyboard("Call Sam{Enter}");
+            await findFailureToast("Couldn't add the action item. Try again.");
+
+            expect(
+                within(notifications())
+                    .getAllByRole("button")
+                    .map(
+                        (button) =>
+                            button.getAttribute("aria-label") ??
+                            button.textContent,
+                    ),
+            ).toEqual(["Close"]);
+            expect(addField()).toHaveFocus();
+
+            await user.click(
+                within(notifications()).getByRole("button", { name: "Close" }),
             );
+
+            await expectNoFailureToast();
         });
     });
 });

@@ -8,7 +8,7 @@
 
 **Tech Stack:** Rust with `rusqlite` and `rusqlite_migration`; React 19 with TypeScript; Tailwind CSS v4; shadcn components on Base UI (`@base-ui/react`); Vitest with React Testing Library in jsdom, and Vitest browser mode in WebKit.
 
-**Spec:** `docs/specs/0005-meeting-action-items.md`, with `docs/adrs/0010-store-tasks-in-their-own-table.md`. The executable specs are `src/features/tasks/action-items.spec.tsx` and `src/features/tasks/action-items.browser.spec.tsx`. Do not change the executable specs to make them pass. If one seems wrong, stop and ask a human.
+**Spec:** `docs/specs/0005-meeting-action-items.md`, with `docs/adrs/0010-store-tasks-in-their-own-table.md`, `docs/adrs/0011-show-meeting-details-in-a-sidebar.md` (Task 6), and `docs/adrs/0012-show-failures-of-actions-as-toasts.md` (Task 7). The executable specs are `src/features/tasks/action-items.spec.tsx`, `src/features/tasks/action-items.browser.spec.tsx`, and, for Task 7, the archive failure tests in `src/features/meetings/archive.spec.tsx`. Do not change the executable specs to make them pass. If one seems wrong, stop and ask a human.
 
 ## Global Constraints
 
@@ -337,3 +337,84 @@ git add src
 git commit -m "Remove action items"
 git push
 ```
+
+---
+
+## Tasks 6 and 7: meeting details sidebar and failure toasts
+
+Tasks 1 to 5 are done. After a design review, the right column became a sidebar for the whole meeting (ADR 0011), and failures of actions became toasts on every page (ADR 0012). Spec 0005 and the executable specs were updated first, and 13 of their tests fail until these two tasks are done.
+
+### Global Constraints for Tasks 6 and 7
+
+- Sidebar: an `<aside aria-label="Meeting details">`, 18rem wide, with a border on its left side. It is as tall as the main area and starts at its top, beside the page header.
+- Sidebar order from top to bottom: a row with the visible label "Date" and the date field (accessible name "Meeting date"); the "Archive" button; a separator; the action items panel (region "Action items").
+- The meeting name is alone on its row in the left column. The page header keeps the breadcrumb and the save status, and no longer has the Archive button.
+- Only the action items list scrolls. The date, the Archive button, the heading, and the "Add action item" field stay in place.
+- Failure toasts: "Couldn't archive the meeting. Try again.", "Couldn't add the action item. Try again.", "Couldn't save the action item. Try again.", "Couldn't remove the action item. Try again." Each has only a "Close" button, a timeout of 8000 milliseconds, and high priority, and it does not take focus.
+- At most one failure toast is open. `show` closes the open one first. A successful archive, add, check or uncheck, text save, or removal calls `clear()`.
+- "Couldn't load action items" with Retry, and the meeting's "Couldn't save" status with Retry, stay where they are.
+
+### Review Focus for Tasks 6 and 7
+
+1. The date field in the narrow sidebar must show the whole date, including the year, without being cut off. (Task 6)
+2. The Tab key must follow the order on the screen in the sidebar: from the date field to the Archive button, then into the action items. (Task 6)
+3. When the archive toast and a failure toast are open together, the user must be able to read both messages and reach both Close buttons. (Task 7)
+4. A failure toast that the editor page opened must still close when the user opens the Meetings page and an archive there succeeds. The provider in `App.tsx` owns the toast, so this works across pages. (Task 7)
+
+### Task 6: Move the date and the Archive button into a full-height meeting details sidebar
+
+**Files:**
+- Modify: `src/features/meetings/meeting-editor.tsx`, `src/features/tasks/action-items-panel.tsx` (only if its outer classes must change to fit the sidebar)
+- Create: `src/features/meetings/meeting-details-sidebar.tsx`
+- Test: `src/features/meetings/meeting-editor.browser.test.tsx` (Review Focus 1), `src/features/meetings/meeting-editor-page.test.tsx` (Review Focus 2)
+
+**Interfaces:**
+- Produces: `export function MeetingDetailsSidebar({ children }: { children: ReactNode })`. It renders the `<aside>` with the three parts as a grid with the rows `auto auto minmax(0,1fr)`: properties and actions, the separator, and the lists. The editor passes the date row, the Archive button, and `<ActionItemsPanel meetingId={meeting.id} />` in explicit slots. Use named props (`properties`, `actions`, `lists`), not an order that the caller must know.
+
+- [ ] **Step 1: Write the failing tests**
+  - In `meeting-editor.browser.test.tsx`, add `shows the whole date in the sidebar`: open a meeting dated `2026-09-24`, and expect the "Meeting date" field's `scrollWidth` to be less than or equal to its `clientWidth`.
+  - In `meeting-editor-page.test.tsx`, add `moves focus from the date to Archive to the action items with Tab`: focus "Meeting date", press Tab and expect "Archive" to have focus, then press Tab and expect focus inside the region "Action items".
+- [ ] **Step 2: Run them, and the sidebar tests of the feature specs, and see them fail**
+  Run: `bunx vitest run src/features/meetings/meeting-editor.browser.test.tsx src/features/meetings/meeting-editor-page.test.tsx src/features/tasks/action-items.spec.tsx src/features/tasks/action-items.browser.spec.tsx`
+  Expected: FAIL, because there is no "Meeting details" landmark.
+- [ ] **Step 3: Implement**
+  - Change the editor's grid to two columns, `grid-cols-[minmax(0,1fr)_18rem]`. The left column is a grid with the rows `auto auto minmax(0,1fr)`: the page header, the name row, and the notes editor. The right column is the sidebar and spans the full height.
+  - Move the date `Input`, with its `COMPLETE_DATE` guard, into a row with a visible `<label htmlFor={dateId}>Date</label>`. Keep `aria-label="Meeting date"` on the input, so its accessible name stays "Meeting date", which contains the visible label.
+  - Move the Archive `Button` into the actions part. Its `archiving` state and `archive()` function stay in `MeetingEditor`. Until Task 7 replaces it with a toast, render the "Couldn't archive the meeting. Try again." alert directly below the button.
+  - Use the shadcn `Separator` from `src/components/ui/separator.tsx`.
+- [ ] **Step 4: Run the tests**
+  Run: `bun run fmt && bun run typecheck && bun run lint && bun run test`
+  Expected: all tests pass, except these feature spec tests, which Task 7 makes pass: the failure toast tests in `action-items.spec.tsx` (those that call `findFailureToast`, and "shows a failure toast with only a Close button, which closes it") and the three archive failure tests in `archive.spec.tsx`.
+- [ ] **Step 5: Commit**
+  `git commit -m "Show the date and Archive in a meeting details sidebar"`
+
+### Task 7: Show failures of actions as toasts
+
+**Files:**
+- Create: `src/components/failure-toast-provider.tsx`, `src/components/use-failure-toast.ts`, `src/components/failure-toast-provider.test.tsx`
+- Modify: `src/App.tsx`, `src/components/toaster.tsx` (its comment and, if Review Focus 3 needs it, how stacked toasts show), `src/features/meetings/meetings-page.tsx`, `src/features/meetings/meeting-editor.tsx`, `src/features/tasks/action-items-panel.tsx`
+- Modify tests that check the old inline messages: `src/features/meetings/meetings-page.test.tsx`, `src/features/meetings/meeting-editor-page.test.tsx`, `src/features/tasks/action-items-panel.test.tsx`. Render them inside `Toaster` and `FailureToastProvider`, and look for the message in the region "Notifications". Say in the commit message that these tests changed because ADR 0012 moves the messages into toasts.
+
+**Interfaces:**
+- Produces (`use-failure-toast.ts`, a separate file for the same reason as `use-archive.ts`): `export function useFailureToast(): { show: (message: string) => void; clear: () => void }`.
+- Produces (`failure-toast-provider.tsx`): `export function FailureToastProvider({ children }: { children: ReactNode })`. It uses `useToastManager()` from the toast provider around it, and keeps the id of the open failure toast in a ref. `show` closes that toast if there is one, then calls `add({ title: message, timeout: 8000, priority: "high" })`. `clear` closes it. Mount it in `App.tsx` inside `Toaster`, next to `ArchiveProvider`.
+
+- [ ] **Step 1: Write the failing tests** in `failure-toast-provider.test.tsx`, using a component that calls the hook:
+  - `shows the message in the Notifications region with only a Close button`.
+  - `replaces the open failure toast when another failure is shown`: call show twice with different texts, and expect only the second text.
+  - `closes the failure toast on clear`.
+  - `keeps an archive toast open when a failure toast opens`: add a toast with the manager directly, then call show, and expect both titles. This covers the rule that the two kinds of toast can be open together.
+  - In `archive.browser.spec.tsx` or a new browser test, add `shows both messages and both Close buttons when an archive toast and a failure toast are open` (Review Focus 3): both titles and both Close buttons are visible (`elementFromPoint` at their centers returns them), and clicking each Close button closes its toast.
+  - In `meeting-editor-page.test.tsx` or `archive.spec`-style app test, add Review Focus 4: a failed archive on the editor page, then open the Meetings page and archive a meeting there successfully. The failure toast closes.
+- [ ] **Step 2: Run them and see them fail**
+  Run: `bunx vitest run src/components src/features/meetings`
+  Expected: FAIL, because the provider does not exist.
+- [ ] **Step 3: Implement the provider and the hook, and mount them.** Update the comment in `toaster.tsx`, because more than one toast can now be open. If the Review Focus 3 test shows that Base UI collapses the stack and hides the older toast, make the viewport show both toasts, for example by keeping the stack expanded.
+- [ ] **Step 4: Use the hook**
+  - `meetings-page.tsx` and `meeting-editor.tsx`: when an archive fails, call `show("Couldn't archive the meeting. Try again.")` and remove the inline alert. When an archive succeeds, call `clear()`.
+  - `action-items-panel.tsx`: replace the `Message` state and the alert with `show` using the same three texts, and replace each place that sets the message to `null` with `clear()`. Keep the texts in one `Record`. Keep the rules that already guard the message, such as showing no failure for an item that was removed.
+- [ ] **Step 5: Run the full check**
+  Run: `bun run check`
+  Expected: everything passes, including all three executable specs.
+- [ ] **Step 6: Commit**
+  `git commit -m "Show failures of actions as toasts"`

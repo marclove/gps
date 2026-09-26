@@ -192,6 +192,18 @@ async function advance(milliseconds: number) {
     await act(() => vi.advanceTimersByTimeAsync(milliseconds));
 }
 
+/**
+ * Waits until the archive failure is reported in a toast, and checks that the page does
+ * not also show it (spec 0005, which changes spec 0004).
+ */
+async function expectArchiveFailureToast() {
+    const message = "Couldn't archive the meeting. Try again.";
+    expect(
+        await within(notifications()).findByText(message),
+    ).toBeInTheDocument();
+    expect(screen.getAllByText(message)).toHaveLength(1);
+}
+
 async function openMeetingsPage(user: ReturnType<typeof userEvent.setup>) {
     await user.click(
         within(sidebarNavigation()).getByRole("link", { name: "Meetings" }),
@@ -343,17 +355,41 @@ describe("Archive meetings", () => {
                 }),
             );
 
-            expect(
-                await screen.findByText(
-                    "Couldn't archive the meeting. Try again.",
-                ),
-            ).toBeInTheDocument();
+            await expectArchiveFailureToast();
             expect(
                 screen.getByRole("link", { name: /Standup/ }),
             ).toBeInTheDocument();
             expect(
                 within(notifications()).queryByRole("button", { name: "Undo" }),
             ).not.toBeInTheDocument();
+        });
+
+        it("closes the failure toast and shows the archive toast when a retry succeeds", async () => {
+            seedThreeMeetings();
+            backend.failArchive = true;
+            const user = renderApp();
+            await user.click(
+                await screen.findByRole("button", {
+                    name: 'Archive "Standup"',
+                }),
+            );
+            await expectArchiveFailureToast();
+
+            backend.failArchive = false;
+            await user.click(
+                screen.getByRole("button", { name: 'Archive "Standup"' }),
+            );
+
+            expect(
+                await within(notifications()).findByText('Archived "Standup".'),
+            ).toBeInTheDocument();
+            await waitFor(() =>
+                expect(
+                    within(notifications()).queryByText(
+                        "Couldn't archive the meeting. Try again.",
+                    ),
+                ).not.toBeInTheDocument(),
+            );
         });
     });
 
@@ -456,11 +492,7 @@ describe("Archive meetings", () => {
             await user.type(notes, "Keep me");
             await user.click(screen.getByRole("button", { name: "Archive" }));
 
-            expect(
-                await screen.findByText(
-                    "Couldn't archive the meeting. Try again.",
-                ),
-            ).toBeInTheDocument();
+            await expectArchiveFailureToast();
             expect(
                 screen.getByRole("textbox", { name: "Notes" }),
             ).toHaveTextContent("Keep me");

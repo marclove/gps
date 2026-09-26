@@ -117,21 +117,24 @@ function isFullyVisible(element: Element) {
 }
 
 describe("Action items panel", () => {
-    it("is at the right side of the editor page, below the page header", async () => {
+    it("is a sidebar as tall as the main area, at the right of the header, name, and notes", async () => {
         seedTask("Send the deck");
         const panel = await openMeeting();
         await findItemField(panel, "Send the deck");
 
-        const area = panel.getBoundingClientRect();
-        const header = screen
-            .getByRole("navigation", { name: "breadcrumb" })
-            .getBoundingClientRect();
-        expect(area.top).toBeGreaterThanOrEqual(header.bottom);
+        const aside = screen.getByRole("complementary", {
+            name: "Meeting details",
+        });
+        const area = aside.getBoundingClientRect();
+        const main = screen.getByRole("main").getBoundingClientRect();
+        expect(Math.round(area.top)).toBe(Math.round(main.top));
+        expect(Math.round(area.bottom)).toBe(Math.round(main.bottom));
         expect(Math.round(area.right)).toBe(window.innerWidth);
         expect(area.width).toBeGreaterThan(0);
+        expect(aside.contains(panel)).toBe(true);
         for (const element of [
+            screen.getByRole("navigation", { name: "breadcrumb" }),
             screen.getByRole("textbox", { name: "Meeting name" }),
-            screen.getByLabelText("Meeting date"),
             screen.getByRole("toolbar", { name: "Formatting" }),
             screen.getByRole("textbox", { name: "Notes" }),
         ]) {
@@ -140,6 +143,25 @@ describe("Action items panel", () => {
                 element.outerHTML.slice(0, 80),
             ).toBeLessThanOrEqual(area.left);
         }
+    });
+
+    it("shows the date, then the Archive button, then the action items, from top to bottom", async () => {
+        const panel = await openMeeting();
+        const aside = screen.getByRole("complementary", {
+            name: "Meeting details",
+        });
+        const date = within(aside).getByLabelText("Meeting date");
+        const archive = within(aside).getByRole("button", { name: "Archive" });
+        const heading = within(panel).getByRole("heading", {
+            name: "Action items",
+        });
+
+        expect(date.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+            archive.getBoundingClientRect().top,
+        );
+        expect(archive.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+            heading.getBoundingClientRect().top,
+        );
     });
 
     it("grays out the text of a checked item and restores it when unchecked", async () => {
@@ -170,12 +192,14 @@ describe("Action items panel", () => {
         await expect.poll(() => getComputedStyle(deck).color).toBe(normal);
     });
 
-    it("scrolls a long list while the heading, the Add action item field, and the notes stay in place", async () => {
+    it("scrolls a long list while the date, Archive, the heading, the Add action item field, and the notes stay in place", async () => {
         for (let i = 1; i <= 60; i++) seedTask(`Item ${i}`);
         const panel = await openMeeting();
         const first = await findItemField(panel, "Item 1");
         const last = await findItemField(panel, "Item 60");
         const fixed = [
+            screen.getByLabelText("Meeting date"),
+            screen.getByRole("button", { name: "Archive" }),
             within(panel).getByRole("heading", { name: "Action items" }),
             within(panel).getByRole("textbox", { name: "Add action item" }),
             screen.getByRole("toolbar", { name: "Formatting" }),
@@ -188,7 +212,7 @@ describe("Action items panel", () => {
         await expect.poll(() => isFullyVisible(last)).toBe(true);
 
         expect(positions(fixed)).toEqual(before);
-        for (const element of fixed.slice(0, 2)) {
+        for (const element of fixed.slice(0, 4)) {
             expect(isFullyVisible(element)).toBe(true);
         }
         expect(window.scrollY).toBe(0);
