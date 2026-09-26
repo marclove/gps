@@ -137,21 +137,21 @@
    same space above them, and only a little space below them, with no extra space from
    the element that follows. A heading at the top of a note has no space above it. */
 @layer utilities {
-    .notes-editor h1 {
+    .markdown-editor h1 {
         font-size: 1.5rem;
         font-weight: 600;
     }
 
-    .notes-editor :is(h1, h2, h3, h4, h5, h6) {
+    .markdown-editor :is(h1, h2, h3, h4, h5, h6) {
         margin-top: 2rem;
         margin-bottom: 0.5rem;
     }
 
-    .notes-editor :is(h1, h2, h3, h4, h5, h6) + * {
+    .markdown-editor :is(h1, h2, h3, h4, h5, h6) + * {
         margin-top: 0;
     }
 
-    .notes-editor > :first-child {
+    .markdown-editor > :first-child {
         margin-top: 0;
     }
 }
@@ -161,10 +161,10 @@
    as a loose list with extra space around every item, so those margins are removed.
    The margin around the list as a whole stays. */
 @layer utilities {
-    .notes-editor li,
-    .notes-editor li p,
-    .notes-editor li ul,
-    .notes-editor li ol {
+    .markdown-editor li,
+    .markdown-editor li p,
+    .markdown-editor li ul,
+    .markdown-editor li ol {
         margin-block: 0;
     }
 }
@@ -174,15 +174,15 @@
    normal blocks, so their spacing matches bullet list items, and the check box sits in
    the gutter where a bullet list shows its marker. */
 @layer utilities {
-    .notes-editor ul[data-type="taskList"] {
+    .markdown-editor ul[data-type="taskList"] {
         list-style: none;
     }
 
-    .notes-editor ul[data-type="taskList"] > li {
+    .markdown-editor ul[data-type="taskList"] > li {
         position: relative;
     }
 
-    .notes-editor ul[data-type="taskList"] > li > label {
+    .markdown-editor ul[data-type="taskList"] > li > label {
         position: absolute;
         top: 0;
         right: 100%;
@@ -192,7 +192,7 @@
         padding-inline-end: 0.5em;
     }
 
-    .notes-editor ul[data-type="taskList"] > li[data-checked="true"] > div {
+    .markdown-editor ul[data-type="taskList"] > li[data-checked="true"] > div {
         color: var(--muted-foreground);
         text-decoration: line-through;
     }
@@ -201,7 +201,7 @@
 /* Selected text in the notes stays marked while the focus is elsewhere, such as in the
    link popover. `Highlight` is the system color for selected text. */
 @layer utilities {
-    .notes-editor .selection {
+    .markdown-editor .selection {
         background-color: Highlight;
     }
 }

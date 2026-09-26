@@ -1,12 +1,13 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
-import { NotesEditor } from "./notes-editor";
+import { MarkdownEditor } from "./markdown-editor";
 
-describe("NotesEditor", () => {
+describe("MarkdownEditor", () => {
     it("shows Markdown as formatted text", async () => {
         render(
-            <NotesEditor
+            <MarkdownEditor
+                label="Notes"
                 initialMarkdown={"## Agenda\n\n**Owner:** Sam\n\n1. Roadmap\n"}
                 onChange={() => {}}
             />,
@@ -25,7 +26,13 @@ describe("NotesEditor", () => {
     it("reports the notes as Markdown after typing", async () => {
         const onChange = vi.fn();
         const user = userEvent.setup();
-        render(<NotesEditor initialMarkdown="" onChange={onChange} />);
+        render(
+            <MarkdownEditor
+                label="Notes"
+                initialMarkdown=""
+                onChange={onChange}
+            />,
+        );
 
         await user.type(
             await screen.findByRole("textbox", { name: "Notes" }),
@@ -46,7 +53,13 @@ describe("NotesEditor", () => {
     ])("applies %s from the toolbar", async (label, markdown) => {
         const onChange = vi.fn();
         const user = userEvent.setup();
-        render(<NotesEditor initialMarkdown="" onChange={onChange} />);
+        render(
+            <MarkdownEditor
+                label="Notes"
+                initialMarkdown=""
+                onChange={onChange}
+            />,
+        );
         await user.click(await screen.findByRole("textbox", { name: "Notes" }));
 
         await user.click(screen.getByRole("button", { name: label }));
@@ -62,14 +75,20 @@ describe("NotesEditor", () => {
     });
 });
 
-describe("NotesEditor links", () => {
+describe("MarkdownEditor links", () => {
     // ProseMirror maps "Mod" to Cmd on macOS and to Ctrl elsewhere. jsdom does not
     // report a Mac, so these tests press Ctrl for shortcuts that are Cmd in the app.
     /** Renders the editor with `markdown` and selects all of the notes. */
     async function renderAndSelectAll(markdown: string) {
         const onChange = vi.fn();
         const user = userEvent.setup();
-        render(<NotesEditor initialMarkdown={markdown} onChange={onChange} />);
+        render(
+            <MarkdownEditor
+                label="Notes"
+                initialMarkdown={markdown}
+                onChange={onChange}
+            />,
+        );
         await user.click(await screen.findByRole("textbox", { name: "Notes" }));
         await user.keyboard("{Control>}a{/Control}");
         return { onChange, user };
@@ -204,7 +223,13 @@ describe("NotesEditor links", () => {
 
     it("disables the Link button when no text is selected", async () => {
         const user = userEvent.setup();
-        render(<NotesEditor initialMarkdown="" onChange={() => {}} />);
+        render(
+            <MarkdownEditor
+                label="Notes"
+                initialMarkdown=""
+                onChange={() => {}}
+            />,
+        );
         await user.click(await screen.findByRole("textbox", { name: "Notes" }));
 
         expect(screen.getByRole("button", { name: "Link" })).toBeDisabled();
@@ -212,7 +237,8 @@ describe("NotesEditor links", () => {
 
     it("draws links so that the opener plugin opens them in the system browser", async () => {
         render(
-            <NotesEditor
+            <MarkdownEditor
+                label="Notes"
                 initialMarkdown="[Roadmap](https://example.com)"
                 onChange={() => {}}
             />,

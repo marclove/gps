@@ -3,7 +3,7 @@ import { XIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
-import { useAutosave } from "@/features/meetings/use-autosave";
+import { useAutosave } from "@/hooks/use-autosave";
 import { cn } from "@/lib/utils";
 import { actionItemName, updateTaskDescription, type Task } from "@/lib/tasks";
 
