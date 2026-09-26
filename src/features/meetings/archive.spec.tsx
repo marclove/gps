@@ -299,7 +299,13 @@ describe("Archive meetings", () => {
             expect(
                 screen.getByRole("heading", { level: 1, name: "Meetings" }),
             ).toBeInTheDocument();
-            expect(listedMeetingNames()).toEqual(["Weekly sync", "Kickoff"]);
+            // The notice appears before the list has loaded.
+            await waitFor(() =>
+                expect(listedMeetingNames()).toEqual([
+                    "Weekly sync",
+                    "Kickoff",
+                ]),
+            );
         });
 
         it("saves a change that was not yet saved", async () => {
