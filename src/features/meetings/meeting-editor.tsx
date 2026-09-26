@@ -86,7 +86,7 @@ export function MeetingEditor({
         // The notes are at the left, and the meeting details sidebar is at the right, as
         // tall as the main area. In the left column, the header and the name row stay in
         // place, and the notes editor gets the remaining height and scrolls its notes itself.
-        <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_clamp(18rem,calc(14rem_+_6vw),21rem)] grid-rows-[minmax(0,1fr)]">
+        <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_clamp(18rem,calc(13rem_+_7.5vw),22rem)] grid-rows-[minmax(0,1fr)]">
             <div className="grid min-h-0 grid-rows-[auto_auto_minmax(0,1fr)]">
                 <PageHeader
                     crumbs={[

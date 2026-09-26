@@ -16,7 +16,7 @@ We had to decide what goes into this column, how it is arranged, and how it fits
 
 ## Decision
 
-- The editor page has two columns. The left column holds the page header, the meeting name, and the notes editor. The right column is a sidebar whose width follows the width of the window: `clamp(18rem, calc(14rem + 6vw), 21rem)`. It is 18rem (288 pixels) wide in windows up to about 1000 pixels wide, grows by about 6 pixels for each 100 pixels of window width above that, and stops at 21rem (336 pixels). In a full-screen window on a laptop, the extra width gives the date and the action items more room, and in a narrow window the notes keep their width. The sidebar is a landmark (`<aside>`) with the accessible name "Meeting details".
+- The editor page has two columns. The left column holds the page header, the meeting name, and the notes editor. The right column is a sidebar whose width follows the width of the window: `clamp(18rem, calc(13rem + 7.5vw), 22rem)`. It is 18rem (288 pixels) wide in windows up to about 1070 pixels wide, grows by about 7.5 pixels for each 100 pixels of window width above that, and stops at 22rem (352 pixels). In a full-screen window on a laptop, the extra width gives the date and the action items more room, and in a narrow window the notes keep their width. The sidebar is a landmark (`<aside>`) with the accessible name "Meeting details".
 - The sidebar is as tall as the main area of the window. It starts at the top of the main area, beside the page header, not below it. A border separates it from the left column.
 - The meeting name stays in the left column, above the notes, because it is the title of the page.
 - The sidebar has these parts, from top to bottom:
