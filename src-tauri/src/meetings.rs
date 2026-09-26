@@ -75,7 +75,7 @@ impl From<rusqlite::Error> for Error {
 }
 
 /// The SQL expression for the current time, as an RFC 3339 timestamp in UTC with milliseconds.
-const NOW: &str = "strftime('%Y-%m-%dT%H:%M:%fZ', 'now')";
+pub(crate) const NOW: &str = "strftime('%Y-%m-%dT%H:%M:%fZ', 'now')";
 
 /// Returns summaries of the meetings that are not archived. The newest date is first. For
 /// meetings with the same date, the meeting that was created last is first.
