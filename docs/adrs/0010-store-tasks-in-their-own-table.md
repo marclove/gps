@@ -46,7 +46,7 @@ A new migration creates the table `tasks`:
 
 ### Foreign keys
 
-SQLite checks that `meeting_id` refers to a real meeting only if the connection has run `PRAGMA foreign_keys = ON`. This setting is off by default and is not stored in the database file, so it must be set each time a connection opens. `db::open` and `db::open_in_memory` turn it on before they apply the migrations. After this change:
+SQLite checks that `meeting_id` refers to a real meeting only when the setting `foreign_keys` is on for the connection. In standard SQLite, this setting is off by default and is not stored in the database file. The copy of SQLite that `rusqlite` compiles into the application (its `bundled` feature) turns it on by default, but we do not want the check to depend on how SQLite was compiled. So `db::open` and `db::open_in_memory` run `PRAGMA foreign_keys = ON` before they apply the migrations. After this change:
 
 - Creating a task for a meeting that does not exist fails.
 - The reference has no `ON DELETE` action. The application does not delete meetings. If a later feature deletes meetings, SQLite refuses to delete a meeting that still has tasks, and that feature must decide what happens to them.
