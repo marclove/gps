@@ -9,11 +9,8 @@ import {
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Toaster } from "@/components/toaster";
 import { toast } from "@/components/ui/toast";
-import {
-    ArchiveProvider,
-    useArchive,
-    type ArchiveApi,
-} from "./archive-provider";
+import { ArchiveProvider } from "./archive-provider";
+import { useArchive, type ArchiveApi } from "./use-archive";
 
 const invoke = vi.hoisted(() => vi.fn());
 

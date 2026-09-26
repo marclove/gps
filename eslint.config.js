@@ -27,12 +27,4 @@ export default defineConfig([
       "react-refresh/only-export-components": "off",
     },
   },
-  {
-    // A provider file exports both its component and the hook that reads the
-    // context it provides, so the file cannot export only components.
-    files: ["src/features/meetings/archive-provider.tsx"],
-    rules: {
-      "react-refresh/only-export-components": "off",
-    },
-  },
 ]);

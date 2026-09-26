@@ -1,7 +1,5 @@
 import {
-    createContext,
     useCallback,
-    useContext,
     useEffect,
     useRef,
     useState,
@@ -9,32 +7,14 @@ import {
 } from "react";
 import { toast } from "@/components/ui/toast";
 import { archiveMeeting, displayName, unarchiveMeeting } from "@/lib/meetings";
+import {
+    ArchiveContext,
+    type MeetingToArchive,
+    type RestoredMeeting,
+} from "./use-archive";
 
 /** How long the archive toast stays open by itself, in milliseconds. */
 const TOAST_TIMEOUT = 8000;
-
-/** The identifier and name of a meeting to archive. */
-type MeetingToArchive = { id: number; name: string };
-
-/** The identifier of a meeting a restore just brought back. */
-type RestoredMeeting = { id: number };
-
-/** The archive action and its state, shared by every page. */
-export type ArchiveApi = {
-    /**
-     * Archives the meeting and shows the archive toast.
-     *
-     * Rejects if the meeting cannot be archived. It does not show the toast in that
-     * case, so the caller can show its own message next to the control that failed.
-     */
-    archive: (meeting: MeetingToArchive) => Promise<void>;
-    /** Counts every archive and restore, so a page knows its list is out of date. */
-    version: number;
-    /** The meeting a restore just brought back, or `null` if none is pending. */
-    restored: RestoredMeeting | null;
-};
-
-const ArchiveContext = createContext<ArchiveApi | null>(null);
 
 /**
  * Gives every page the archive action and the archive toast.
@@ -129,13 +109,4 @@ export function ArchiveProvider({ children }: { children: ReactNode }) {
             {children}
         </ArchiveContext.Provider>
     );
-}
-
-/** Returns the archive action and its state. Must be used inside `ArchiveProvider`. */
-export function useArchive(): ArchiveApi {
-    const api = useContext(ArchiveContext);
-    if (!api) {
-        throw new Error("useArchive must be used inside ArchiveProvider");
-    }
-    return api;
 }
