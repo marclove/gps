@@ -161,6 +161,18 @@ pub fn archive(connection: &Connection, id: i64) -> Result<(), Error> {
     Ok(())
 }
 
+/// Makes an archived meeting appear in the list of meetings again.
+pub fn unarchive(connection: &Connection, id: i64) -> Result<(), Error> {
+    let changed = connection.execute(
+        "UPDATE meetings SET archived_at = NULL WHERE id = ?1",
+        params![id],
+    )?;
+    if changed == 0 {
+        return Err(Error::NotFound(id));
+    }
+    Ok(())
+}
+
 // SQLite's `date()` function returns NULL for text that is not a date, and moves impossible
 // dates such as `2026-02-30` to a different day. A date is valid only if `date()` returns it
 // unchanged.
@@ -325,6 +337,28 @@ mod tests {
     fn archive_reports_unknown_id() {
         let connection = open_in_memory();
         assert!(matches!(archive(&connection, 42), Err(Error::NotFound(42))));
+    }
+
+    #[test]
+    fn unarchive_returns_the_meeting_to_the_list() {
+        let connection = open_in_memory();
+        let kickoff = create(&connection, "2026-09-18").unwrap();
+        let weekly_sync = create(&connection, "2026-09-24").unwrap();
+
+        archive(&connection, weekly_sync.id).unwrap();
+        unarchive(&connection, weekly_sync.id).unwrap();
+
+        let ids: Vec<i64> = list(&connection).unwrap().iter().map(|m| m.id).collect();
+        assert_eq!(ids, vec![weekly_sync.id, kickoff.id]);
+    }
+
+    #[test]
+    fn unarchive_reports_unknown_id() {
+        let connection = open_in_memory();
+        assert!(matches!(
+            unarchive(&connection, 42),
+            Err(Error::NotFound(42))
+        ));
     }
 
     #[test]

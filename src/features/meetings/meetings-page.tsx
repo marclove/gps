@@ -11,6 +11,7 @@ import {
     displayName,
     listMeetings,
     type MeetingSummary,
+    unarchiveMeeting,
 } from "@/lib/meetings";
 
 type ListState =
@@ -34,6 +35,8 @@ export function MeetingsPage() {
     const [archivedMeeting, setArchivedMeeting] =
         useState<ArchivedMeeting | null>(null);
     const [archiveFailed, setArchiveFailed] = useState(false);
+    const [restoring, setRestoring] = useState(false);
+    const [restoreFailed, setRestoreFailed] = useState(false);
 
     useEffect(() => {
         let current = true;
@@ -82,8 +85,23 @@ export function MeetingsPage() {
                 name: displayName(meeting.name),
             });
             setArchiveFailed(false);
+            setRestoreFailed(false);
         } catch {
             setArchiveFailed(true);
+        }
+    }
+
+    async function restore(meeting: ArchivedMeeting) {
+        setRestoring(true);
+        try {
+            await unarchiveMeeting(meeting.id);
+            setArchivedMeeting(null);
+            setRestoreFailed(false);
+            setAttempt((value) => value + 1);
+        } catch {
+            setRestoreFailed(true);
+        } finally {
+            setRestoring(false);
         }
     }
 
@@ -105,11 +123,24 @@ export function MeetingsPage() {
                         className="flex items-center gap-2 text-sm"
                     >
                         <p>Archived "{archivedMeeting.name}".</p>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            disabled={restoring}
+                            onClick={() => restore(archivedMeeting)}
+                        >
+                            Undo
+                        </Button>
                     </div>
                 )}
                 {archiveFailed && (
                     <p role="alert" className="text-sm text-destructive">
                         Couldn't archive the meeting. Try again.
+                    </p>
+                )}
+                {restoreFailed && (
+                    <p role="alert" className="text-sm text-destructive">
+                        Couldn't restore the meeting. Try again.
                     </p>
                 )}
                 {createFailed && (

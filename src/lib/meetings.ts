@@ -54,6 +54,11 @@ export function archiveMeeting(id: number): Promise<void> {
     return invoke<void>("archive_meeting", { id });
 }
 
+/** Restores an archived meeting, so it appears in the list of meetings again. */
+export function unarchiveMeeting(id: number): Promise<void> {
+    return invoke<void>("unarchive_meeting", { id });
+}
+
 /** Returns the name to show for a meeting. A meeting with an empty name shows the default name. */
 export function displayName(name: string): string {
     return name.trim() === "" ? DEFAULT_MEETING_NAME : name;

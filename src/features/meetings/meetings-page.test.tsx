@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router";
@@ -172,6 +172,85 @@ describe("MeetingsPage", () => {
         ).toBeInTheDocument();
         expect(
             screen.queryByText("Couldn't archive the meeting. Try again."),
+        ).toBeNull();
+    });
+
+    it("restores only once when Undo is clicked twice quickly", async () => {
+        let resolveUnarchive: (() => void) | undefined;
+        invoke.mockImplementation((command: string) => {
+            if (command === "list_meetings") {
+                return Promise.resolve([summary(1, "Kickoff", "2026-09-18")]);
+            }
+            if (command === "archive_meeting") {
+                return Promise.resolve(null);
+            }
+            if (command === "unarchive_meeting") {
+                return new Promise<void>((resolve) => {
+                    resolveUnarchive = resolve;
+                });
+            }
+            return Promise.resolve(null);
+        });
+        const user = userEvent.setup();
+        renderPage();
+        await user.click(
+            await screen.findByRole("button", { name: 'Archive "Kickoff"' }),
+        );
+        const undoButton = await screen.findByRole("button", { name: "Undo" });
+
+        await user.click(undoButton);
+        await user.click(undoButton);
+
+        expect(
+            invoke.mock.calls.filter(
+                ([command]) => command === "unarchive_meeting",
+            ),
+        ).toHaveLength(1);
+
+        resolveUnarchive?.();
+
+        await waitFor(() =>
+            expect(screen.queryByText('Archived "Kickoff".')).toBeNull(),
+        );
+    });
+
+    it("hides the restore error when another meeting is archived", async () => {
+        invoke.mockImplementation((command: string) => {
+            if (command === "list_meetings") {
+                return Promise.resolve([
+                    summary(2, "Kickoff", "2026-09-24"),
+                    summary(1, "Standup", "2026-09-18"),
+                ]);
+            }
+            if (command === "archive_meeting") {
+                return Promise.resolve(null);
+            }
+            if (command === "unarchive_meeting") {
+                return Promise.reject("database is locked");
+            }
+            return Promise.resolve(null);
+        });
+        const user = userEvent.setup();
+        renderPage();
+
+        await user.click(
+            await screen.findByRole("button", { name: 'Archive "Standup"' }),
+        );
+        await user.click(await screen.findByRole("button", { name: "Undo" }));
+
+        expect(
+            await screen.findByText("Couldn't restore the meeting. Try again."),
+        ).toBeInTheDocument();
+
+        await user.click(
+            screen.getByRole("button", { name: 'Archive "Kickoff"' }),
+        );
+
+        expect(
+            await screen.findByText('Archived "Kickoff".'),
+        ).toBeInTheDocument();
+        expect(
+            screen.queryByText("Couldn't restore the meeting. Try again."),
         ).toBeNull();
     });
 });
