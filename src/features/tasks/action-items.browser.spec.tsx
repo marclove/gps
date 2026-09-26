@@ -216,7 +216,7 @@ describe("Action items panel", () => {
         }
     });
 
-    it("grows with a wider window, from 288 up to 352 pixels", async () => {
+    it("grows with a wider window, from 288 up to 384 pixels", async () => {
         await openMeeting();
         const aside = screen.getByRole("complementary", {
             name: "Meeting details",
@@ -226,13 +226,13 @@ describe("Action items panel", () => {
             await page.viewport(900, 800);
             await expect.poll(width).toBe(288);
             await page.viewport(1470, 800);
-            await expect.poll(width).toBeGreaterThanOrEqual(314);
-            expect(width()).toBeLessThanOrEqual(322);
+            await expect.poll(width).toBeGreaterThanOrEqual(334);
+            expect(width()).toBeLessThanOrEqual(342);
             await page.viewport(1710, 800);
-            await expect.poll(width).toBeGreaterThanOrEqual(332);
-            expect(width()).toBeLessThanOrEqual(340);
+            await expect.poll(width).toBeGreaterThanOrEqual(360);
+            expect(width()).toBeLessThanOrEqual(368);
             await page.viewport(2400, 800);
-            await expect.poll(width).toBe(352);
+            await expect.poll(width).toBe(384);
         } finally {
             await page.viewport(1200, 800);
         }

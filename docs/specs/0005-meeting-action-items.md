@@ -24,7 +24,7 @@ The terms "meeting", "Meetings page", and "editor page" are defined in [Spec 000
 
 - The meeting details sidebar is at the right side of the editor page. It starts at the top of the main area, beside the page header, and ends at the bottom of the window. The page header, the meeting name, the formatting toolbar, and the notes are at its left.
 - The sidebar is always visible. It cannot be hidden.
-- The sidebar is 288 pixels wide when the window is at most about 1070 pixels wide. In a wider window it is wider, by about 7.5 pixels for each 100 pixels of window width, up to 352 pixels.
+- The sidebar is 288 pixels wide when the window is at most about 1020 pixels wide. In a wider window it is wider, by about 11 pixels for each 100 pixels of window width, up to 384 pixels.
 - From top to bottom, the sidebar shows:
   1. a row with the label "Date" and the date field named "Meeting date",
   2. the "Archive" button,
