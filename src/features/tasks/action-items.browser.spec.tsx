@@ -1,6 +1,6 @@
 import { render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { userEvent } from "vitest/browser";
+import { page, userEvent } from "vitest/browser";
 import App from "@/App";
 
 // Feature spec for docs/specs/0005-meeting-action-items.md.
@@ -213,6 +213,28 @@ describe("Action items panel", () => {
                 element.getBoundingClientRect().right,
                 element.outerHTML.slice(0, 80),
             ).toBeLessThanOrEqual(area.left);
+        }
+    });
+
+    it("grows with a wider window, from 288 up to 336 pixels", async () => {
+        await openMeeting();
+        const aside = screen.getByRole("complementary", {
+            name: "Meeting details",
+        });
+        const width = () => Math.round(aside.getBoundingClientRect().width);
+        try {
+            await page.viewport(900, 800);
+            await expect.poll(width).toBe(288);
+            await page.viewport(1470, 800);
+            await expect.poll(width).toBeGreaterThanOrEqual(308);
+            expect(width()).toBeLessThanOrEqual(316);
+            await page.viewport(1710, 800);
+            await expect.poll(width).toBeGreaterThanOrEqual(322);
+            expect(width()).toBeLessThanOrEqual(332);
+            await page.viewport(2400, 800);
+            await expect.poll(width).toBe(336);
+        } finally {
+            await page.viewport(1200, 800);
         }
     });
 

@@ -16,7 +16,7 @@ We had to decide what goes into this column, how it is arranged, and how it fits
 
 ## Decision
 
-- The editor page has two columns. The left column holds the page header, the meeting name, and the notes editor. The right column is a sidebar that is 18rem wide. The sidebar is a landmark (`<aside>`) with the accessible name "Meeting details".
+- The editor page has two columns. The left column holds the page header, the meeting name, and the notes editor. The right column is a sidebar whose width follows the width of the window: `clamp(18rem, calc(14rem + 6vw), 21rem)`. It is 18rem (288 pixels) wide in windows up to about 1000 pixels wide, grows by about 6 pixels for each 100 pixels of window width above that, and stops at 21rem (336 pixels). In a full-screen window on a laptop, the extra width gives the date and the action items more room, and in a narrow window the notes keep their width. The sidebar is a landmark (`<aside>`) with the accessible name "Meeting details".
 - The sidebar is as tall as the main area of the window. It starts at the top of the main area, beside the page header, not below it. A border separates it from the left column.
 - The meeting name stays in the left column, above the notes, because it is the title of the page.
 - The sidebar has these parts, from top to bottom:
@@ -30,7 +30,7 @@ We had to decide what goes into this column, how it is arranged, and how it fits
 
 ## Consequences
 
-- The notes get the full width of the left column, apart from the fixed 18rem of the sidebar.
+- The notes get the full width of the left column, apart from the width of the sidebar.
 - The Archive button is no longer in the page header. Spec 0004 describes it in the page header, and spec 0005 records the change, because a spec that has been merged is not changed.
 - The date field is no longer on the row of the meeting name. Its accessible name stays "Meeting date", which contains its visible label "Date".
 - The width of the window is at least 900 pixels, so the left column is at least about 560 pixels wide. If the sidebar gets many more parts, it may need a way to be hidden or resized. That is left to a later decision.
