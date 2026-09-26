@@ -241,4 +241,14 @@ describe("MeetingEditor layout", () => {
         );
         await expect.poll(visible).toBe(true);
     });
+
+    it("shows the whole date in the sidebar", async () => {
+        seed("Weekly sync", "");
+        render(<App />);
+        await openMeeting("Weekly sync");
+
+        const date = screen.getByLabelText("Meeting date");
+        expect(date).toHaveValue("2026-09-24");
+        expect(date.scrollWidth).toBeLessThanOrEqual(date.clientWidth);
+    });
 });

@@ -169,7 +169,7 @@ export function ActionItemsPanel({ meetingId }: { meetingId: number }) {
     return (
         <section
             aria-labelledby={headingId}
-            className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)_auto] border-l"
+            className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)_auto]"
         >
             <h2 id={headingId} className="px-4 pt-1 pb-2 text-sm font-medium">
                 Action items

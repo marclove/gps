@@ -268,4 +268,20 @@ describe("MeetingEditorPage", () => {
             within(notifications()).getByText('Archived "Retro".'),
         ).toBeInTheDocument();
     });
+
+    it("moves focus from the date to Archive to the action items with Tab", async () => {
+        serveMeeting();
+        const user = userEvent.setup();
+        renderPage("/meetings/42");
+        await screen.findByText("No action items yet");
+
+        screen.getByLabelText("Meeting date").focus();
+        await user.tab();
+        expect(screen.getByRole("button", { name: "Archive" })).toHaveFocus();
+
+        await user.tab();
+        expect(
+            screen.getByRole("region", { name: "Action items" }),
+        ).toContainElement(document.activeElement as HTMLElement);
+    });
 });
