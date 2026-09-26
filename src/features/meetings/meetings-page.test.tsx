@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router";
+import { FailureToastProvider } from "@/components/failure-toast-provider";
 import { Toaster } from "@/components/toaster";
 import { toast } from "@/components/ui/toast";
 import { formatMeetingDate } from "@/lib/dates";
@@ -30,10 +31,12 @@ function renderPage(extra?: ReactNode) {
     render(
         <MemoryRouter>
             <Toaster toastManager={toast}>
-                <ArchiveProvider>
-                    {extra}
-                    <MeetingsPage />
-                </ArchiveProvider>
+                <FailureToastProvider>
+                    <ArchiveProvider>
+                        {extra}
+                        <MeetingsPage />
+                    </ArchiveProvider>
+                </FailureToastProvider>
             </Toaster>
         </MemoryRouter>,
     );
@@ -152,7 +155,7 @@ describe("MeetingsPage", () => {
         ).toHaveLength(1);
     });
 
-    it("hides the error after a failed archive when the next archive succeeds", async () => {
+    it("closes the failure toast after a failed archive when the next archive succeeds", async () => {
         invoke.mockImplementation((command: string) => {
             if (command === "list_meetings") {
                 return Promise.resolve([
@@ -174,7 +177,9 @@ describe("MeetingsPage", () => {
         await user.click(archiveButton);
 
         expect(
-            await screen.findByText("Couldn't archive the meeting. Try again."),
+            await within(notifications()).findByText(
+                "Couldn't archive the meeting. Try again.",
+            ),
         ).toBeInTheDocument();
 
         invoke.mockImplementation((command: string) => {
@@ -197,9 +202,11 @@ describe("MeetingsPage", () => {
         expect(
             await within(notifications()).findByText('Archived "Weekly sync".'),
         ).toBeInTheDocument();
-        expect(
-            screen.queryByText("Couldn't archive the meeting. Try again."),
-        ).toBeNull();
+        await waitFor(() =>
+            expect(
+                screen.queryByText("Couldn't archive the meeting. Try again."),
+            ).toBeNull(),
+        );
     });
 
     it("archives once when a row's Archive button is clicked twice quickly", async () => {

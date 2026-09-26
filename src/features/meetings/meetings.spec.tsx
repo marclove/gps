@@ -85,6 +85,8 @@ class FakeBackend {
                     name: "Untitled meeting",
                     date: args.date as string,
                 });
+            case "list_meeting_tasks":
+                return [];
             case "get_meeting":
                 return this.meetings.find((m) => m.id === args.id) ?? null;
             case "update_meeting": {

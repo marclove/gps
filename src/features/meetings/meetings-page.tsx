@@ -2,6 +2,7 @@ import { ArchiveIcon, PlusIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import { PageHeader } from "@/components/page-header";
+import { useFailureToast } from "@/components/use-failure-toast";
 import { PAGE_TITLE_CLASSES } from "@/components/page-title";
 import { Button } from "@/components/ui/button";
 import { formatMeetingDate, toMeetingDate } from "@/lib/dates";
@@ -50,7 +51,7 @@ export function MeetingsPage() {
     const [attempt, setAttempt] = useState(0);
     const [creating, setCreating] = useState(false);
     const [createFailed, setCreateFailed] = useState(false);
-    const [archiveFailed, setArchiveFailed] = useState(false);
+    const failureToast = useFailureToast();
     const newNoteButtonRef = useRef<HTMLButtonElement>(null);
     const meetingLinkRefs = useRef(new Map<number, HTMLAnchorElement>());
     const archiveButtonRefs = useRef(new Map<number, HTMLButtonElement>());
@@ -151,7 +152,7 @@ export function MeetingsPage() {
         pendingArchiveIds.current.add(meeting.id);
         try {
             await archive({ id: meeting.id, name: meeting.name });
-            setArchiveFailed(false);
+            failureToast.clear();
             // Recorded here, from the list this render sees, rather than computing
             // the focus target itself inside the `setList` updater below: React may
             // call that updater more than once, so it must stay pure, and by the time
@@ -182,7 +183,7 @@ export function MeetingsPage() {
                 };
             });
         } catch {
-            setArchiveFailed(true);
+            failureToast.show("Couldn't archive the meeting. Try again.");
         } finally {
             pendingArchiveIds.current.delete(meeting.id);
         }
@@ -202,13 +203,8 @@ export function MeetingsPage() {
                     New note
                 </Button>
             </PageHeader>
-            <div className="flex flex-col gap-4 px-4 pb-2">
+            <div className="flex flex-col gap-4 px-6 pb-2">
                 <h1 className={PAGE_TITLE_CLASSES}>Meetings</h1>
-                {archiveFailed && (
-                    <p role="alert" className="text-sm text-destructive">
-                        Couldn't archive the meeting. Try again.
-                    </p>
-                )}
                 {createFailed && (
                     <p role="alert" className="text-sm text-destructive">
                         Couldn't create a note. Try again.
@@ -218,7 +214,7 @@ export function MeetingsPage() {
             {/* `pt-2` leaves room for the focus ring of the first meeting, which the
                 scrolling area would cut off. The title row has 8 pixels less padding,
                 so the list stays at the same position. */}
-            <div className="overflow-y-auto px-4 pt-2 pb-4">
+            <div className="overflow-y-auto px-6 pt-2 pb-4">
                 {list.kind === "loading" && (
                     <p className="text-sm text-muted-foreground">Loading…</p>
                 )}

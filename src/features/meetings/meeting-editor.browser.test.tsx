@@ -42,6 +42,8 @@ async function handle(command: string, args: Record<string, unknown> = {}) {
                 date,
                 updatedAt,
             }));
+        case "list_meeting_tasks":
+            return [];
         case "get_meeting":
             return meetings.find((m) => m.id === args.id) ?? null;
         case "update_meeting": {
@@ -238,5 +240,15 @@ describe("MeetingEditor layout", () => {
             last,
         );
         await expect.poll(visible).toBe(true);
+    });
+
+    it("shows the whole date in the sidebar", async () => {
+        seed("Weekly sync", "");
+        render(<App />);
+        await openMeeting("Weekly sync");
+
+        const date = screen.getByLabelText("Meeting date");
+        expect(date).toHaveValue("2026-09-24");
+        expect(date.scrollWidth).toBeLessThanOrEqual(date.clientWidth);
     });
 });
