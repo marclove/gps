@@ -8,6 +8,7 @@ import {
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter, Route, Routes } from "react-router";
+import { FailureToastProvider } from "@/components/failure-toast-provider";
 import { Toaster } from "@/components/toaster";
 import { toast } from "@/components/ui/toast";
 import { ArchiveProvider } from "./archive-provider";
@@ -60,18 +61,20 @@ function renderPage(path: string) {
     render(
         <MemoryRouter initialEntries={[path]}>
             <Toaster toastManager={toast}>
-                <ArchiveProvider>
-                    <Routes>
-                        <Route
-                            path="/meetings"
-                            element={<MeetingsListRoute />}
-                        />
-                        <Route
-                            path="/meetings/:id"
-                            element={<MeetingEditorPage />}
-                        />
-                    </Routes>
-                </ArchiveProvider>
+                <FailureToastProvider>
+                    <ArchiveProvider>
+                        <Routes>
+                            <Route
+                                path="/meetings"
+                                element={<MeetingsListRoute />}
+                            />
+                            <Route
+                                path="/meetings/:id"
+                                element={<MeetingEditorPage />}
+                            />
+                        </Routes>
+                    </ArchiveProvider>
+                </FailureToastProvider>
             </Toaster>
         </MemoryRouter>,
     );

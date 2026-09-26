@@ -1,5 +1,6 @@
 import { MemoryRouter, Navigate, Route, Routes } from "react-router";
 import { AppSidebar } from "@/components/app-sidebar";
+import { FailureToastProvider } from "@/components/failure-toast-provider";
 import { Toaster } from "@/components/toaster";
 import { toast } from "@/components/ui/toast";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
@@ -12,31 +13,36 @@ function App() {
     return (
         <TooltipProvider>
             <Toaster toastManager={toast}>
-                <ArchiveProvider>
-                    <MemoryRouter>
-                        <SidebarProvider className="h-svh">
-                            <AppSidebar />
-                            <SidebarInset className="min-h-0 overflow-hidden">
-                                <Routes>
-                                    <Route
-                                        path="/"
-                                        element={
-                                            <Navigate to="/meetings" replace />
-                                        }
-                                    />
-                                    <Route
-                                        path="/meetings"
-                                        element={<MeetingsPage />}
-                                    />
-                                    <Route
-                                        path="/meetings/:id"
-                                        element={<MeetingEditorPage />}
-                                    />
-                                </Routes>
-                            </SidebarInset>
-                        </SidebarProvider>
-                    </MemoryRouter>
-                </ArchiveProvider>
+                <FailureToastProvider>
+                    <ArchiveProvider>
+                        <MemoryRouter>
+                            <SidebarProvider className="h-svh">
+                                <AppSidebar />
+                                <SidebarInset className="min-h-0 overflow-hidden">
+                                    <Routes>
+                                        <Route
+                                            path="/"
+                                            element={
+                                                <Navigate
+                                                    to="/meetings"
+                                                    replace
+                                                />
+                                            }
+                                        />
+                                        <Route
+                                            path="/meetings"
+                                            element={<MeetingsPage />}
+                                        />
+                                        <Route
+                                            path="/meetings/:id"
+                                            element={<MeetingEditorPage />}
+                                        />
+                                    </Routes>
+                                </SidebarInset>
+                            </SidebarProvider>
+                        </MemoryRouter>
+                    </ArchiveProvider>
+                </FailureToastProvider>
             </Toaster>
         </TooltipProvider>
     );

@@ -2,6 +2,7 @@ import { ArchiveIcon } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { PageHeader } from "@/components/page-header";
+import { useFailureToast } from "@/components/use-failure-toast";
 import { PAGE_TITLE_CLASSES } from "@/components/page-title";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -51,7 +52,7 @@ export function MeetingEditor({
     const navigate = useNavigate();
     const { archive: archiveInProvider } = useArchive();
     const [archiving, setArchiving] = useState(false);
-    const [archiveFailed, setArchiveFailed] = useState(false);
+    const failureToast = useFailureToast();
 
     useEffect(() => {
         if (!isNew) return;
@@ -67,16 +68,16 @@ export function MeetingEditor({
 
     async function archive() {
         setArchiving(true);
-        setArchiveFailed(false);
         try {
             await archiveInProvider({
                 id: meeting.id,
                 name: draft.name,
             });
+            failureToast.clear();
             const state: MeetingsPageState = { focusNewNote: true };
             navigate("/meetings", { state });
         } catch {
-            setArchiveFailed(true);
+            failureToast.show("Couldn't archive the meeting. Try again.");
             setArchiving(false);
         }
     }
@@ -142,25 +143,15 @@ export function MeetingEditor({
                     </div>
                 }
                 actions={
-                    <>
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            disabled={archiving}
-                            onClick={archive}
-                        >
-                            <ArchiveIcon />
-                            Archive
-                        </Button>
-                        {archiveFailed && (
-                            <p
-                                role="alert"
-                                className="text-sm text-destructive"
-                            >
-                                Couldn't archive the meeting. Try again.
-                            </p>
-                        )}
-                    </>
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={archiving}
+                        onClick={archive}
+                    >
+                        <ArchiveIcon />
+                        Archive
+                    </Button>
                 }
                 lists={<ActionItemsPanel meetingId={meeting.id} />}
             />

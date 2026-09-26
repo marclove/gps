@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useFailureToast } from "@/components/use-failure-toast";
 import {
     createTask,
     deleteTask,
@@ -13,10 +14,10 @@ import { ActionItemRow } from "./action-item-row";
 type LoadState =
     { kind: "loading" } | { kind: "error" } | { kind: "loaded"; tasks: Task[] };
 
-/** The problem that the panel reports, or `null` when there is no problem to report. */
-type Message = "add" | "save" | "remove" | null;
+/** A failed action that the panel reports in a failure toast. */
+type Failure = "add" | "save" | "remove";
 
-const MESSAGE_TEXTS: Record<Exclude<Message, null>, string> = {
+const FAILURE_TEXTS: Record<Failure, string> = {
     add: "Couldn't add the action item. Try again.",
     save: "Couldn't save the action item. Try again.",
     remove: "Couldn't remove the action item. Try again.",
@@ -32,7 +33,7 @@ export function ActionItemsPanel({ meetingId }: { meetingId: number }) {
     const [load, setLoad] = useState<LoadState>({ kind: "loading" });
     const [attempt, setAttempt] = useState(0);
     const [newText, setNewText] = useState("");
-    const [message, setMessage] = useState<Message>(null);
+    const failureToast = useFailureToast();
     // Whether each item is done, by task identifier. An item that is not here uses its stored value.
     const [completed, setCompleted] = useState(new Map<number, boolean>());
     // The number of the latest click on the checkbox of each item, by task identifier.
@@ -89,9 +90,9 @@ export function ActionItemsPanel({ meetingId }: { meetingId: number }) {
                     ? { kind: "loaded", tasks: [...current.tasks, task] }
                     : current,
             );
-            setMessage(null);
+            failureToast.clear();
         } catch {
-            setMessage("add");
+            failureToast.show(FAILURE_TEXTS.add);
             // Put the text back, unless the user has typed a new text since.
             setNewText((current) => (current === "" ? text : current));
         }
@@ -114,11 +115,11 @@ export function ActionItemsPanel({ meetingId }: { meetingId: number }) {
             if (!removed && (saved === undefined || saved.click < click)) {
                 savedCompleted.current.set(task.id, { click, value });
             }
-            setMessage(null);
+            failureToast.clear();
         } catch {
             // A failure for an item that was removed since the click is not reported.
             if (!completeClicks.current.has(task.id)) return;
-            setMessage("save");
+            failureToast.show(FAILURE_TEXTS.save);
             // Show the value that was saved last, unless the user has clicked the checkbox again since.
             if (completeClicks.current.get(task.id) === click) {
                 const saved =
@@ -133,7 +134,7 @@ export function ActionItemsPanel({ meetingId }: { meetingId: number }) {
         try {
             await deleteTask(task.id);
         } catch {
-            setMessage("remove");
+            failureToast.show(FAILURE_TEXTS.remove);
             return false;
         }
         setLoad((current) => {
@@ -155,7 +156,7 @@ export function ActionItemsPanel({ meetingId }: { meetingId: number }) {
         completeClicks.current.delete(task.id);
         savedCompleted.current.delete(task.id);
         itemFields.current.delete(task.id);
-        setMessage(null);
+        failureToast.clear();
         return true;
     }
 
@@ -209,7 +210,9 @@ export function ActionItemsPanel({ meetingId }: { meetingId: number }) {
                                     changeCompleted(task, value)
                                 }
                                 onSaveResult={(ok) =>
-                                    setMessage(ok ? null : "save")
+                                    ok
+                                        ? failureToast.clear()
+                                        : failureToast.show(FAILURE_TEXTS.save)
                                 }
                                 onRemove={() => remove(task)}
                                 inputRef={itemFieldRef(task.id)}
@@ -218,12 +221,7 @@ export function ActionItemsPanel({ meetingId }: { meetingId: number }) {
                     </ul>
                 )}
             </div>
-            <div className="flex flex-col gap-2 p-4">
-                {message !== null && (
-                    <p role="alert" className="text-sm text-destructive">
-                        {MESSAGE_TEXTS[message]}
-                    </p>
-                )}
+            <div className="p-4">
                 <Input
                     ref={addFieldRef}
                     aria-label="Add action item"

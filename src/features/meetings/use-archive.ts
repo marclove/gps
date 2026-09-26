@@ -19,7 +19,7 @@ export type ArchiveApi = {
      * Archives the meeting and shows the archive toast.
      *
      * Rejects if the meeting cannot be archived. It does not show the toast in that
-     * case, so the caller can show its own message next to the control that failed.
+     * case, so the caller can show its own failure message.
      */
     archive: (meeting: MeetingToArchive) => Promise<void>;
     /** Counts every archive and restore, so a page knows its list is out of date. */

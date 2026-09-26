@@ -18,14 +18,22 @@ function ToastList() {
     const { toasts } = useToastManager();
 
     return toasts.map((item) => (
-        <Toast key={item.id} toast={item}>
-            <ToastContent>
+        // The archive toast and a failure toast can be open together. The stack always
+        // shows every toast in full, one above the other, so the user can read each
+        // message and reach each button without a hover or focus. Base UI's default
+        // shows only the frontmost toast until the pointer or the focus expands the stack.
+        <Toast
+            key={item.id}
+            toast={item}
+            className="h-(--toast-height) [transform:translateX(var(--toast-swipe-movement-x))_translateY(var(--offset-y))]"
+        >
+            <ToastContent className="data-behind:opacity-100">
                 {/* The title takes the free width, so the buttons sit at the right side. */}
                 <ToastTitle className="flex-1" />
                 <ToastAction />
-                {/* This application shows at most one toast at a time, so the close
-                    button stays reachable without a hover or focus, unlike Base UI's
-                    default, which hides it until a stack of several toasts expands. */}
+                {/* Base UI hides the close button from screen readers until the stack
+                    expands. The stack always shows every toast, so the button stays
+                    available. */}
                 <ToastClose aria-hidden={false} />
             </ToastContent>
         </Toast>

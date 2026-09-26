@@ -4,9 +4,13 @@ import {
     render,
     screen,
     waitFor,
+    within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { FailureToastProvider } from "@/components/failure-toast-provider";
+import { Toaster } from "@/components/toaster";
+import { toast } from "@/components/ui/toast";
 import type { Task } from "@/lib/tasks";
 import { ActionItemsPanel } from "./action-items-panel";
 
@@ -71,6 +75,29 @@ function answer({
     );
 }
 
+/** Renders the panel inside the providers of the toasts that report its failures. */
+function renderPanel() {
+    render(
+        <Toaster toastManager={toast}>
+            <FailureToastProvider>
+                <ActionItemsPanel meetingId={1} />
+            </FailureToastProvider>
+        </Toaster>,
+    );
+}
+
+/** The texts of the failure toasts that are open. */
+function failureToasts(): string[] {
+    return within(screen.getByRole("region", { name: "Notifications" }))
+        .queryAllByText(/^Couldn't .* Try again\.$/)
+        .map((element) => element.textContent ?? "");
+}
+
+/** Waits until the only failure toast says `text`. */
+async function findFailureToast(text: string) {
+    await waitFor(() => expect(failureToasts()).toEqual([text]));
+}
+
 function addField() {
     return screen.getByRole("textbox", { name: "Add action item" });
 }
@@ -104,7 +131,7 @@ beforeEach(() => {
 describe("ActionItemsPanel", () => {
     it("loads the tasks of its meeting", async () => {
         answer({ tasks: [task(1, "Send the deck"), task(2, "Call Sam")] });
-        render(<ActionItemsPanel meetingId={1} />);
+        renderPanel();
 
         expect(screen.getByText("Loading…")).toBeInTheDocument();
         await waitFor(() =>
@@ -117,7 +144,7 @@ describe("ActionItemsPanel", () => {
 
     it("says that there are no action items", async () => {
         answer();
-        render(<ActionItemsPanel meetingId={1} />);
+        renderPanel();
 
         expect(
             await screen.findByText("No action items yet"),
@@ -127,7 +154,7 @@ describe("ActionItemsPanel", () => {
     it("reports a failed load and loads again on Retry", async () => {
         invoke.mockRejectedValueOnce("database is locked");
         const user = userEvent.setup();
-        render(<ActionItemsPanel meetingId={1} />);
+        renderPanel();
 
         expect(
             await screen.findByText("Couldn't load action items"),
@@ -145,7 +172,7 @@ describe("ActionItemsPanel", () => {
             create: () => new Promise<Task>((resolve) => pending.push(resolve)),
         });
         const user = userEvent.setup();
-        render(<ActionItemsPanel meetingId={1} />);
+        renderPanel();
         await screen.findByText("No action items yet");
 
         await user.click(addField());
@@ -165,7 +192,7 @@ describe("ActionItemsPanel", () => {
 
     it("does not add an item on Enter that confirms an input method composition", async () => {
         answer();
-        render(<ActionItemsPanel meetingId={1} />);
+        renderPanel();
         await screen.findByText("No action items yet");
 
         fireEvent.change(addField(), { target: { value: "にほん" } });
@@ -177,7 +204,7 @@ describe("ActionItemsPanel", () => {
 
     it("does not add an item on the Enter that WebKit sends after an input method composition ends", async () => {
         answer();
-        render(<ActionItemsPanel meetingId={1} />);
+        renderPanel();
         await screen.findByText("No action items yet");
 
         fireEvent.change(addField(), { target: { value: "にほん" } });
@@ -194,15 +221,13 @@ describe("ActionItemsPanel", () => {
     it("keeps the text and reports the problem when adding fails", async () => {
         answer({ create: () => Promise.reject("database is locked") });
         const user = userEvent.setup();
-        render(<ActionItemsPanel meetingId={1} />);
+        renderPanel();
         await screen.findByText("No action items yet");
 
         await user.click(addField());
         await user.keyboard("Call Sam{Enter}");
 
-        expect(await screen.findByRole("alert")).toHaveTextContent(
-            "Couldn't add the action item. Try again.",
-        );
+        await findFailureToast("Couldn't add the action item. Try again.");
         expect(addField()).toHaveValue("Call Sam");
         expect(itemValues()).toEqual([]);
     });
@@ -216,14 +241,14 @@ describe("ActionItemsPanel", () => {
                 }),
         });
         const user = userEvent.setup();
-        render(<ActionItemsPanel meetingId={1} />);
+        renderPanel();
         await screen.findByText("No action items yet");
 
         await user.click(addField());
         await user.keyboard("Call Sam{Enter}Book");
         reject("database is locked");
 
-        await screen.findByRole("alert");
+        await findFailureToast("Couldn't add the action item. Try again.");
         expect(addField()).toHaveValue("Book");
     });
 
@@ -245,7 +270,7 @@ describe("ActionItemsPanel", () => {
             },
         });
         const user = userEvent.setup();
-        render(<ActionItemsPanel meetingId={1} />);
+        renderPanel();
 
         const checkbox = await screen.findByRole("checkbox", {
             name: 'Complete "Send the deck"',
@@ -294,7 +319,7 @@ describe("ActionItemsPanel", () => {
 
     async function clickTwice() {
         const user = userEvent.setup();
-        render(<ActionItemsPanel meetingId={1} />);
+        renderPanel();
         const checkbox = await screen.findByRole("checkbox", {
             name: 'Complete "Send the deck"',
         });
@@ -334,16 +359,14 @@ describe("ActionItemsPanel", () => {
         await act(async () => calls[1].reject("database is locked"));
 
         expect(checkbox).not.toBeChecked();
-        expect(screen.getByRole("alert")).toHaveTextContent(
-            "Couldn't save the action item. Try again.",
-        );
+        await findFailureToast("Couldn't save the action item. Try again.");
     });
 
     it("keeps the typed text when the item is checked before the text is saved", async () => {
         // The answer to the check has the description that was stored before the change.
         answer({ tasks: [task(1, "Send the deck")] });
         const user = userEvent.setup();
-        render(<ActionItemsPanel meetingId={1} />);
+        renderPanel();
         const checkbox = await screen.findByRole("checkbox", {
             name: 'Complete "Send the deck"',
         });
@@ -372,7 +395,7 @@ describe("ActionItemsPanel", () => {
             remove: () => Promise.reject("database is locked"),
         });
         const user = userEvent.setup();
-        render(<ActionItemsPanel meetingId={1} />);
+        renderPanel();
         await waitFor(() =>
             expect(itemValues()).toEqual(["Send the deck", "Book a room"]),
         );
@@ -387,9 +410,7 @@ describe("ActionItemsPanel", () => {
             }),
         );
 
-        expect(await screen.findByRole("alert")).toHaveTextContent(
-            "Couldn't remove the action item. Try again.",
-        );
+        await findFailureToast("Couldn't remove the action item. Try again.");
         await waitFor(
             () =>
                 expect(updateCalls()).toEqual([
@@ -408,7 +429,7 @@ describe("ActionItemsPanel", () => {
             update: () => Promise.reject("database is locked"),
         });
         const user = userEvent.setup();
-        render(<ActionItemsPanel meetingId={1} />);
+        renderPanel();
         const checkbox = await screen.findByRole("checkbox", {
             name: 'Complete "Send the deck"',
         });
@@ -416,21 +437,15 @@ describe("ActionItemsPanel", () => {
 
         await user.click(field);
         await user.keyboard("{End} to Alex");
-        expect(await screen.findByRole("alert")).toHaveTextContent(
-            "Couldn't save the action item. Try again.",
-        );
+        await findFailureToast("Couldn't save the action item. Try again.");
 
         await user.click(checkbox);
-        await waitFor(() =>
-            expect(screen.queryByRole("alert")).not.toBeInTheDocument(),
-        );
+        await waitFor(() => expect(failureToasts()).toEqual([]));
 
         await user.click(field);
         await user.keyboard("!");
         await waitFor(() => expect(updateCalls()).toHaveLength(2));
-        expect(await screen.findByRole("alert")).toHaveTextContent(
-            "Couldn't save the action item. Try again.",
-        );
+        await findFailureToast("Couldn't save the action item. Try again.");
     });
 
     it("deletes once and reports nothing when the remove button is clicked twice quickly", async () => {
@@ -443,7 +458,7 @@ describe("ActionItemsPanel", () => {
                 }),
         });
         const user = userEvent.setup();
-        render(<ActionItemsPanel meetingId={1} />);
+        renderPanel();
         await waitFor(() =>
             expect(itemValues()).toEqual(["Send the deck", "Book a room"]),
         );
@@ -466,13 +481,13 @@ describe("ActionItemsPanel", () => {
             invoke.mock.calls.filter(([command]) => command === "delete_task"),
         ).toEqual([["delete_task", { id: 2 }]]);
         expect(updateCalls()).toEqual([]);
-        expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+        expect(failureToasts()).toEqual([]);
     });
 
     it("reports nothing when a check fails after its item was removed", async () => {
         const calls = answerCompleteByHand();
         const user = userEvent.setup();
-        render(<ActionItemsPanel meetingId={1} />);
+        renderPanel();
         await user.click(
             await screen.findByRole("checkbox", {
                 name: 'Complete "Send the deck"',
@@ -486,6 +501,6 @@ describe("ActionItemsPanel", () => {
         await screen.findByText("No action items yet");
         await act(async () => calls[0].reject("database is locked"));
 
-        expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+        expect(failureToasts()).toEqual([]);
     });
 });
