@@ -45,6 +45,8 @@ async function handle(command: string, args: Record<string, unknown> = {}) {
                 date,
                 updatedAt,
             }));
+        case "list_meeting_tasks":
+            return [];
         case "get_meeting":
             return meetings.find((m) => m.id === args.id) ?? null;
         case "update_meeting": {

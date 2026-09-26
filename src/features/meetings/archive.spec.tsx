@@ -98,6 +98,8 @@ class FakeBackend {
                     name: "Untitled meeting",
                     date: args.date as string,
                 });
+            case "list_meeting_tasks":
+                return [];
             case "get_meeting": {
                 const meeting = this.find(args.id as number);
                 return meeting ? withoutArchiveTime(meeting) : null;
