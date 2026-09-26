@@ -83,6 +83,9 @@ describe("Archive button visibility", () => {
 /** The largest distance, in pixels, from the toast to the window edges. */
 const TOAST_EDGE_DISTANCE = 32;
 
+/** How long to wait for the toast to finish sliding in, in milliseconds. */
+const POSITION_TIMEOUT = { timeout: 5000 };
+
 describe("Archive toast position", () => {
     it("is at the bottom right of the window", async () => {
         const archive = await renderApp();
@@ -103,8 +106,11 @@ describe("Archive toast position", () => {
                     bottom,
                     windowWidth: window.innerWidth,
                     windowHeight: window.innerHeight,
+                    startingStyle: toast.hasAttribute("data-starting-style"),
+                    transform: getComputedStyle(toast).transform,
+                    visibility: document.visibilityState,
                 };
-            })
+            }, POSITION_TIMEOUT)
             .toSatisfy(
                 ({ left, right, bottom }) =>
                     bottom >= 800 - TOAST_EDGE_DISTANCE &&
