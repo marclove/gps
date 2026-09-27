@@ -64,6 +64,21 @@ async function drag(source: Element, target: Element) {
     await dragWithPointer(source, target);
 }
 
+/**
+ * Waits until the sheet has finished sliding in. The slide starts when the sheet drops its
+ * `data-starting-style` attribute, which can take a while when the browser draws frames
+ * slowly, and ends when its transitions finish.
+ */
+async function waitForSheetToArrive(sheet: HTMLElement) {
+    await waitFor(
+        () => expect(sheet).not.toHaveAttribute("data-starting-style"),
+        { timeout: 10000 },
+    );
+    await Promise.all(
+        sheet.getAnimations().map((animation) => animation.finished),
+    );
+}
+
 function seedColumn(horizon: Horizon, names: string[]) {
     for (const name of names) backend.seedInitiative({ name, horizon });
 }
@@ -372,10 +387,8 @@ describe("Layout", () => {
         );
 
         const dialog = await screen.findByRole("dialog", { name: "A" });
-        // The sheet slides in from the right, so wait until it has arrived.
-        await expect
-            .poll(() => dialog.getBoundingClientRect().right)
-            .toBe(window.innerWidth);
+        await waitForSheetToArrive(dialog);
+        expect(dialog.getBoundingClientRect().right).toBe(window.innerWidth);
         const sheet = dialog.getBoundingClientRect();
         expect(sheet.top).toBe(0);
         expect(sheet.bottom).toBe(window.innerHeight);
@@ -396,6 +409,7 @@ describe("Layout", () => {
             await screen.findByRole("button", { name: /^A/ }),
         );
         const sheet = await screen.findByRole("dialog", { name: "A" });
+        await waitForSheetToArrive(sheet);
         // The sheet slides in from the right, so wait until it has arrived.
         await expect
             .poll(() => sheet.getBoundingClientRect().right)
