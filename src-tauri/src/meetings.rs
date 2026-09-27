@@ -24,6 +24,9 @@ pub struct Meeting {
     pub created_at: String,
     /// The time when the meeting was last changed, as an RFC 3339 timestamp in UTC.
     pub updated_at: String,
+    /// The identifier of the initiative that the meeting is assigned to, or `None` if the
+    /// meeting is not assigned to an initiative.
+    pub initiative_id: Option<i64>,
 }
 
 /// The part of a meeting that the list of meetings shows. It does not include the notes.
@@ -47,6 +50,8 @@ pub enum Error {
     NotFound(i64),
     /// The date is not a real calendar date in the format `YYYY-MM-DD`.
     InvalidDate(String),
+    /// No initiative has the given identifier.
+    InitiativeNotFound(i64),
     /// The database reported an error.
     Database(rusqlite::Error),
 }
@@ -61,6 +66,7 @@ impl fmt::Display for Error {
                     "invalid meeting date \"{date}\": use the format YYYY-MM-DD"
                 )
             }
+            Error::InitiativeNotFound(id) => write!(f, "initiative {id} not found"),
             Error::Database(error) => write!(f, "database error: {error}"),
         }
     }
@@ -116,7 +122,8 @@ pub fn create(connection: &Connection, date: &str) -> Result<Meeting, Error> {
 pub fn get(connection: &Connection, id: i64) -> Result<Option<Meeting>, Error> {
     let meeting = connection
         .query_row(
-            "SELECT id, name, date, notes, created_at, updated_at FROM meetings WHERE id = ?1",
+            "SELECT id, name, date, notes, created_at, updated_at, initiative_id FROM meetings
+             WHERE id = ?1",
             params![id],
             meeting_from_row,
         )
@@ -125,7 +132,8 @@ pub fn get(connection: &Connection, id: i64) -> Result<Option<Meeting>, Error> {
 }
 
 /// Replaces the name, date, and notes of a meeting, and sets the time it was last changed.
-/// Returns the meeting as it is stored after the change.
+/// Does not change the initiative of the meeting. Returns the meeting as it is stored after
+/// the change.
 pub fn update(
     connection: &Connection,
     id: i64,
@@ -140,6 +148,34 @@ pub fn update(
              WHERE id = ?1"
         ),
         params![id, name, date, notes],
+    )?;
+    if changed == 0 {
+        return Err(Error::NotFound(id));
+    }
+    get(connection, id)?.ok_or(Error::NotFound(id))
+}
+
+/// Assigns a meeting to an initiative, or removes the assignment when `initiative_id` is
+/// `None`. The initiative can be completed or deleted. Sets the time the meeting was last
+/// changed. Returns the meeting as it is stored after the change.
+pub fn set_initiative(
+    connection: &Connection,
+    id: i64,
+    initiative_id: Option<i64>,
+) -> Result<Meeting, Error> {
+    if let Some(initiative_id) = initiative_id {
+        let initiative_exists: bool = connection.query_row(
+            "SELECT EXISTS(SELECT 1 FROM initiatives WHERE id = ?1)",
+            params![initiative_id],
+            |row| row.get(0),
+        )?;
+        if !initiative_exists {
+            return Err(Error::InitiativeNotFound(initiative_id));
+        }
+    }
+    let changed = connection.execute(
+        &format!("UPDATE meetings SET initiative_id = ?2, updated_at = {NOW} WHERE id = ?1"),
+        params![id, initiative_id],
     )?;
     if changed == 0 {
         return Err(Error::NotFound(id));
@@ -197,6 +233,7 @@ fn meeting_from_row(row: &Row<'_>) -> rusqlite::Result<Meeting> {
         notes: row.get(3)?,
         created_at: row.get(4)?,
         updated_at: row.get(5)?,
+        initiative_id: row.get(6)?,
     })
 }
 
@@ -204,6 +241,7 @@ fn meeting_from_row(row: &Row<'_>) -> rusqlite::Result<Meeting> {
 mod tests {
     use super::*;
     use crate::db::open_in_memory;
+    use crate::initiatives;
 
     #[test]
     fn list_is_empty_for_a_new_database() {
@@ -378,5 +416,107 @@ mod tests {
 
         assert_eq!(get(&connection, created.id).unwrap(), Some(updated.clone()));
         assert_eq!(updated.notes, "new notes");
+    }
+
+    const OLD_TIME: &str = "2000-01-01T00:00:00.000Z";
+
+    fn set_updated_at(connection: &Connection, id: i64, time: &str) {
+        connection
+            .execute(
+                "UPDATE meetings SET updated_at = ?2 WHERE id = ?1",
+                params![id, time],
+            )
+            .unwrap();
+    }
+
+    /// Creates an initiative with a description and returns it.
+    fn new_initiative(connection: &Connection) -> initiatives::Initiative {
+        match initiatives::create(connection, "", "x", None).unwrap() {
+            initiatives::CreateOutcome::Created { initiative } => initiative,
+            initiatives::CreateOutcome::NameTaken => panic!("the create should succeed"),
+        }
+    }
+
+    #[test]
+    fn a_new_meeting_has_no_initiative() {
+        let connection = open_in_memory();
+        let meeting = create(&connection, "2026-09-24").unwrap();
+        assert_eq!(meeting.initiative_id, None);
+    }
+
+    #[test]
+    fn set_initiative_assigns_removes_and_changes_updated_at() {
+        let connection = open_in_memory();
+        let initiative = new_initiative(&connection);
+        let created = create(&connection, "2026-09-24").unwrap();
+        set_updated_at(&connection, created.id, OLD_TIME);
+
+        let assigned = set_initiative(&connection, created.id, Some(initiative.id)).unwrap();
+        assert_eq!(assigned.initiative_id, Some(initiative.id));
+        assert_ne!(assigned.updated_at, OLD_TIME);
+        assert_eq!(get(&connection, created.id).unwrap(), Some(assigned));
+
+        set_updated_at(&connection, created.id, OLD_TIME);
+        let removed = set_initiative(&connection, created.id, None).unwrap();
+        assert_eq!(removed.initiative_id, None);
+        assert_ne!(removed.updated_at, OLD_TIME);
+        assert_eq!(get(&connection, created.id).unwrap(), Some(removed));
+    }
+
+    #[test]
+    fn set_initiative_accepts_deleted_and_completed_initiatives() {
+        let connection = open_in_memory();
+        let deleted = new_initiative(&connection);
+        initiatives::archive(&connection, deleted.id).unwrap();
+        let completed = new_initiative(&connection);
+        initiatives::move_to(&connection, completed.id, "done", 0).unwrap();
+        let meeting = create(&connection, "2026-09-24").unwrap();
+
+        let assigned = set_initiative(&connection, meeting.id, Some(deleted.id)).unwrap();
+        assert_eq!(assigned.initiative_id, Some(deleted.id));
+        let assigned = set_initiative(&connection, meeting.id, Some(completed.id)).unwrap();
+        assert_eq!(assigned.initiative_id, Some(completed.id));
+    }
+
+    #[test]
+    fn set_initiative_refuses_a_missing_initiative() {
+        let connection = open_in_memory();
+        let created = create(&connection, "2026-09-24").unwrap();
+
+        assert!(matches!(
+            set_initiative(&connection, created.id, Some(999)),
+            Err(Error::InitiativeNotFound(999))
+        ));
+        assert_eq!(
+            Error::InitiativeNotFound(999).to_string(),
+            "initiative 999 not found"
+        );
+        assert_eq!(get(&connection, created.id).unwrap(), Some(created));
+    }
+
+    #[test]
+    fn set_initiative_on_a_missing_meeting_returns_not_found() {
+        let connection = open_in_memory();
+        let initiative = new_initiative(&connection);
+        assert!(matches!(
+            set_initiative(&connection, 42, Some(initiative.id)),
+            Err(Error::NotFound(42))
+        ));
+        assert!(matches!(
+            set_initiative(&connection, 42, None),
+            Err(Error::NotFound(42))
+        ));
+    }
+
+    #[test]
+    fn update_does_not_change_the_initiative() {
+        let connection = open_in_memory();
+        let initiative = new_initiative(&connection);
+        let created = create(&connection, "2026-09-24").unwrap();
+        set_initiative(&connection, created.id, Some(initiative.id)).unwrap();
+
+        let updated = update(&connection, created.id, "Weekly sync", "2026-09-25", "").unwrap();
+
+        assert_eq!(updated.initiative_id, Some(initiative.id));
     }
 }

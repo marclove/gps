@@ -7,9 +7,9 @@ import { FailureToastProvider } from "@/components/failure-toast-provider";
 import { Toaster } from "@/components/toaster";
 import { toast } from "@/components/ui/toast";
 import { formatMeetingDate } from "@/lib/dates";
-import { ArchiveProvider } from "./archive-provider";
+import { ArchiveProvider } from "@/components/archive-provider";
 import { MeetingsPage } from "./meetings-page";
-import { useArchive, type ArchiveApi } from "./use-archive";
+import { useArchive, type ArchiveApi } from "@/components/use-archive";
 
 const invoke = vi.hoisted(() => vi.fn());
 
@@ -450,7 +450,9 @@ describe("MeetingsPage", () => {
         );
         expect(screen.getByText("Loading…")).toBeInTheDocument();
 
-        await act(() => archiveFn!({ id: 1, name: "Kickoff" }));
+        await act(() =>
+            archiveFn!({ kind: "meeting", id: 1, name: "Kickoff" }),
+        );
         resolveFirstList?.([summary(1, "Kickoff", "2026-09-18")]);
 
         await waitFor(() =>

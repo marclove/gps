@@ -33,7 +33,7 @@ function withScheme(address: string) {
 }
 
 /**
- * The Link button of the notes toolbar and its popover, where the user adds, changes,
+ * The Link button of the Markdown editor toolbar and its popover, where the user adds, changes,
  * or removes the link at the current selection. The parent controls whether the
  * popover is open, so that a keyboard shortcut can open it too.
  */
@@ -68,8 +68,8 @@ export function LinkPopover({
                 <LinkIcon />
             </PopoverTrigger>
             <PopoverContent
-                // `contextElement` lets the popover follow the text when the notes
-                // scroll, not only when the window scrolls.
+                // `contextElement` lets the popover follow the text when the editor text
+                // scrolls, not only when the window scrolls.
                 anchor={() => ({
                     getBoundingClientRect: () => linkTextRect(editor),
                     contextElement: editor.view.dom,
@@ -131,7 +131,7 @@ function LinkForm({ editor, onDone }: { editor: Editor; onDone: () => void }) {
         >
             <Input
                 // The popover moves the focus a moment after it opens, so without
-                // `autoFocus` the first keys typed go to the notes and replace the
+                // `autoFocus` the first keys typed go to the editor text and replace the
                 // selected text.
                 autoFocus
                 aria-label="Link address"

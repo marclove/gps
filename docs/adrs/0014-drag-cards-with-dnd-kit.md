@@ -1,0 +1,77 @@
+# 14. Drag the cards of the roadmap with dnd-kit
+
+Date: 2026-09-26
+
+## Status
+
+Accepted
+
+## Context
+
+Feature ticket 0006 shows initiatives as cards on a roadmap with the columns Now, Next, Later, and Done (ADR 0013). The user drags a card to another column or to another place in the same column. Dropping a card in Done completes the initiative, and dragging it out of Done reopens it.
+
+Dragging must also work without a pointer. A user who works with the keyboard, or with a screen reader, must be able to move a card and to hear where it is.
+
+There are two ways to build dragging in a web page:
+
+- **The native drag and drop of HTML.** The browser sends `dragstart`, `dragover`, and `drop` events. Tauri also uses these events on the window to receive files that are dropped from the operating system. Tauri's `dragDropEnabled` window setting must be turned off before the page receives them, and then the application can no longer receive dropped files.
+- **Pointer events.** A library listens to `pointerdown`, `pointermove`, and `pointerup`, and moves the card itself. This does not conflict with Tauri.
+
+We compared three React libraries:
+
+- `@dnd-kit/core` with `@dnd-kit/sortable` (versions 6 and 10), which use pointer events and include a keyboard sensor and messages for screen readers. Several sortable columns are a documented use.
+- `@dnd-kit/react` (version 0.5), a newer rewrite by the same author. Its version number is below 1, so its interface can change in any release.
+- `@atlaskit/pragmatic-drag-and-drop` (version 4), which uses the native drag and drop of HTML and has no keyboard support.
+
+The project checks layout and pointer behavior in headless WebKit (ADR 0006). jsdom has no layout, so it cannot run a drag. Before this decision, a short experiment outside the branch checked that the browser tests can drive `@dnd-kit/core` with the pointer and with the keyboard.
+
+## Decision
+
+We use `@dnd-kit/core`, `@dnd-kit/sortable`, and `@dnd-kit/utilities`.
+
+### Board
+
+- One `DndContext` holds the four columns. Each column is a `SortableContext` with a vertical list, and each card uses `useSortable`. The whole list area of a column, also when it is empty, is a place to drop.
+- The pointer sensor starts a drag only after the pointer moves 8 pixels, so a click on a card opens its sheet. It is our own sensor, `CardPointerSensor`, and not the `PointerSensor` of dnd-kit. After a drop, `PointerSensor` ignores every click in the whole document for about 50 milliseconds, so that the end of the drag does not count as a click. A click on a link in that time, such as a section in the sidebar, then skips React Router, and the webview follows the link as a normal page load, which reloads the application. `CardPointerSensor` works in the same way, but after a drop it ignores clicks only on cards.
+- Our own collision function, `findTarget`, decides which card or column is under the dragged card. With the pointer, it uses the elements under the pointer (`pointerWithin`). With the keyboard, it uses the elements that overlap the card (`rectIntersection`). In both cases, it prefers a card over the list area of a column, and inside a list area it takes the nearest card. The `closestCorners` function of dnd-kit could not target an empty column, because each list area is as tall as its column.
+- The keyboard sensor starts and ends a drag with Space only, and cancels with Escape. Enter stays free to open the sheet. The Up and Down arrow keys move the card in its column, and the Left and Right arrow keys move it to the next column. The cards fill the width of their list, because the standard keyboard coordinates of dnd-kit compare left edges, and a card narrower than its list would not reach the next column.
+- While a card moves over another column, the board moves it into that column in its own state, as the "multiple containers" example of dnd-kit does, so that the other cards make room.
+- Done does not take part in sorting. A card over Done shows at its top. A drag inside Done changes nothing.
+- The board draws the dragged card in a `DragOverlay` of dnd-kit, which is outside the columns and above them. The list of each column scrolls, so it cuts off anything that goes past its edges. A card that moved by a CSS transform, as `useSortable` moves it, was cut off at the edge of its column while it was dragged toward another column, and it could disappear while the pointer was over a heading or a gap. The copy in the overlay is only a picture: screen readers and the keyboard ignore it, so each initiative still has exactly one button. The card itself stays in its list as a faded placeholder, and it keeps the keyboard focus and the `data-initiative-id` attribute.
+
+### Saving a drop
+
+- When the card drops, the board keeps the new order in its state at once, and calls `move_initiative` with the column and the index where the card dropped. The frontend computes no positions. The backend renumbers the columns (ADR 0013).
+- If `move_initiative` fails, the page shows a failure toast, "Couldn't move the initiative. Try again." (ADR 0012), and loads the board again from the backend once no other move is still being saved. For a single move, this puts the card back where it was before the drag. Restoring a copy of the board from before the drag would be wrong when the user made a second move that succeeded before the first one failed, because the copy would also undo the second move. A list that the backend sent before a move started is ignored, so it cannot overwrite a move that the board already shows.
+- The board does not load the list again after a move that succeeds, because its state already matches the backend.
+
+### Messages for screen readers
+
+The board gives dnd-kit its own messages, in the words of the roadmap:
+
+- `Picked up <name>.`
+- `<name> is in <column>, position <n> of <count>.`
+- `<name> was moved to <column>, position <n> of <count>.`
+- `<name> was completed.`
+- `<name> was put back.`
+
+dnd-kit asks for a message before the board updates its state for a drop. So a message reads the column and the index from the event's `over` target, which dnd-kit fills in, and not from the board's state.
+
+### Tests
+
+- Dragging is tested in the WebKit browser project with `userEvent.dragAndDrop(source, target, { steps: 10 })` from `vitest/browser`. Without the steps, the pointer jumps to the target in one move, and dnd-kit never sees it pass over another card. For the keyboard, the test focuses a card and sends Space, arrow keys, and Space with `userEvent.keyboard`.
+- After a drag ends, the board ignores clicks on cards for about 50 milliseconds, so that the end of a drag does not count as a click. A test that clicks a card right after a drag must wait for that time.
+- The jsdom tests render the board and use clicks and Enter, but do not drag.
+
+## Consequences
+
+- The application keeps the ability to receive files dropped on the window, because the board does not use the native drag and drop of HTML.
+- Keyboard and screen reader users can reorder and complete initiatives, which is why the sheet has no buttons to complete or reopen.
+- `@dnd-kit/core` has had no release since December 2024. It works with React 19 without warnings, and it is small enough that we could replace it. If it stops working with a later React version, `@dnd-kit/react` is the likely replacement, once it reaches version 1.
+- Three new dependencies are added to `package.json`.
+
+## Alternatives considered
+
+- **`@dnd-kit/react`.** Its interface is simpler, and it is in active development. But an interface below version 1 can change in any release, and every change would touch the board and its tests.
+- **`@atlaskit/pragmatic-drag-and-drop`.** It is maintained and small, but it needs `dragDropEnabled` turned off in Tauri, and we would build the keyboard support and the messages for screen readers ourselves.
+- **No library.** Pointer tracking, automatic scrolling while dragging, keyboard moves, and messages for screen readers are a large amount of code to write and maintain.

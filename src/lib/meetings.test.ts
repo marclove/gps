@@ -5,6 +5,7 @@ import {
     displayName,
     getMeeting,
     listMeetings,
+    setMeetingInitiative,
     unarchiveMeeting,
     updateMeeting,
 } from "./meetings";
@@ -30,6 +31,8 @@ describe("meeting commands", () => {
         });
         await archiveMeeting(3);
         await unarchiveMeeting(3);
+        await setMeetingInitiative(3, 7);
+        await setMeetingInitiative(3, null);
 
         expect(invoke.mock.calls).toEqual([
             ["list_meetings"],
@@ -46,6 +49,8 @@ describe("meeting commands", () => {
             ],
             ["archive_meeting", { id: 3 }],
             ["unarchive_meeting", { id: 3 }],
+            ["set_meeting_initiative", { id: 3, initiativeId: 7 }],
+            ["set_meeting_initiative", { id: 3, initiativeId: null }],
         ]);
     });
 });

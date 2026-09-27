@@ -31,6 +31,13 @@ export default mergeConfig(
                         name: "browser",
                         setupFiles: ["./src/test/browser-setup.ts"],
                         include: ["src/**/*.browser.{test,spec}.tsx"],
+                        // WebKit on Linux, as in CI, renders very few animation frames when
+                        // other work uses the CPU, so CSS transitions and the drag and drop
+                        // code, which work in frames, do not advance in time for the tests.
+                        // So this project runs after the unit project has finished, and it
+                        // runs one file at a time.
+                        sequence: { groupOrder: 1 },
+                        fileParallelism: false,
                         browser: {
                             enabled: true,
                             provider: playwright(),

@@ -1,5 +1,5 @@
 import { Button } from "@/components/ui/button";
-import type { AutosaveStatus } from "./use-autosave";
+import type { AutosaveStatus } from "@/hooks/use-autosave";
 
 const LABELS: Record<AutosaveStatus, string> = {
     idle: "",

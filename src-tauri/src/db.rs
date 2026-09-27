@@ -30,6 +30,25 @@ const MIGRATIONS: &[M<'static>] = &[
     );
     CREATE INDEX tasks_meeting_id ON tasks(meeting_id);",
     ),
+    M::up(
+        "CREATE TABLE initiatives (
+        id           INTEGER PRIMARY KEY,
+        name         TEXT NOT NULL DEFAULT '',
+        description  TEXT NOT NULL DEFAULT '',
+        raci_role    TEXT CHECK (raci_role IN ('responsible', 'accountable', 'consulted', 'informed')),
+        horizon      TEXT NOT NULL DEFAULT 'later' CHECK (horizon IN ('now', 'next', 'later')),
+        position     INTEGER NOT NULL,
+        created_at   TEXT NOT NULL,
+        updated_at   TEXT NOT NULL,
+        completed_at TEXT,
+        archived_at  TEXT
+    );
+    CREATE INDEX initiatives_horizon_position ON initiatives(horizon, position);
+    CREATE UNIQUE INDEX initiatives_name ON initiatives(name COLLATE NOCASE)
+        WHERE archived_at IS NULL AND name <> '';
+    ALTER TABLE meetings ADD COLUMN initiative_id INTEGER REFERENCES initiatives(id);
+    CREATE INDEX meetings_initiative_id ON meetings(initiative_id);",
+    ),
 ];
 
 /// Opens the database file at `path`, and creates it if it does not exist.
@@ -120,5 +139,32 @@ mod tests {
         let meetings = crate::meetings::list(&connection).unwrap();
         assert_eq!(meetings.len(), 1);
         assert_eq!(meetings[0].name, "Kickoff");
+    }
+
+    #[test]
+    fn migration_4_keeps_meetings_and_tasks_and_assigns_no_initiative() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        Migrations::from_slice(&MIGRATIONS[..3])
+            .to_latest(&mut connection)
+            .unwrap();
+        connection
+            .execute_batch(
+                "INSERT INTO meetings (id, name, notes, date, created_at, updated_at)
+                 VALUES (1, 'Kickoff', '', '2026-09-24', '2026-09-24T10:00:00.000Z',
+                         '2026-09-24T10:00:00.000Z');
+                 INSERT INTO tasks (id, meeting_id, description, created_at, updated_at)
+                 VALUES (1, 1, 'Send the deck', '2026-09-24T10:00:00.000Z',
+                         '2026-09-24T10:00:00.000Z');",
+            )
+            .unwrap();
+
+        migrate(&mut connection).unwrap();
+
+        let meeting = crate::meetings::get(&connection, 1).unwrap().unwrap();
+        assert_eq!(meeting.name, "Kickoff");
+        assert_eq!(meeting.initiative_id, None);
+        let tasks = crate::tasks::list_for_meeting(&connection, 1).unwrap();
+        assert_eq!(tasks.len(), 1);
+        assert_eq!(tasks[0].description, "Send the deck");
     }
 }

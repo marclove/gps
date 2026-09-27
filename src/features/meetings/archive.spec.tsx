@@ -22,6 +22,7 @@ type Meeting = {
     name: string;
     date: string;
     notes: string;
+    initiativeId: number | null;
     createdAt: string;
     updatedAt: string;
 };
@@ -30,8 +31,9 @@ type StoredMeeting = Meeting & { archivedAt: string | null };
 
 /** Returns the meeting as the commands return it, without the time it was archived. */
 function withoutArchiveTime(stored: StoredMeeting): Meeting {
-    const { id, name, date, notes, createdAt, updatedAt } = stored;
-    return { id, name, date, notes, createdAt, updatedAt };
+    const { id, name, date, notes, initiativeId, createdAt, updatedAt } =
+        stored;
+    return { id, name, date, notes, initiativeId, createdAt, updatedAt };
 }
 
 type UpdateArgs = Pick<Meeting, "id" | "name" | "date" | "notes">;
@@ -47,6 +49,7 @@ class FakeBackend {
         const meeting: StoredMeeting = {
             id: this.nextId++,
             notes: "",
+            initiativeId: null,
             createdAt: now,
             updatedAt: now,
             archivedAt: null,
@@ -99,6 +102,8 @@ class FakeBackend {
                     date: args.date as string,
                 });
             case "list_meeting_tasks":
+                return [];
+            case "list_initiatives":
                 return [];
             case "get_meeting": {
                 const meeting = this.find(args.id as number);

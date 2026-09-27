@@ -16,6 +16,7 @@ type Meeting = {
     name: string;
     date: string;
     notes: string;
+    initiativeId: number | null;
     createdAt: string;
     updatedAt: string;
 };
@@ -29,6 +30,7 @@ function seed(name: string, notes = "") {
         name,
         date: "2026-09-24",
         notes,
+        initiativeId: null,
         createdAt: now,
         updatedAt: now,
     };
@@ -46,6 +48,8 @@ async function handle(command: string, args: Record<string, unknown> = {}) {
                 updatedAt,
             }));
         case "list_meeting_tasks":
+            return [];
+        case "list_initiatives":
             return [];
         case "get_meeting":
             return meetings.find((m) => m.id === args.id) ?? null;

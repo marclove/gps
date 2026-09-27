@@ -11,7 +11,7 @@ import { MemoryRouter, Route, Routes } from "react-router";
 import { FailureToastProvider } from "@/components/failure-toast-provider";
 import { Toaster } from "@/components/toaster";
 import { toast } from "@/components/ui/toast";
-import { ArchiveProvider } from "./archive-provider";
+import { ArchiveProvider } from "@/components/archive-provider";
 import type { Meeting } from "@/lib/meetings";
 import { MeetingEditorPage } from "./meeting-editor-page";
 
@@ -36,6 +36,7 @@ const MEETING: Meeting = {
     notes: "",
     createdAt: "2026-09-24T17:00:00.000Z",
     updatedAt: "2026-09-24T17:00:00.000Z",
+    initiativeId: null,
 };
 
 type Answer = (args?: Record<string, unknown>) => unknown;
@@ -43,7 +44,8 @@ type Answer = (args?: Record<string, unknown>) => unknown;
 /**
  * Makes the fake backend answer each command by its name. A command in `answers`
  * gets that answer. Otherwise `get_meeting` returns MEETING, `list_meeting_tasks`
- * returns no tasks, and every other command returns MEETING with its arguments.
+ * returns no tasks, `list_initiatives` returns no initiatives, and every other command
+ * returns MEETING with its arguments.
  */
 function serveMeeting(answers: Record<string, Answer> = {}) {
     invoke.mockImplementation(
@@ -52,6 +54,7 @@ function serveMeeting(answers: Record<string, Answer> = {}) {
             if (answer) return answer(args);
             if (command === "get_meeting") return MEETING;
             if (command === "list_meeting_tasks") return [];
+            if (command === "list_initiatives") return [];
             return { ...MEETING, ...args };
         },
     );
@@ -272,13 +275,20 @@ describe("MeetingEditorPage", () => {
         ).toBeInTheDocument();
     });
 
-    it("moves focus from the date to Archive to the action items with Tab", async () => {
+    it("moves focus from the date to the initiative to Archive to the action items with Tab", async () => {
         serveMeeting();
         const user = userEvent.setup();
         renderPage("/meetings/42");
         await screen.findByText("No action items yet");
+        const initiative = screen.getByRole("combobox", {
+            name: "Meeting initiative",
+        });
+        await waitFor(() => expect(initiative).toBeEnabled());
 
         screen.getByLabelText("Meeting date").focus();
+        await user.tab();
+        expect(initiative).toHaveFocus();
+
         await user.tab();
         expect(screen.getByRole("button", { name: "Archive" })).toHaveFocus();
 
