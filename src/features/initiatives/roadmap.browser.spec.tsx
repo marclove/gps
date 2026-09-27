@@ -187,7 +187,9 @@ describe("Dragging cards with the pointer", () => {
 
         await userEvent.click(card("A"));
 
-        expect(await screen.findByRole("dialog", { name: "A" })).toBeVisible();
+        const dialog = await screen.findByRole("dialog", { name: "A" });
+        // The sheet fades in, so wait until it has arrived.
+        await waitFor(() => expect(dialog).toBeVisible());
         expect(invoke).not.toHaveBeenCalledWith(
             "move_initiative",
             expect.anything(),
@@ -391,6 +393,10 @@ describe("Layout", () => {
             await screen.findByRole("button", { name: /^A/ }),
         );
         const sheet = await screen.findByRole("dialog", { name: "A" });
+        // The sheet slides in from the right, so wait until it has arrived.
+        await expect
+            .poll(() => sheet.getBoundingClientRect().right)
+            .toBe(window.innerWidth);
         const description = await within(sheet).findByRole("textbox", {
             name: "Description",
         });

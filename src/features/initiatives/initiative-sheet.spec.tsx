@@ -35,13 +35,25 @@ async function openInitiativesPage(): Promise<User> {
     return user;
 }
 
-function column(name: "Now" | "Next" | "Later" | "Done") {
-    return screen.getByRole("region", { name });
+/**
+ * Options for queries of the board. While the sheet is open, the board is behind a modal
+ * dialog, which hides it from the accessibility tree, so such queries pass `hidden: true`.
+ */
+type BoardQuery = { hidden?: boolean };
+
+function column(
+    name: "Now" | "Next" | "Later" | "Done",
+    { hidden = false }: BoardQuery = {},
+) {
+    return screen.getByRole("region", { name, hidden });
 }
 
-function cardTexts(name: "Now" | "Next" | "Later" | "Done"): string[] {
-    return within(column(name))
-        .queryAllByRole("button")
+function cardTexts(
+    name: "Now" | "Next" | "Later" | "Done",
+    { hidden = false }: BoardQuery = {},
+): string[] {
+    return within(column(name, { hidden }))
+        .queryAllByRole("button", { hidden })
         .map((card) => card.textContent ?? "");
 }
 
@@ -72,6 +84,21 @@ function roleSelect(sheet: HTMLElement) {
 
 function description(sheet: HTMLElement) {
     return within(sheet).getByRole("textbox", { name: "Description" });
+}
+
+/**
+ * Waits until no sheet is open. A toast also has the role "dialog", so the sheet is
+ * identified by its name field.
+ */
+async function waitForSheetToClose() {
+    await waitFor(() =>
+        expect(
+            screen.queryByRole("textbox", {
+                name: "Initiative name",
+                hidden: true,
+            }),
+        ).not.toBeInTheDocument(),
+    );
 }
 
 function notifications() {
@@ -155,16 +182,12 @@ describe("The sheet", () => {
 
         const sheet = await openSheet(user, /^Launch/, "Launch");
         await user.click(within(sheet).getByRole("button", { name: "Close" }));
-        await waitFor(() =>
-            expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
-        );
+        await waitForSheetToClose();
         expect(await card(/^Launch/)).toHaveFocus();
 
         await openSheet(user, /^Launch/, "Launch");
         await user.keyboard("{Escape}");
-        await waitFor(() =>
-            expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
-        );
+        await waitForSheetToClose();
         expect(await card(/^Launch/)).toHaveFocus();
     });
 
@@ -205,7 +228,10 @@ describe("Saving", () => {
                 description: "Goals",
             }),
         );
-        expect(cardTexts("Next")).toEqual(["Pilot", "Launch v2Accountable"]);
+        expect(cardTexts("Next", { hidden: true })).toEqual([
+            "Pilot",
+            "Launch v2Accountable",
+        ]);
         expect(
             screen.getByRole("dialog", { name: "Launch v2" }),
         ).toBeInTheDocument();
@@ -265,7 +291,7 @@ describe("Unique names", () => {
         expect(follows(nameField(sheet), message)).toBe(true);
         expect(nameField(sheet)).toHaveValue("  launch ");
         expect(backend.column("next")).toEqual(["Pilot"]);
-        expect(cardTexts("Next")).toEqual(["Pilot"]);
+        expect(cardTexts("Next", { hidden: true })).toEqual(["Pilot"]);
         expect(
             screen.getByRole("dialog", { name: "Pilot" }),
         ).toBeInTheDocument();
@@ -308,7 +334,9 @@ describe("Unique names", () => {
 
         await user.type(nameField(sheet), " v2");
 
-        await waitFor(() => expect(cardTexts("Next")).toEqual(["Launch v2"]));
+        await waitFor(() =>
+            expect(cardTexts("Next", { hidden: true })).toEqual(["Launch v2"]),
+        );
         expect(
             within(sheet).queryByText(/^Another initiative is named/),
         ).not.toBeInTheDocument();
@@ -326,9 +354,7 @@ describe("Unique names", () => {
 
         await user.keyboard("{Escape}");
 
-        await waitFor(() =>
-            expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
-        );
+        await waitForSheetToClose();
         expect(cardTexts("Next")).toEqual(["Pilot"]);
         expect(backend.column("next")).toEqual(["Pilot"]);
     });
@@ -350,7 +376,9 @@ describe("Unique names", () => {
 
         await user.clear(nameField(sheet));
         await user.type(nameField(sheet), "Gone");
-        await waitFor(() => expect(cardTexts("Next")).toEqual(["Gone"]));
+        await waitFor(() =>
+            expect(cardTexts("Next", { hidden: true })).toEqual(["Gone"]),
+        );
     });
 
     it("saves a name without the spaces at its start and end", async () => {
@@ -361,7 +389,9 @@ describe("Unique names", () => {
         await user.clear(nameField(sheet));
         await user.type(nameField(sheet), "  Launch  ");
 
-        await waitFor(() => expect(cardTexts("Next")).toEqual(["Launch"]));
+        await waitFor(() =>
+            expect(cardTexts("Next", { hidden: true })).toEqual(["Launch"]),
+        );
         expect(backend.column("next")).toEqual(["Launch"]);
         expect(nameField(sheet)).toHaveValue("  Launch  ");
     });
@@ -374,15 +404,13 @@ describe("Unique names", () => {
         );
         await screen.findByRole("dialog", { name: "Untitled initiative" });
         await user.keyboard("{Escape}");
-        await waitFor(() =>
-            expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
-        );
+        await waitForSheetToClose();
         await user.click(
             screen.getByRole("button", { name: "New initiative" }),
         );
         await screen.findByRole("dialog", { name: "Untitled initiative" });
 
-        expect(cardTexts("Later")).toEqual([
+        expect(cardTexts("Later", { hidden: true })).toEqual([
             "Untitled initiative",
             "Untitled initiative",
         ]);
@@ -399,9 +427,7 @@ describe("Deleting an initiative", () => {
 
         await user.click(within(sheet).getByRole("button", { name: "Delete" }));
 
-        await waitFor(() =>
-            expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
-        );
+        await waitForSheetToClose();
         expect(cardTexts("Now")).toEqual(["A", "C"]);
         expect(
             screen.getByRole("button", { name: "New initiative" }),
@@ -479,7 +505,7 @@ describe("Deleting an initiative", () => {
         expect(
             screen.getByRole("dialog", { name: "Launch" }),
         ).toBeInTheDocument();
-        expect(cardTexts("Now")).toEqual(["Launch"]);
+        expect(cardTexts("Now", { hidden: true })).toEqual(["Launch"]);
     });
 
     it("says so in the toast when the restore fails, and tries again on Undo", async () => {
@@ -516,7 +542,9 @@ describe("Deleting an initiative", () => {
         sheet = await openSheet(user, /^Pilot/, "Pilot");
         await user.clear(nameField(sheet));
         await user.type(nameField(sheet), "Launch");
-        await waitFor(() => expect(cardTexts("Next")).toEqual(["Launch"]));
+        await waitFor(() =>
+            expect(cardTexts("Next", { hidden: true })).toEqual(["Launch"]),
+        );
         await user.keyboard("{Escape}");
 
         await user.click(

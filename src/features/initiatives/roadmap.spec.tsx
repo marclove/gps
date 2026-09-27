@@ -36,14 +36,26 @@ async function openInitiativesPage(): Promise<User> {
     return user;
 }
 
-function column(name: "Now" | "Next" | "Later" | "Done") {
-    return screen.getByRole("region", { name });
+/**
+ * Options for queries of the board. While the sheet is open, the board is behind a modal
+ * dialog, which hides it from the accessibility tree, so such queries pass `hidden: true`.
+ */
+type BoardQuery = { hidden?: boolean };
+
+function column(
+    name: "Now" | "Next" | "Later" | "Done",
+    { hidden = false }: BoardQuery = {},
+) {
+    return screen.getByRole("region", { name, hidden });
 }
 
 /** The text of each card in the column, from the top. */
-function cardTexts(name: "Now" | "Next" | "Later" | "Done"): string[] {
-    return within(column(name))
-        .queryAllByRole("button")
+function cardTexts(
+    name: "Now" | "Next" | "Later" | "Done",
+    { hidden = false }: BoardQuery = {},
+): string[] {
+    return within(column(name, { hidden }))
+        .queryAllByRole("button", { hidden })
         .map((card) => card.textContent ?? "");
 }
 
@@ -218,7 +230,7 @@ describe("Roadmap", () => {
         expect(
             await screen.findByRole("dialog", { name: "Launch" }),
         ).toBeInTheDocument();
-        expect(cardTexts("Now")).toEqual(["Launch"]);
+        expect(cardTexts("Now", { hidden: true })).toEqual(["Launch"]);
     });
 });
 
@@ -244,7 +256,10 @@ describe("Creating an initiative", () => {
         expect(
             within(sheet).getByRole("combobox", { name: "RACI role" }),
         ).toHaveValue("");
-        expect(cardTexts("Later")).toEqual(["Untitled initiative", "Pilot"]);
+        expect(cardTexts("Later", { hidden: true })).toEqual([
+            "Untitled initiative",
+            "Pilot",
+        ]);
         expect(backend.column("later")).toEqual(["", "Pilot"]);
     });
 
@@ -282,6 +297,12 @@ describe("Creating an initiative", () => {
             ),
         ).toBeInTheDocument();
         expect(button).toBeEnabled();
-        expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+        // A toast also has the role "dialog", so the sheet is identified by its name field.
+        expect(
+            screen.queryByRole("textbox", {
+                name: "Initiative name",
+                hidden: true,
+            }),
+        ).not.toBeInTheDocument();
     });
 });
