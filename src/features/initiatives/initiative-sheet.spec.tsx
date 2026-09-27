@@ -221,7 +221,7 @@ describe("Saving", () => {
 
         await waitFor(() =>
             expect(invoke).toHaveBeenCalledWith(
-                "update_initiative",
+                "rename_initiative",
                 expect.objectContaining({ name: "Launch!" }),
             ),
         );
@@ -232,7 +232,7 @@ describe("Saving", () => {
 
     it("shows Couldn't save when a save fails, and saves on Retry", async () => {
         backend.seedInitiative({ name: "Launch", horizon: "now" });
-        backend.failingOnce.add("update_initiative");
+        backend.failingOnce.add("rename_initiative");
         const user = await openInitiativesPage();
         const sheet = await openSheet(user, /^Launch/, "Launch");
 
@@ -244,6 +244,148 @@ describe("Saving", () => {
         await user.click(within(sheet).getByRole("button", { name: "Retry" }));
         expect(await within(sheet).findByText("Saved")).toBeInTheDocument();
         expect(backend.find("Launch!")).toBeDefined();
+    });
+});
+
+describe("Unique names", () => {
+    const takenMessage = 'Another initiative is named "launch".';
+
+    it("does not save a name that another initiative has, and says so below the name field", async () => {
+        backend.seedInitiative({ name: "Launch", horizon: "now" });
+        backend.seedInitiative({ name: "Pilot", horizon: "next" });
+        const user = await openInitiativesPage();
+        const sheet = await openSheet(user, /^Pilot/, "Pilot");
+
+        await user.clear(nameField(sheet));
+        await user.type(nameField(sheet), "  launch ");
+
+        const message = await within(sheet).findByText(takenMessage);
+        expect(nameField(sheet)).toHaveAttribute("aria-invalid", "true");
+        expect(nameField(sheet)).toHaveAccessibleDescription(takenMessage);
+        expect(follows(nameField(sheet), message)).toBe(true);
+        expect(nameField(sheet)).toHaveValue("  launch ");
+        expect(backend.column("next")).toEqual(["Pilot"]);
+        expect(cardTexts("Next")).toEqual(["Pilot"]);
+        expect(
+            screen.getByRole("dialog", { name: "Pilot" }),
+        ).toBeInTheDocument();
+        expect(
+            within(sheet).queryByText("Couldn't save"),
+        ).not.toBeInTheDocument();
+    });
+
+    it("still saves the role and the description while the name conflicts", async () => {
+        backend.seedInitiative({ name: "Launch", horizon: "now" });
+        backend.seedInitiative({ name: "Pilot", horizon: "next" });
+        const user = await openInitiativesPage();
+        const sheet = await openSheet(user, /^Pilot/, "Pilot");
+
+        await user.clear(nameField(sheet));
+        await user.type(nameField(sheet), "Launch");
+        await user.selectOptions(roleSelect(sheet), "Informed");
+        await user.click(description(sheet));
+        await user.keyboard("Notes");
+
+        await waitFor(() =>
+            expect(backend.find("Pilot")).toMatchObject({
+                raciRole: "informed",
+                description: "Notes",
+            }),
+        );
+        expect(
+            within(sheet).getByText('Another initiative is named "Launch".'),
+        ).toBeInTheDocument();
+    });
+
+    it("clears the message once the name is changed and saved", async () => {
+        backend.seedInitiative({ name: "Launch", horizon: "now" });
+        backend.seedInitiative({ name: "Pilot", horizon: "next" });
+        const user = await openInitiativesPage();
+        const sheet = await openSheet(user, /^Pilot/, "Pilot");
+        await user.clear(nameField(sheet));
+        await user.type(nameField(sheet), "Launch");
+        await within(sheet).findByText('Another initiative is named "Launch".');
+
+        await user.type(nameField(sheet), " v2");
+
+        await waitFor(() => expect(cardTexts("Next")).toEqual(["Launch v2"]));
+        expect(
+            within(sheet).queryByText(/^Another initiative is named/),
+        ).not.toBeInTheDocument();
+        expect(nameField(sheet)).not.toHaveAttribute("aria-invalid", "true");
+    });
+
+    it("keeps the saved name when the sheet closes while the name conflicts", async () => {
+        backend.seedInitiative({ name: "Launch", horizon: "now" });
+        backend.seedInitiative({ name: "Pilot", horizon: "next" });
+        const user = await openInitiativesPage();
+        const sheet = await openSheet(user, /^Pilot/, "Pilot");
+        await user.clear(nameField(sheet));
+        await user.type(nameField(sheet), "Launch");
+        await within(sheet).findByText('Another initiative is named "Launch".');
+
+        await user.keyboard("{Escape}");
+
+        await waitFor(() =>
+            expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+        );
+        expect(cardTexts("Next")).toEqual(["Pilot"]);
+        expect(backend.column("next")).toEqual(["Pilot"]);
+    });
+
+    it("counts completed initiatives, but not deleted ones", async () => {
+        backend.seedInitiative({ name: "Won", completed: true });
+        backend.seedInitiative({ name: "Gone", archived: true });
+        backend.seedInitiative({ name: "Pilot", horizon: "next" });
+        const user = await openInitiativesPage();
+        const sheet = await openSheet(user, /^Pilot/, "Pilot");
+
+        await user.clear(nameField(sheet));
+        await user.type(nameField(sheet), "won");
+        expect(
+            await within(sheet).findByText(
+                'Another initiative is named "won".',
+            ),
+        ).toBeInTheDocument();
+
+        await user.clear(nameField(sheet));
+        await user.type(nameField(sheet), "Gone");
+        await waitFor(() => expect(cardTexts("Next")).toEqual(["Gone"]));
+    });
+
+    it("saves a name without the spaces at its start and end", async () => {
+        backend.seedInitiative({ name: "Pilot", horizon: "next" });
+        const user = await openInitiativesPage();
+        const sheet = await openSheet(user, /^Pilot/, "Pilot");
+
+        await user.clear(nameField(sheet));
+        await user.type(nameField(sheet), "  Launch  ");
+
+        await waitFor(() => expect(cardTexts("Next")).toEqual(["Launch"]));
+        expect(backend.column("next")).toEqual(["Launch"]);
+        expect(nameField(sheet)).toHaveValue("  Launch  ");
+    });
+
+    it("allows more than one initiative with an empty name", async () => {
+        const user = await openInitiativesPage();
+
+        await user.click(
+            screen.getByRole("button", { name: "New initiative" }),
+        );
+        await screen.findByRole("dialog", { name: "Untitled initiative" });
+        await user.keyboard("{Escape}");
+        await waitFor(() =>
+            expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+        );
+        await user.click(
+            screen.getByRole("button", { name: "New initiative" }),
+        );
+        await screen.findByRole("dialog", { name: "Untitled initiative" });
+
+        expect(cardTexts("Later")).toEqual([
+            "Untitled initiative",
+            "Untitled initiative",
+        ]);
     });
 });
 
@@ -362,6 +504,37 @@ describe("Deleting an initiative", () => {
         );
 
         await waitFor(() => expect(cardTexts("Now")).toEqual(["Launch"]));
+    });
+
+    it("keeps the initiative deleted when another one took its name before Undo", async () => {
+        backend.seedInitiative({ name: "Launch", horizon: "now" });
+        backend.seedInitiative({ name: "Pilot", horizon: "next" });
+        const user = await openInitiativesPage();
+        let sheet = await openSheet(user, /^Launch/, "Launch");
+        await user.click(within(sheet).getByRole("button", { name: "Delete" }));
+        await waitFor(() => expect(cardTexts("Now")).toEqual([]));
+        sheet = await openSheet(user, /^Pilot/, "Pilot");
+        await user.clear(nameField(sheet));
+        await user.type(nameField(sheet), "Launch");
+        await waitFor(() => expect(cardTexts("Next")).toEqual(["Launch"]));
+        await user.keyboard("{Escape}");
+
+        await user.click(
+            within(notifications()).getByRole("button", { name: "Undo" }),
+        );
+
+        expect(
+            await within(notifications()).findByText(
+                'Couldn\'t restore "Launch" because another initiative has that name.',
+            ),
+        ).toBeInTheDocument();
+        expect(
+            within(notifications()).queryByRole("button", { name: "Undo" }),
+        ).not.toBeInTheDocument();
+        expect(cardTexts("Now")).toEqual([]);
+        expect(
+            backend.initiatives.filter((i) => i.archivedAt !== null),
+        ).toHaveLength(1);
     });
 
     it("shares one archive toast with meetings", async () => {

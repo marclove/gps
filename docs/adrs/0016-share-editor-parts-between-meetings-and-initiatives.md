@@ -31,6 +31,8 @@ We move these parts out of `src/features/meetings/`, give them names that do not
   - the text of the toast (`Archived "<name>".` or `Deleted "<name>".`),
   - the text when a restore fails ("Couldn't restore the meeting. Try again." or "Couldn't restore the initiative. Try again.").
 
+  A restore of an initiative can also answer that another initiative has its name (ADR 0013). Then the toast says `Couldn't restore "<name>" because another initiative has that name.` and has no "Undo" button, because trying again cannot succeed. A restore of a meeting never gives this answer.
+
   There is still at most one archive toast. Deleting an initiative closes an open archive toast for a meeting, and the other way around. `restored` gives the kind with the identifier, so that a page reacts only to a restore of its own kind. `version` counts the archives and restores of both kinds. A page that shows a list loads it again after any archive or restore, which costs one extra load when the other kind changed.
 - The shadcn native select component is added as `src/components/ui/native-select.tsx`, for the "RACI role" select box and the initiative select box in the meeting sidebar. A native select box works with the keyboard and with screen readers without extra code, and supports groups of choices.
 

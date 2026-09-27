@@ -43,7 +43,10 @@ There is no button to complete or reopen an initiative. Dragging a card, with th
 
 ### Saving
 
-- The name, the role, and the description are saved automatically with `useAutosave`, with the same delay as the meeting editor, through `update_initiative`. The save status is the same component as on the meeting editor page, with the same "Retry" button.
+- The name, the role, and the description are saved automatically with `useAutosave`, with the same delay as the meeting editor. The name is saved through `rename_initiative`, and the role and the description through `update_initiative` (ADR 0013). The save status is the same component as on the meeting editor page, with the same "Retry" button.
+- Names are unique (ADR 0013). When `rename_initiative` answers that another initiative has the name, the name field is marked as invalid, and a message below it says `Another initiative is named "<name>".` The name stays as it was saved last, and the card and the title of the sheet keep that name. The role and the description are still saved. This is not a failure to save, so the save status does not say "Couldn't save". The message goes away when the user changes the name to one that can be saved, or to the name that is saved now.
+- While the user types, the name passes through shorter names, such as "Launch" on the way to "Launch v2". If one of them is taken, the message shows only until the next save, after the user pauses.
+- If the sheet closes while the message is shown, the name that conflicts is not saved.
 - Closing the sheet saves a change that is not yet saved, in the same way as leaving the meeting editor page does.
 - The sheet loads the full initiative with `get_initiative` each time it opens, because the board has only summaries without descriptions. While it loads, the fields are disabled. If it cannot load, the sheet says "Couldn't load the initiative" with a "Retry" button.
 - After each save that succeeds, the sheet gives the saved initiative to the board, which updates the name and the role on the card. The board does not load the whole list again, so a save cannot move a card that the user is dragging.
@@ -52,6 +55,7 @@ There is no button to complete or reopen an initiative. Dragging a card, with th
 
 - The "Delete" button calls the shared archive action (ADR 0016) with the kind "initiative". The sheet saves any pending change first, then the initiative is archived, the sheet closes, the card is removed, and the archive toast says `Deleted "<name>".` with an "Undo" button.
 - "Undo" restores the initiative to the place it had (ADR 0013). If the Initiatives page is open, the board loads again and keyboard focus moves to the restored card.
+- If another initiative has the same name by then, the initiative stays deleted, and the toast says `Couldn't restore "<name>" because another initiative has that name.`, with no "Undo" button, because trying again cannot succeed.
 - If the delete fails, the sheet stays open and a failure toast says "Couldn't delete the initiative. Try again." (ADR 0012).
 
 ## Consequences

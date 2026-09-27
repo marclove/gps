@@ -45,6 +45,7 @@ export type FailingCommand =
     | "list_initiatives"
     | "create_initiative"
     | "get_initiative"
+    | "rename_initiative"
     | "update_initiative"
     | "move_initiative"
     | "archive_initiative"
@@ -190,6 +191,23 @@ export class FakeRoadmapBackend {
         return initiative;
     }
 
+    /**
+     * Tells if an initiative that is not deleted, other than `except`, has the same
+     * name, without regard to case and to spaces at the start and end.
+     */
+    private nameTaken(name: string, except: StoredInitiative): boolean {
+        const key = name.trim().toLowerCase();
+        return (
+            key !== "" &&
+            this.initiatives.some(
+                (i) =>
+                    i !== except &&
+                    i.archivedAt === null &&
+                    i.name.trim().toLowerCase() === key,
+            )
+        );
+    }
+
     private initiative(id: unknown): StoredInitiative {
         const initiative = this.initiatives.find((i) => i.id === id);
         if (!initiative) throw `initiative ${String(id)} not found`;
@@ -283,10 +301,19 @@ export class FakeRoadmapBackend {
                 );
                 return initiative ? { ...initiative } : null;
             }
+            case "rename_initiative": {
+                const initiative = this.initiative(args.id);
+                const name = (args.name as string).trim();
+                if (this.nameTaken(name, initiative)) {
+                    return { status: "nameTaken" };
+                }
+                initiative.name = name;
+                initiative.updatedAt = this.now();
+                return { status: "renamed", initiative: { ...initiative } };
+            }
             case "update_initiative": {
                 const initiative = this.initiative(args.id);
                 Object.assign(initiative, {
-                    name: args.name,
                     description: args.description,
                     raciRole: args.raciRole,
                     updatedAt: this.now(),
@@ -324,6 +351,9 @@ export class FakeRoadmapBackend {
             case "unarchive_initiative": {
                 const initiative = this.initiative(args.id);
                 if (initiative.archivedAt !== null) {
+                    if (this.nameTaken(initiative.name, initiative)) {
+                        return { status: "nameTaken" };
+                    }
                     initiative.archivedAt = null;
                     if (initiative.completedAt === null) {
                         this.insert(
@@ -333,7 +363,7 @@ export class FakeRoadmapBackend {
                         );
                     }
                 }
-                return null;
+                return { status: "restored" };
             }
             default:
                 throw `unexpected command ${command}`;

@@ -19,6 +19,7 @@ See [ADR 0013](../adrs/0013-store-initiatives-on-a-roadmap.md) for how initiativ
 - **Complete**: to move an initiative to Done. **Reopen**: to move it from Done to another column.
 - **Sheet**: the panel at the right side of the window in which the user edits one initiative. It is a modal dialog.
 - **Delete**: to remove an initiative from the roadmap. The initiative is kept, and "Undo" in the toast brings it back.
+- **Same name**: two names are the same when they are equal after removing spaces at the start and the end, without regard to uppercase and lowercase letters. For example, "Launch", "launch", and " Launch " are the same name.
 - **Assign**: to record that a meeting is about an initiative. A meeting is assigned to at most one initiative.
 
 The terms "meeting", "Meetings page", and "editor page" are defined in [Spec 0001](0001-take-meeting-notes.md). The terms "archive", "restore", and "archive toast" are defined in [Spec 0004](0004-archive-meeting-notes.md). The terms "meeting details sidebar" and "failure toast" are defined in [Spec 0005](0005-meeting-action-items.md). For initiatives, the archive toast is called the delete toast.
@@ -94,6 +95,16 @@ The terms "meeting", "Meetings page", and "editor page" are defined in [Spec 000
 - If the user closes the sheet before the pause ends, the change is saved at once.
 - After a change is saved, the card on the roadmap shows the new name and role. The card stays in its place.
 - The name, the description, and the role are kept when the user closes the sheet and opens it again, and after the application is closed and opened again.
+- A name is saved without the spaces at its start and end. The card and the title of the sheet show the saved name. The name field keeps the text as the user typed it.
+
+### Unique names
+
+- Two initiatives that are not deleted cannot have the same name. Completed initiatives count. Deleted initiatives do not, so the name of a deleted initiative can be used again. Any number of initiatives can have an empty name.
+- When the user types a name that another initiative has, and pauses, the name is not saved. The name field is marked as invalid, and a message below it says `Another initiative is named "<name>".`, with the name as the user typed it without the spaces at its start and end. The field describes itself with this message for screen readers.
+- The card and the title of the sheet keep the name that was saved last.
+- The role and the description are still saved, and the save status does not say "Couldn't save".
+- The message goes away when the user changes the name and it is saved.
+- If the user closes the sheet while the message is shown, the name that the user typed is not saved, and the card keeps the name that was saved last.
 
 ### Deleting an initiative
 
@@ -103,6 +114,7 @@ The terms "meeting", "Meetings page", and "editor page" are defined in [Spec 000
 - When the user clicks "Undo", the initiative is restored to the column and the place it had. If that column now has fewer cards than the old place, the card goes to the end of the column. A completed initiative goes back to Done. If the Initiatives page is open, keyboard focus moves to the restored card.
 - If the initiative cannot be deleted, the sheet stays open and a failure toast says "Couldn't delete the initiative. Try again."
 - If the initiative cannot be restored, the text of the delete toast changes to "Couldn't restore the initiative. Try again.", and its "Undo" button tries again.
+- If another initiative that is not deleted has the same name when the user clicks "Undo", the initiative stays deleted. The text of the delete toast changes to `Couldn't restore "<name>" because another initiative has that name.`, and the toast has no "Undo" button.
 - There is only one archive toast, for meetings and initiatives together. When the user deletes an initiative while the archive toast for a meeting is open, that toast closes and the delete toast appears, and the other way around.
 - A deleted initiative does not appear on the roadmap. Deleting it does not change its name, description, or role, and it does not change the meetings that are assigned to it.
 
@@ -145,19 +157,21 @@ The executable specs replace the Tauri backend with an in-memory fake. They rely
 | `list_initiatives`       | `includeArchived`                           | list of initiative summaries                |
 | `create_initiative`      | none                                        | the new initiative                          |
 | `get_initiative`         | `id`                                        | the initiative, or `null` if none has the id |
-| `update_initiative`      | `id`, `name`, `description`, `raciRole`     | the initiative                              |
+| `rename_initiative`      | `id`, `name`                                | `{ status: "renamed", initiative }` or `{ status: "nameTaken" }` |
+| `update_initiative`      | `id`, `description`, `raciRole`             | the initiative                              |
 | `move_initiative`        | `id`, `destination`, `index`                | nothing (`null`)                            |
 | `archive_initiative`     | `id`                                        | nothing (`null`)                            |
-| `unarchive_initiative`   | `id`                                        | nothing (`null`)                            |
+| `unarchive_initiative`   | `id`                                        | `{ status: "restored" }` or `{ status: "nameTaken" }` |
 | `set_meeting_initiative` | `id`, `initiativeId`                        | the meeting                                 |
 
 - An initiative has `id`, `name`, `description`, `raciRole`, `horizon`, `position`, `createdAt`, `updatedAt`, `completedAt`, and `archivedAt`. A summary has the same fields without `description`.
 - `raciRole` is `"responsible"`, `"accountable"`, `"consulted"`, `"informed"`, or `null`. `horizon` is `"now"`, `"next"`, or `"later"`. `completedAt` and `archivedAt` are RFC 3339 timestamps or `null`.
 - `list_initiatives` returns the initiatives that are not deleted, or all of them when `includeArchived` is `true`, in any order. The frontend sorts them.
 - `create_initiative` puts the new initiative at position 0 of Later, and moves the other initiatives in Later down by one.
-- `update_initiative` changes only the name, the description, the role, and `updatedAt`.
+- `rename_initiative` removes the spaces at the start and the end of the name. If another initiative that is not deleted has the same name, and the name is not empty, it returns `nameTaken` and changes nothing. Otherwise, it saves the name, changes `updatedAt`, and returns the initiative.
+- `update_initiative` changes only the description, the role, and `updatedAt`.
 - `move_initiative` takes `destination` `"now"`, `"next"`, `"later"`, or `"done"`, and `index`, the place from 0 at which the card was dropped. It keeps the positions of each column as 0, 1, 2, and so on, as [ADR 0013](../adrs/0013-store-initiatives-on-a-roadmap.md) describes. For `"done"`, it sets `completedAt` and ignores `index`. From Done to another column, it clears `completedAt`.
-- `archive_initiative` and `unarchive_initiative` delete and restore an initiative, and keep the positions as ADR 0013 describes.
+- `archive_initiative` and `unarchive_initiative` delete and restore an initiative, and keep the positions as ADR 0013 describes. `unarchive_initiative` returns `nameTaken` and changes nothing when another initiative that is not deleted has the same name.
 - A meeting has a new field, `initiativeId`, which is the identifier of an initiative or `null`. `set_meeting_initiative` accepts any initiative, also a completed or deleted one, or `null`.
 - Every command rejects with a message when no item has the identifier, a value is not allowed, or the database reports an error. `move_initiative` also rejects a deleted initiative.
 
