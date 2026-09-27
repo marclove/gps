@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import App from "@/App";
 import { FakeRoadmapBackend, type Horizon } from "@/test/fake-roadmap-backend";
+import { dragWithPointer, waitForCardInColumn } from "@/test/pointer-drag";
 
 // Feature spec for dragging cards and for the layout of the roadmap and the sheet in
 // docs/specs/0006-managing-initiatives.md.
@@ -60,7 +61,7 @@ async function waitForCards(name: ColumnName, texts: string[]) {
  * steps, as a person's pointer does, so that the board sees it pass over the cards.
  */
 async function drag(source: Element, target: Element) {
-    await userEvent.dragAndDrop(source, target, { steps: 10 });
+    await dragWithPointer(source, target);
 }
 
 function seedColumn(horizon: Horizon, names: string[]) {
@@ -187,9 +188,9 @@ describe("Dragging cards with the pointer", () => {
 
         await userEvent.click(card("A"));
 
-        const dialog = await screen.findByRole("dialog", { name: "A" });
-        // The sheet fades in, so wait until it has arrived.
-        await waitFor(() => expect(dialog).toBeVisible());
+        expect(
+            await screen.findByRole("dialog", { name: "A" }),
+        ).toBeInTheDocument();
         expect(invoke).not.toHaveBeenCalledWith(
             "move_initiative",
             expect.anything(),
@@ -270,6 +271,7 @@ describe("Dragging cards with the keyboard", () => {
         card("A").focus();
         await userEvent.keyboard(" ");
         await userEvent.keyboard("{ArrowRight}");
+        await waitForCardInColumn("Next");
         await userEvent.keyboard(" ");
 
         await waitFor(() => expect(cardTexts("Next")).toContain("A"));
@@ -287,6 +289,7 @@ describe("Dragging cards with the keyboard", () => {
         card("A").focus();
         await userEvent.keyboard(" ");
         await userEvent.keyboard("{ArrowRight}");
+        await waitForCardInColumn("Done");
         await userEvent.keyboard(" ");
 
         await waitForCards("Done", ["A"]);

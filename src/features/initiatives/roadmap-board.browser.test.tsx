@@ -3,6 +3,12 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import App from "@/App";
 import { FakeRoadmapBackend, type Horizon } from "@/test/fake-roadmap-backend";
+import {
+    center,
+    nextFrame,
+    pointer,
+    waitForCardInColumn,
+} from "@/test/pointer-drag";
 
 // Cases of dragging on the roadmap that the feature spec for
 // docs/specs/0006-managing-initiatives.md does not cover. They run in WebKit with the
@@ -51,33 +57,6 @@ function seedColumn(horizon: Horizon, names: string[]) {
     for (const name of names) backend.seedInitiative({ name, horizon });
 }
 
-function center(element: Element) {
-    const { left, top, width, height } = element.getBoundingClientRect();
-    return { x: left + width / 2, y: top + height / 2 };
-}
-
-function pointer(type: string, target: EventTarget, x: number, y: number) {
-    target.dispatchEvent(
-        new PointerEvent(type, {
-            bubbles: true,
-            cancelable: true,
-            composed: true,
-            isPrimary: true,
-            pointerId: 1,
-            pointerType: "mouse",
-            button: 0,
-            buttons: type === "pointerup" ? 0 : 1,
-            clientX: x,
-            clientY: y,
-        }),
-    );
-}
-
-/** Returns a promise that resolves after the browser draws the next frame. */
-function nextFrame() {
-    return new Promise((resolve) => requestAnimationFrame(resolve));
-}
-
 describe("Dragging cards", () => {
     it("keeps the focus on a card that the keyboard moves into another column", async () => {
         seedColumn("now", ["A"]);
@@ -88,6 +67,7 @@ describe("Dragging cards", () => {
         card("A").focus();
         await userEvent.keyboard(" ");
         await userEvent.keyboard("{ArrowRight}");
+        await waitForCardInColumn("Next");
         await userEvent.keyboard(" ");
 
         await waitFor(() => expect(cardTexts("Next")).toContain("A"));
