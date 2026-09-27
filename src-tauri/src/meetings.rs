@@ -429,6 +429,14 @@ mod tests {
             .unwrap();
     }
 
+    /// Creates an initiative with a description and returns it.
+    fn new_initiative(connection: &Connection) -> initiatives::Initiative {
+        match initiatives::create(connection, "", "x", None).unwrap() {
+            initiatives::CreateOutcome::Created { initiative } => initiative,
+            initiatives::CreateOutcome::NameTaken => panic!("the create should succeed"),
+        }
+    }
+
     #[test]
     fn a_new_meeting_has_no_initiative() {
         let connection = open_in_memory();
@@ -439,7 +447,7 @@ mod tests {
     #[test]
     fn set_initiative_assigns_removes_and_changes_updated_at() {
         let connection = open_in_memory();
-        let initiative = initiatives::create(&connection).unwrap();
+        let initiative = new_initiative(&connection);
         let created = create(&connection, "2026-09-24").unwrap();
         set_updated_at(&connection, created.id, OLD_TIME);
 
@@ -458,9 +466,9 @@ mod tests {
     #[test]
     fn set_initiative_accepts_deleted_and_completed_initiatives() {
         let connection = open_in_memory();
-        let deleted = initiatives::create(&connection).unwrap();
+        let deleted = new_initiative(&connection);
         initiatives::archive(&connection, deleted.id).unwrap();
-        let completed = initiatives::create(&connection).unwrap();
+        let completed = new_initiative(&connection);
         initiatives::move_to(&connection, completed.id, "done", 0).unwrap();
         let meeting = create(&connection, "2026-09-24").unwrap();
 
@@ -489,7 +497,7 @@ mod tests {
     #[test]
     fn set_initiative_on_a_missing_meeting_returns_not_found() {
         let connection = open_in_memory();
-        let initiative = initiatives::create(&connection).unwrap();
+        let initiative = new_initiative(&connection);
         assert!(matches!(
             set_initiative(&connection, 42, Some(initiative.id)),
             Err(Error::NotFound(42))
@@ -503,7 +511,7 @@ mod tests {
     #[test]
     fn update_does_not_change_the_initiative() {
         let connection = open_in_memory();
-        let initiative = initiatives::create(&connection).unwrap();
+        let initiative = new_initiative(&connection);
         let created = create(&connection, "2026-09-24").unwrap();
         set_initiative(&connection, created.id, Some(initiative.id)).unwrap();
 

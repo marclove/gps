@@ -84,6 +84,23 @@ pub struct InitiativeSummary {
     pub archived_at: Option<String>,
 }
 
+/// The result of a create.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "status", rename_all = "camelCase")]
+#[expect(
+    clippy::large_enum_variant,
+    reason = "each value lives only until the command sends it to the frontend"
+)]
+pub enum CreateOutcome {
+    /// The initiative was saved.
+    Created {
+        /// The initiative as it is stored after the create.
+        initiative: Initiative,
+    },
+    /// Another initiative that is not deleted has the same name. Nothing was saved.
+    NameTaken,
+}
+
 /// The result of a rename.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(tag = "status", rename_all = "camelCase")]
@@ -123,6 +140,9 @@ pub enum Error {
     InvalidDestination(String),
     /// The initiative is deleted, so the operation cannot change it.
     Archived(i64),
+    /// The name is empty, the description is empty, and there is no role, so the user did not
+    /// change the new initiative. Such an initiative is never saved.
+    Unchanged,
     /// The database reported an error.
     Database(rusqlite::Error),
 }
@@ -140,6 +160,7 @@ impl fmt::Display for Error {
                 "invalid destination \"{destination}\": use now, next, later, or done"
             ),
             Error::Archived(id) => write!(f, "initiative {id} is deleted"),
+            Error::Unchanged => write!(f, "an initiative needs a name, a description, or a role"),
             Error::Database(error) => write!(f, "database error: {error}"),
         }
     }
@@ -188,21 +209,42 @@ pub fn list(
     Ok(summaries)
 }
 
-/// Creates an initiative with an empty name, an empty description, and no role, at the top of
-/// the column `later`. The other initiatives in `later` move down by one.
-pub fn create(connection: &Connection) -> Result<Initiative, Error> {
+/// Creates an initiative with the given name, description, and role, at the top of the column
+/// `later`. The other initiatives in `later` move down by one.
+///
+/// Removes the spaces at the start and the end of `name`. The role must be one of
+/// `RACI_ROLES`, or `None` for no role. If the name is empty, the description is empty, and
+/// the role is `None`, returns `Error::Unchanged`. If another initiative that is not deleted
+/// has the same name, without regard to uppercase and lowercase letters, returns
+/// `CreateOutcome::NameTaken` and saves nothing. An empty name never conflicts.
+pub fn create(
+    connection: &Connection,
+    name: &str,
+    description: &str,
+    raci_role: Option<&str>,
+) -> Result<CreateOutcome, Error> {
+    let name = name.trim();
+    check_role(raci_role)?;
+    if name.is_empty() && description.is_empty() && raci_role.is_none() {
+        return Err(Error::Unchanged);
+    }
     let transaction = connection.unchecked_transaction()?;
+    if name_is_taken(&transaction, None, name)? {
+        return Ok(CreateOutcome::NameTaken);
+    }
     open_gap(&transaction, "later", 0)?;
     let id = transaction.query_row(
         &format!(
-            "INSERT INTO initiatives (horizon, position, created_at, updated_at)
-             VALUES ('later', 0, {NOW}, {NOW}) RETURNING id"
+            "INSERT INTO initiatives
+                 (name, description, raci_role, horizon, position, created_at, updated_at)
+             VALUES (?1, ?2, ?3, 'later', 0, {NOW}, {NOW}) RETURNING id"
         ),
-        [],
+        params![name, description, raci_role],
         |row| row.get(0),
     )?;
     transaction.commit()?;
-    get(connection, id)?.ok_or(Error::NotFound(id))
+    let initiative = get(connection, id)?.ok_or(Error::NotFound(id))?;
+    Ok(CreateOutcome::Created { initiative })
 }
 
 /// Returns the initiative with the given identifier, or `None` if no initiative has it.
@@ -228,7 +270,7 @@ pub fn rename(connection: &Connection, id: i64, name: &str) -> Result<RenameOutc
     if get(connection, id)?.is_none() {
         return Err(Error::NotFound(id));
     }
-    if name_is_taken(connection, id, name)? {
+    if name_is_taken(connection, Some(id), name)? {
         return Ok(RenameOutcome::NameTaken);
     }
     connection.execute(
@@ -248,11 +290,7 @@ pub fn update(
     description: &str,
     raci_role: Option<&str>,
 ) -> Result<Initiative, Error> {
-    if let Some(role) = raci_role {
-        if !RACI_ROLES.contains(&role) {
-            return Err(Error::InvalidRole(role.to_owned()));
-        }
-    }
+    check_role(raci_role)?;
     let changed = connection.execute(
         &format!(
             "UPDATE initiatives SET description = ?2, raci_role = ?3, updated_at = {NOW}
@@ -341,7 +379,7 @@ pub fn unarchive(connection: &Connection, id: i64) -> Result<RestoreOutcome, Err
     if initiative.archived_at.is_none() {
         return Ok(RestoreOutcome::Restored);
     }
-    if name_is_taken(connection, id, &initiative.name)? {
+    if name_is_taken(connection, Some(id), &initiative.name)? {
         return Ok(RestoreOutcome::NameTaken);
     }
     let transaction = connection.unchecked_transaction()?;
@@ -356,18 +394,27 @@ pub fn unarchive(connection: &Connection, id: i64) -> Result<RestoreOutcome, Err
     Ok(RestoreOutcome::Restored)
 }
 
-/// Returns true if an initiative other than `id` that is not deleted has `name`, without
-/// regard to uppercase and lowercase letters. An empty name is never taken.
-fn name_is_taken(connection: &Connection, id: i64, name: &str) -> Result<bool, Error> {
+/// Returns `Error::InvalidRole` if `raci_role` is not one of `RACI_ROLES` and not `None`.
+fn check_role(raci_role: Option<&str>) -> Result<(), Error> {
+    match raci_role {
+        Some(role) if !RACI_ROLES.contains(&role) => Err(Error::InvalidRole(role.to_owned())),
+        _ => Ok(()),
+    }
+}
+
+/// Returns true if an initiative that is not deleted has `name`, without regard to uppercase
+/// and lowercase letters. The initiative `except` does not count. An empty name is never
+/// taken.
+fn name_is_taken(connection: &Connection, except: Option<i64>, name: &str) -> Result<bool, Error> {
     if name.is_empty() {
         return Ok(false);
     }
     let taken = connection.query_row(
         "SELECT EXISTS(
              SELECT 1 FROM initiatives
-             WHERE id <> ?1 AND archived_at IS NULL AND name = ?2 COLLATE NOCASE
+             WHERE id IS NOT ?1 AND archived_at IS NULL AND name = ?2 COLLATE NOCASE
          )",
-        params![id, name],
+        params![except, name],
         |row| row.get(0),
     )?;
     Ok(taken)
@@ -476,15 +523,36 @@ mod tests {
         }
     }
 
+    /// Creates an initiative with the given values and returns it. Fails the test if the
+    /// initiative is not created.
+    fn created(
+        connection: &Connection,
+        name: &str,
+        description: &str,
+        raci_role: Option<&str>,
+    ) -> Initiative {
+        match create(connection, name, description, raci_role).unwrap() {
+            CreateOutcome::Created { initiative } => initiative,
+            CreateOutcome::NameTaken => panic!("the create should succeed"),
+        }
+    }
+
     /// Creates an initiative with the given name at the end of the given column.
     fn add(connection: &Connection, name: &str, horizon: &str) -> i64 {
-        let id = create(connection).unwrap().id;
+        let id = created(connection, "", "x", None).id;
         assert!(matches!(
             rename(connection, id, name).unwrap(),
             RenameOutcome::Renamed { .. }
         ));
         move_to(connection, id, horizon, 99).unwrap();
         id
+    }
+
+    /// Returns the number of initiatives in the database, deleted ones included.
+    fn count(connection: &Connection) -> i64 {
+        connection
+            .query_row("SELECT count(*) FROM initiatives", [], |row| row.get(0))
+            .unwrap()
     }
 
     fn set_updated_at(connection: &Connection, id: i64, time: &str) {
@@ -501,27 +569,106 @@ mod tests {
     }
 
     #[test]
-    fn create_puts_an_empty_initiative_at_the_top_of_later() {
+    fn create_puts_the_initiative_at_the_top_of_later() {
         let connection = open_in_memory();
-        let first = create(&connection).unwrap();
-        rename(&connection, first.id, "first").unwrap();
-        let second = create(&connection).unwrap();
-        rename(&connection, second.id, "second").unwrap();
+        add(&connection, "N", "now");
+        let first = created(&connection, "first", "", None);
+        let second = created(&connection, "  second ", "## Goals\n", Some("consulted"));
 
         assert_eq!(
             column(&connection, "later"),
             vec![("second".to_owned(), 0), ("first".to_owned(), 1)]
         );
-        assert_eq!(second.name, "");
-        assert_eq!(second.description, "");
-        assert_eq!(second.raci_role, None);
+        assert_eq!(fetch(&connection, first.id).position, 1);
+        assert_eq!(second.name, "second");
+        assert_eq!(second.description, "## Goals\n");
+        assert_eq!(second.raci_role.as_deref(), Some("consulted"));
         assert_eq!(second.horizon, "later");
         assert_eq!(second.position, 0);
         assert_eq!(second.completed_at, None);
         assert_eq!(second.archived_at, None);
         assert_eq!(second.created_at, second.updated_at);
         assert!(second.created_at.ends_with('Z'));
+        assert_eq!(fetch(&connection, second.id), second);
+        assert_eq!(names(&connection, "now"), ["N"]);
         assert_dense(&connection);
+    }
+
+    #[test]
+    fn create_refuses_an_initiative_that_the_user_did_not_change() {
+        let connection = open_in_memory();
+
+        for name in ["", "   "] {
+            let result = create(&connection, name, "", None);
+            assert!(
+                matches!(result, Err(Error::Unchanged)),
+                "{name:?} should be refused"
+            );
+        }
+
+        assert_eq!(count(&connection), 0);
+        assert_eq!(
+            Error::Unchanged.to_string(),
+            "an initiative needs a name, a description, or a role"
+        );
+    }
+
+    #[test]
+    fn create_accepts_only_a_role_or_only_a_description() {
+        let connection = open_in_memory();
+
+        let with_role = created(&connection, " ", "", Some("informed"));
+        assert_eq!(with_role.name, "");
+        assert_eq!(with_role.raci_role.as_deref(), Some("informed"));
+
+        let with_description = created(&connection, "", "Notes", None);
+        assert_eq!(with_description.name, "");
+        assert_eq!(with_description.description, "Notes");
+        assert_eq!(with_description.raci_role, None);
+
+        assert_eq!(count(&connection), 2);
+        assert_dense(&connection);
+    }
+
+    #[test]
+    fn create_returns_name_taken_and_saves_nothing() {
+        let connection = open_in_memory();
+        add(&connection, "Launch", "later");
+        let later_before = column(&connection, "later");
+
+        assert!(matches!(
+            create(&connection, " LAUNCH ", "Notes", Some("responsible")).unwrap(),
+            CreateOutcome::NameTaken
+        ));
+
+        assert_eq!(count(&connection), 1);
+        assert_eq!(column(&connection, "later"), later_before);
+        assert_dense(&connection);
+    }
+
+    #[test]
+    fn create_accepts_the_name_of_a_deleted_initiative() {
+        let connection = open_in_memory();
+        let old = add(&connection, "Launch", "now");
+        archive(&connection, old).unwrap();
+
+        assert_eq!(created(&connection, "launch", "", None).name, "launch");
+    }
+
+    #[test]
+    fn create_refuses_an_unknown_role() {
+        let connection = open_in_memory();
+
+        for role in ["Responsible", "owner", ""] {
+            assert!(
+                matches!(
+                    create(&connection, "Launch", "", Some(role)),
+                    Err(Error::InvalidRole(ref refused)) if refused == role
+                ),
+                "{role} should be refused"
+            );
+        }
+        assert_eq!(count(&connection), 0);
     }
 
     #[test]
@@ -727,7 +874,7 @@ mod tests {
     #[test]
     fn rename_trims_and_saves() {
         let connection = open_in_memory();
-        let id = create(&connection).unwrap().id;
+        let id = created(&connection, "", "x", None).id;
         set_updated_at(&connection, id, OLD_TIME);
 
         let RenameOutcome::Renamed { initiative } = rename(&connection, id, "  Launch ").unwrap()
@@ -883,7 +1030,7 @@ mod tests {
     #[test]
     fn update_refuses_an_unknown_role() {
         let connection = open_in_memory();
-        let created = create(&connection).unwrap();
+        let created = created(&connection, "", "x", None);
 
         for role in ["Responsible", "owner", ""] {
             assert!(

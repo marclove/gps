@@ -8,7 +8,9 @@ use std::sync::Mutex;
 use rusqlite::Connection;
 use tauri::{Manager, State};
 
-use crate::initiatives::{Initiative, InitiativeSummary, RenameOutcome, RestoreOutcome};
+use crate::initiatives::{
+    CreateOutcome, Initiative, InitiativeSummary, RenameOutcome, RestoreOutcome,
+};
 use crate::meetings::{Meeting, MeetingSummary};
 use crate::tasks::Task;
 
@@ -123,8 +125,14 @@ fn list_initiatives(
     clippy::needless_pass_by_value,
     reason = "Tauri gives managed state to commands by value"
 )]
-fn create_initiative(database: State<'_, Database>) -> Result<Initiative, String> {
-    database.run(initiatives::create)
+fn create_initiative(
+    database: State<'_, Database>,
+    name: &str,
+    description: &str,
+    raci_role: Option<String>,
+) -> Result<CreateOutcome, String> {
+    database
+        .run(|connection| initiatives::create(connection, name, description, raci_role.as_deref()))
 }
 
 #[tauri::command]
