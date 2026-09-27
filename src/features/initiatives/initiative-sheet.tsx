@@ -18,20 +18,28 @@ import {
     NAME_FIELD_CLASSES,
 } from "./initiative-form";
 
+/** What the sheet shows: the identifier of an initiative, or "new" for a draft. */
+export type SheetTarget = number | "new";
+
 type LoadState =
     | { kind: "loading" }
     | { kind: "error" }
-    | { kind: "loaded"; initiative: Initiative };
+    // `initiative` is `null` for a draft.
+    | { kind: "loaded"; initiative: Initiative | null };
 
 /**
  * The sheet that edits one initiative. It opens from the right side of the window.
  *
- * - `id` is the identifier of the initiative, or `null` when the sheet is closed.
+ * - `id` is the identifier of the initiative, "new" for a draft, or `null` when the sheet is
+ *   closed. A draft is a new initiative that is not saved yet. For a draft, the name field
+ *   gets the focus.
  * - `name` is the saved name of the initiative. The sheet uses it as its title.
- * - `newInitiative` is an initiative that was just created. If its identifier is `id`, the
- *   sheet shows it without loading it, and the name field gets the focus.
  * - `onClose` is called when the user closes the sheet, also with the "Save" button.
- * - `onSaved` receives the summary of the initiative after each save that succeeds.
+ * - `onSaved` receives the summary of the initiative after each save that succeeds. For a
+ *   draft, the first save creates the initiative.
+ * - `onCreated` receives the identifier of the initiative that a draft created, while the
+ *   draft is shown. The caller then gives this identifier as `id`, and the sheet goes on
+ *   editing the initiative in the same form.
  * - `onDelete` is called when the user clicks "Delete", after the changes that were waiting
  *   are saved. It receives the identifier and the saved name of the initiative.
  * - `finalFocus` receives the focus when the sheet closes. If it is not given, the focus
@@ -40,17 +48,17 @@ type LoadState =
 export function InitiativeSheet({
     id,
     name,
-    newInitiative = null,
     onClose,
     onSaved,
+    onCreated,
     onDelete,
     finalFocus,
 }: {
-    id: number | null;
+    id: SheetTarget | null;
     name: string;
-    newInitiative?: Initiative | null;
     onClose: () => void;
     onSaved: (summary: InitiativeSummary) => void;
+    onCreated: (id: number) => void;
     onDelete: (id: number, savedName: string) => Promise<void>;
     finalFocus?: RefObject<HTMLElement | null>;
 }) {
@@ -59,8 +67,27 @@ export function InitiativeSheet({
     if (id !== null && (id !== shown.id || name !== shown.name)) {
         setShown({ id, name });
     }
+    // Each draft gets a new form. The initiative that a draft created stays in the form of
+    // the draft, so that the form is not loaded again.
+    const [draft, setDraft] = useState<{
+        count: number;
+        createdId: number | null;
+    }>({ count: 0, createdId: null });
+    const [previousId, setPreviousId] = useState(id);
+    if (id !== previousId) {
+        setPreviousId(id);
+        if (id === "new") {
+            setDraft((current) => ({
+                count: current.count + 1,
+                createdId: null,
+            }));
+        }
+    }
+    const inDraftForm =
+        shown.id === "new" ||
+        (shown.id !== null && shown.id === draft.createdId);
+    const bodyKey = inDraftForm ? `draft-${draft.count}` : `id-${shown.id}`;
     const nameInput = useRef<HTMLInputElement>(null);
-    const focusName = newInitiative !== null && newInitiative.id === id;
 
     return (
         <Sheet
@@ -71,7 +98,7 @@ export function InitiativeSheet({
         >
             <SheetContent
                 side="right"
-                initialFocus={focusName ? nameInput : true}
+                initialFocus={id === "new" ? nameInput : true}
                 finalFocus={finalFocus ?? true}
                 className="gap-0 data-[side=right]:w-[min(40rem,100vw)] data-[side=right]:sm:max-w-none"
             >
@@ -80,15 +107,14 @@ export function InitiativeSheet({
                 </SheetTitle>
                 {shown.id !== null && (
                     <SheetBody
-                        key={shown.id}
+                        key={bodyKey}
                         id={shown.id}
-                        initial={
-                            newInitiative?.id === shown.id
-                                ? newInitiative
-                                : null
-                        }
                         nameRef={nameInput}
                         onSaved={onSaved}
+                        onCreated={(createdId) => {
+                            setDraft((current) => ({ ...current, createdId }));
+                            onCreated(createdId);
+                        }}
                         onDelete={onDelete}
                         onClose={onClose}
                     />
@@ -98,30 +124,35 @@ export function InitiativeSheet({
     );
 }
 
-/** Loads the initiative and shows its form, or the fields disabled while it loads. */
+/**
+ * Loads the initiative and shows its form, or the fields disabled while it loads. For a
+ * draft, it shows the form at once. When the draft is created, `id` changes to the identifier
+ * of the new initiative, and the form stays.
+ */
 function SheetBody({
     id,
-    initial,
     nameRef,
     onSaved,
+    onCreated,
     onDelete,
     onClose,
 }: {
-    id: number;
-    initial: Initiative | null;
+    id: SheetTarget;
     nameRef: RefObject<HTMLInputElement | null>;
     onSaved: (summary: InitiativeSummary) => void;
+    onCreated: (id: number) => void;
     onDelete: (id: number, savedName: string) => Promise<void>;
     onClose: () => void;
 }) {
+    // A body that starts as a draft never loads, because its form has the saved values.
+    const [isDraft] = useState(id === "new");
     const [state, setState] = useState<LoadState>(
-        initial ? { kind: "loaded", initiative: initial } : { kind: "loading" },
+        isDraft ? { kind: "loaded", initiative: null } : { kind: "loading" },
     );
     const [attempt, setAttempt] = useState(0);
 
     useEffect(() => {
-        // A new initiative is shown as it was created. A retry loads it again.
-        if (initial !== null && attempt === 0) return;
+        if (isDraft || id === "new") return;
         let current = true;
         getInitiative(id).then(
             (initiative) =>
@@ -136,14 +167,19 @@ function SheetBody({
         return () => {
             current = false;
         };
-    }, [id, initial, attempt]);
+    }, [id, isDraft, attempt]);
 
     if (state.kind === "loaded") {
         return (
             <InitiativeForm
                 initiative={state.initiative}
                 onSaved={onSaved}
-                onDelete={(savedName) => onDelete(id, savedName)}
+                onCreated={onCreated}
+                // The form shows "Delete" only after the draft is created, and then `id` is
+                // the identifier of the initiative.
+                onDelete={(savedName) =>
+                    id === "new" ? Promise.resolve() : onDelete(id, savedName)
+                }
                 onSave={onClose}
                 nameRef={nameRef}
             />

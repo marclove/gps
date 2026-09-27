@@ -4,7 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FailureToastProvider } from "@/components/failure-toast-provider";
 import { Toaster } from "@/components/toaster";
 import { toast } from "@/components/ui/toast";
-import type { Initiative, RenameResult } from "@/lib/initiatives";
+import { AUTOSAVE_DELAY_MS } from "@/hooks/use-autosave";
+import type { CreateResult, Initiative, RenameResult } from "@/lib/initiatives";
 import { InitiativeForm } from "./initiative-form";
 
 const invoke = vi.hoisted(() => vi.fn());
@@ -45,8 +46,9 @@ afterEach(() => {
     consoleError.mockRestore();
 });
 
-function renderForm() {
+function renderForm(initiative: Initiative | null = PILOT) {
     const onSaved = vi.fn();
+    const onCreated = vi.fn();
     const onDelete = vi.fn((savedName: string) => {
         void savedName;
         return Promise.resolve();
@@ -56,8 +58,9 @@ function renderForm() {
         <Toaster toastManager={toast}>
             <FailureToastProvider>
                 <InitiativeForm
-                    initiative={PILOT}
+                    initiative={initiative}
                     onSaved={onSaved}
+                    onCreated={onCreated}
                     onDelete={onDelete}
                     onSave={onSave}
                 />
@@ -65,7 +68,22 @@ function renderForm() {
         </Toaster>,
     );
     const name = screen.getByRole("textbox", { name: "Initiative name" });
-    return { ...view, onSaved, onDelete, onSave, name };
+    return { ...view, onSaved, onCreated, onDelete, onSave, name };
+}
+
+/** Waits until the autosave pause has passed. */
+async function waitForAutosavePause() {
+    await act(
+        () =>
+            new Promise((resolve) =>
+                setTimeout(resolve, AUTOSAVE_DELAY_MS + 100),
+            ),
+    );
+}
+
+/** Returns the calls of a backend command. */
+function callsOf(command: string) {
+    return invoke.mock.calls.filter(([called]) => called === command);
 }
 
 describe("InitiativeForm", () => {
@@ -281,6 +299,179 @@ describe("InitiativeForm", () => {
 
             await act(async () => done.resolve());
             expect(button).toBeEnabled();
+        });
+    });
+
+    describe("for a draft", () => {
+        it("creates nothing when the name is typed and cleared before the pause", async () => {
+            const user = userEvent.setup();
+            const { onSaved, name, unmount } = renderForm(null);
+
+            await user.type(name, "Launch");
+            await user.clear(name);
+            await waitForAutosavePause();
+            unmount();
+
+            expect(invoke).not.toHaveBeenCalled();
+            expect(onSaved).not.toHaveBeenCalled();
+        });
+
+        it("shows no Delete button and no save status until it is created", async () => {
+            invoke.mockImplementation((command: string, args) =>
+                command === "create_initiative"
+                    ? Promise.resolve({
+                          status: "created",
+                          initiative: { ...PILOT, name: args.name.trim() },
+                      })
+                    : Promise.reject(new Error(`Unexpected ${command}`)),
+            );
+            const user = userEvent.setup();
+            const { name } = renderForm(null);
+
+            expect(
+                screen.queryByRole("button", { name: "Delete" }),
+            ).not.toBeInTheDocument();
+            expect(screen.queryByRole("status")).not.toBeInTheDocument();
+
+            await user.type(name, "Launch");
+
+            expect(
+                await screen.findByRole("button", { name: "Delete" }),
+            ).toBeInTheDocument();
+            await waitFor(() =>
+                expect(screen.getByRole("status")).toHaveTextContent("Saved"),
+            );
+        });
+
+        it("renames and updates the created initiative after the first save, and never creates it again", async () => {
+            invoke.mockImplementation((command: string, args) => {
+                if (command === "create_initiative")
+                    return Promise.resolve({
+                        status: "created",
+                        initiative: { ...PILOT, name: args.name.trim() },
+                    });
+                if (command === "rename_initiative")
+                    return Promise.resolve({
+                        status: "renamed",
+                        initiative: { ...PILOT, name: args.name.trim() },
+                    });
+                if (command === "update_initiative")
+                    return Promise.resolve({
+                        ...PILOT,
+                        raciRole: args.raciRole,
+                    });
+                return Promise.reject(new Error(`Unexpected ${command}`));
+            });
+            const user = userEvent.setup();
+            const { onSaved, onCreated, name } = renderForm(null);
+
+            await user.type(name, "Launch");
+            await waitFor(() => expect(onCreated).toHaveBeenCalledWith(7));
+            expect(callsOf("create_initiative")).toEqual([
+                [
+                    "create_initiative",
+                    { name: "Launch", description: "", raciRole: null },
+                ],
+            ]);
+            expect(onSaved).toHaveBeenLastCalledWith(
+                expect.objectContaining({ id: 7, name: "Launch" }),
+            );
+
+            await user.type(name, " v2");
+            await waitFor(() =>
+                expect(invoke).toHaveBeenCalledWith("rename_initiative", {
+                    id: 7,
+                    name: "Launch v2",
+                }),
+            );
+            await user.selectOptions(
+                screen.getByRole("combobox", { name: "RACI role" }),
+                "Informed",
+            );
+            await waitFor(() =>
+                expect(invoke).toHaveBeenCalledWith("update_initiative", {
+                    id: 7,
+                    description: "",
+                    raciRole: "informed",
+                }),
+            );
+
+            expect(callsOf("create_initiative")).toHaveLength(1);
+            expect(onCreated).toHaveBeenCalledTimes(1);
+        });
+
+        it("reports the created initiative when it unmounts while a change is waiting", async () => {
+            const create = deferred<CreateResult>();
+            invoke.mockImplementation((command: string) =>
+                command === "create_initiative"
+                    ? create.promise
+                    : Promise.reject(new Error(`Unexpected ${command}`)),
+            );
+            const user = userEvent.setup();
+            const { onSaved, onCreated, name, unmount } = renderForm(null);
+            await user.type(name, "Launch");
+
+            unmount();
+
+            expect(invoke).toHaveBeenCalledExactlyOnceWith(
+                "create_initiative",
+                { name: "Launch", description: "", raciRole: null },
+            );
+            await act(async () =>
+                create.resolve({
+                    status: "created",
+                    initiative: { ...PILOT, name: "Launch" },
+                }),
+            );
+            expect(onSaved).toHaveBeenCalledTimes(1);
+            expect(onSaved.mock.calls[0][0]).toMatchObject({
+                id: 7,
+                name: "Launch",
+            });
+            expect(onSaved.mock.calls[0][0]).not.toHaveProperty("description");
+            expect(onCreated).not.toHaveBeenCalled();
+        });
+
+        it("saves the role with an empty name when the name is taken", async () => {
+            invoke.mockImplementation((command: string, args) => {
+                if (command !== "create_initiative")
+                    return Promise.reject(new Error(`Unexpected ${command}`));
+                return Promise.resolve(
+                    args.name === ""
+                        ? {
+                              status: "created",
+                              initiative: {
+                                  ...PILOT,
+                                  name: "",
+                                  raciRole: args.raciRole,
+                              },
+                          }
+                        : { status: "nameTaken" },
+                );
+            });
+            const user = userEvent.setup();
+            const { onSaved, name } = renderForm(null);
+
+            await user.type(name, "Launch");
+            await user.selectOptions(
+                screen.getByRole("combobox", { name: "RACI role" }),
+                "Informed",
+            );
+
+            await waitFor(() => expect(onSaved).toHaveBeenCalled());
+            expect(callsOf("create_initiative")).toEqual([
+                [
+                    "create_initiative",
+                    { name: "Launch", description: "", raciRole: "informed" },
+                ],
+                [
+                    "create_initiative",
+                    { name: "", description: "", raciRole: "informed" },
+                ],
+            ]);
+            expect(
+                screen.getByText('Another initiative is named "Launch".'),
+            ).toBeInTheDocument();
         });
     });
 });

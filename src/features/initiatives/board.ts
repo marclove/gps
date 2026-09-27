@@ -73,6 +73,15 @@ export function moveCard(
 }
 
 /**
+ * Returns a board with the card of `summary` at the top of Later. If a column already holds a
+ * card with the identifier of `summary`, the function returns the board that it gets.
+ */
+export function addCard(board: Board, summary: InitiativeSummary): Board {
+    if (columnOf(board, summary.id) !== null) return board;
+    return { ...board, later: [summary, ...board.later] };
+}
+
+/**
  * Returns a board with the card that has the identifier of `summary` replaced by `summary`, at
  * the same place. If no column holds the card, the function returns the board that it gets.
  */

@@ -5,14 +5,13 @@ import { useArchive, type RestoredItem } from "@/components/use-archive";
 import { useFailureToast } from "@/components/use-failure-toast";
 import { Button } from "@/components/ui/button";
 import {
-    createInitiative,
     listInitiatives,
     moveInitiative,
     type Column,
-    type Initiative,
     type InitiativeSummary,
 } from "@/lib/initiatives";
 import {
+    addCard,
     buildBoard,
     columnOf,
     emptyBoard,
@@ -21,7 +20,7 @@ import {
     replaceCard,
     type Board,
 } from "./board";
-import { InitiativeSheet } from "./initiative-sheet";
+import { InitiativeSheet, type SheetTarget } from "./initiative-sheet";
 import { RoadmapBoard } from "./roadmap-board";
 
 type BoardState =
@@ -37,21 +36,20 @@ function nameOnBoard(board: Board, id: number): string | null {
 
 /**
  * The page that shows the initiatives that are not deleted on a roadmap. A click on a card
- * opens the sheet of its initiative. "New initiative" creates an initiative and opens its
- * sheet. "Delete" in the sheet deletes the initiative, and the archive toast can restore it.
- * The page loads the board again after each archive and restore, and focuses the card of a
- * restored initiative. A dragged card moves on the board at once. If the backend cannot save
- * the move, the page shows a failure toast and loads the board again when no other move is
- * waiting for the backend, so that the board shows what the backend has.
+ * opens the sheet of its initiative. "New initiative" opens the sheet for a draft, which is
+ * saved only after the user changes it. When the draft is saved, its card appears at the top
+ * of Later, and the sheet goes on to edit the new initiative. "Delete" in the sheet deletes
+ * the initiative, and the archive toast can restore it. The page loads the board again after
+ * each archive and restore, and focuses the card of a restored initiative. A dragged card
+ * moves on the board at once. If the backend cannot save the move, the page shows a failure
+ * toast and loads the board again when no other move is waiting for the backend, so that the
+ * board shows what the backend has.
  */
 export function InitiativesPage() {
     const [state, setState] = useState<BoardState>({ kind: "loading" });
     const [attempt, setAttempt] = useState(0);
-    const [openId, setOpenId] = useState<number | null>(null);
-    // The initiative that "New initiative" created last. Its sheet puts the focus in the
-    // name field.
-    const [created, setCreated] = useState<Initiative | null>(null);
-    const [creating, setCreating] = useState(false);
+    // The initiative whose sheet is open, "new" for a draft, or `null`.
+    const [openId, setOpenId] = useState<SheetTarget | null>(null);
     // True when the sheet closes because its initiative was deleted. Then the focus goes to
     // "New initiative", because the card that opened the sheet is gone.
     const [focusNewOnClose, setFocusNewOnClose] = useState(false);
@@ -121,7 +119,6 @@ export function InitiativesPage() {
     }
 
     function openInitiative(id: number) {
-        setCreated(null);
         setFocusNewOnClose(false);
         setOpenId(id);
     }
@@ -143,21 +140,14 @@ export function InitiativesPage() {
         );
     }
 
-    async function create() {
-        setCreating(true);
+    function openDraft() {
         setFocusNewOnClose(false);
-        try {
-            const initiative = await createInitiative();
-            failureToast.clear();
-            setCreated(initiative);
-            setOpenId(initiative.id);
-            // Load the board again, so that it shows the new card at the top of Later.
-            setAttempt((value) => value + 1);
-        } catch {
-            failureToast.show("Couldn't create the initiative. Try again.");
-        } finally {
-            setCreating(false);
-        }
+        setOpenId("new");
+    }
+
+    function editCreated(id: number) {
+        // The draft sheet goes on to edit the initiative that it created.
+        setOpenId((current) => (current === "new" ? id : current));
     }
 
     async function move(id: number, to: Column, index: number) {
@@ -188,25 +178,29 @@ export function InitiativesPage() {
     }
 
     function showSaved(summary: InitiativeSummary) {
-        setState((current) =>
-            current.kind === "loaded"
-                ? { kind: "loaded", board: replaceCard(current.board, summary) }
-                : current,
-        );
+        setState((current) => {
+            if (current.kind !== "loaded") return current;
+            // A summary of an initiative that is not on the board and not deleted comes from
+            // a draft that was just created, also after its sheet closed.
+            const board =
+                columnOf(current.board, summary.id) === null &&
+                summary.archivedAt === null
+                    ? addCard(current.board, summary)
+                    : replaceCard(current.board, summary);
+            return { kind: "loaded", board };
+        });
     }
 
     const openName =
-        openId === null
-            ? ""
-            : ((state.kind === "loaded"
-                  ? nameOnBoard(state.board, openId)
-                  : null) ?? (created?.id === openId ? created.name : ""));
+        typeof openId === "number" && state.kind === "loaded"
+            ? (nameOnBoard(state.board, openId) ?? "")
+            : "";
 
     return (
         // The header stays in place, and the board gets the remaining height.
         <div className="grid min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)]">
             <PageHeader crumbs={[{ label: "Initiatives" }]}>
-                <Button ref={newButton} disabled={creating} onClick={create}>
+                <Button ref={newButton} onClick={openDraft}>
                     <PlusIcon />
                     New initiative
                 </Button>
@@ -236,9 +230,9 @@ export function InitiativesPage() {
             <InitiativeSheet
                 id={openId}
                 name={openName}
-                newInitiative={created}
                 onClose={() => setOpenId(null)}
                 onSaved={showSaved}
+                onCreated={editCreated}
                 onDelete={deleteInitiative}
                 finalFocus={focusNewOnClose ? newButton : undefined}
             />

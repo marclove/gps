@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/native-select";
 import { useAutosave } from "@/hooks/use-autosave";
 import {
+    createInitiative,
     initiativeDisplayName,
     RACI_ROLES,
     renameInitiative,
@@ -34,6 +35,22 @@ type Draft = {
     description: string;
     raciRole: RaciRole | null;
 };
+
+/** The values of a draft, which is a new initiative that is not saved yet. */
+const EMPTY_DRAFT: Draft = { name: "", description: "", raciRole: null };
+
+/**
+ * Returns true if the values are the values of a new draft: a name that is empty after
+ * removing the spaces at its start and end, an empty description, and no role. Such a draft
+ * is never saved.
+ */
+function isEmptyDraft(values: Draft): boolean {
+    return (
+        values.name.trim() === "" &&
+        values.description === "" &&
+        values.raciRole === null
+    );
+}
 
 /** Returns the summary of an initiative, which is the initiative without its description. */
 function toSummary(initiative: Initiative): InitiativeSummary {
@@ -71,6 +88,16 @@ export const FIELD_LABEL_CLASSES = "pl-[calc(--spacing(2.5)+1px)] text-xs";
  * Changes are saved automatically. "Save" only calls `onSave`, which closes the sheet, and
  * the form then saves the changes that are waiting when it unmounts.
  *
+ * When `initiative` is `null`, the form edits a draft: a new initiative with an empty name,
+ * an empty description, and no role, which is not saved yet. The draft has no "Delete" button
+ * and no save status, but a failed save shows "Couldn't save". The form creates the
+ * initiative at the first save of a draft that is not empty, and then saves later changes as
+ * for any other initiative. If the name of the draft is taken, the name field shows a
+ * message, and the form creates the initiative with an empty name when the draft has a
+ * description or a role. After the create, `onSaved` receives the summary, also when the
+ * create finishes after the form unmounts, and `onCreated` receives the identifier while the
+ * form is mounted.
+ *
  * A name change is saved with a rename. If another initiative has the name, the name field
  * shows a message, and the other changes are still saved. `onSaved` receives the summary of
  * the initiative after each save that succeeds, also when the save finishes after the form
@@ -84,37 +111,49 @@ export const FIELD_LABEL_CLASSES = "pl-[calc(--spacing(2.5)+1px)] text-xs";
 export function InitiativeForm({
     initiative,
     onSaved,
+    onCreated,
     onDelete,
     onSave,
     nameRef,
 }: {
-    initiative: Initiative;
+    initiative: Initiative | null;
     onSaved: (summary: InitiativeSummary) => void;
+    onCreated?: (id: number) => void;
     onDelete: (savedName: string) => Promise<void>;
     onSave: () => void;
     nameRef?: Ref<HTMLInputElement>;
 }) {
-    const [draft, setDraft] = useState<Draft>({
-        name: initiative.name,
-        description: initiative.description,
-        raciRole: initiative.raciRole,
-    });
+    const [draft, setDraft] = useState<Draft>(
+        initiative === null
+            ? EMPTY_DRAFT
+            : {
+                  name: initiative.name,
+                  description: initiative.description,
+                  raciRole: initiative.raciRole,
+              },
+    );
     const [takenName, setTakenName] = useState<string | null>(null);
     const [deleting, setDeleting] = useState(false);
+    // The identifier of the initiative, or `null` while the draft is not saved. The ref gives
+    // the identifier to a save that finishes after the form unmounts.
+    const [id, setId] = useState(initiative?.id ?? null);
+    const idRef = useRef(initiative?.id ?? null);
     // The name that the backend has for the initiative. The backend trims names.
-    const savedName = useRef(initiative.name);
+    const savedName = useRef(initiative?.name ?? "");
     // The values that the backend has now. They are refs, so that a save that finishes after
     // the form unmounts still compares with the correct values.
     const saved = useRef<Draft>({ ...draft });
     const mounted = useRef(true);
     const onSavedRef = useRef(onSaved);
+    const onCreatedRef = useRef(onCreated);
     const nameId = useId();
     const roleId = useId();
     const messageId = useId();
 
     useEffect(() => {
         onSavedRef.current = onSaved;
-    }, [onSaved]);
+        onCreatedRef.current = onCreated;
+    }, [onSaved, onCreated]);
 
     useEffect(() => {
         mounted.current = true;
@@ -123,10 +162,46 @@ export function InitiativeForm({
         };
     }, []);
 
+    // Creates the initiative from a draft that is not empty. If the name is taken, the draft
+    // is created with an empty name when it has a description or a role.
+    const create = useCallback(async (next: Draft) => {
+        if (isEmptyDraft(next)) {
+            if (mounted.current) setTakenName(null);
+            return;
+        }
+        let result = await createInitiative(next);
+        let values = next;
+        if (result.status === "nameTaken") {
+            // A name that is taken is not a failed save.
+            if (mounted.current) setTakenName(next.name.trim());
+            values = { ...next, name: "" };
+            if (isEmptyDraft(values)) return;
+            result = await createInitiative(values);
+            // An empty name is never taken.
+            if (result.status === "nameTaken") return;
+        } else if (mounted.current) {
+            setTakenName(null);
+        }
+        const created = result.initiative;
+        idRef.current = created.id;
+        saved.current = { ...values };
+        savedName.current = created.name;
+        onSavedRef.current(toSummary(created));
+        if (mounted.current) {
+            setId(created.id);
+            onCreatedRef.current?.(created.id);
+        }
+    }, []);
+
     const save = useCallback(
         async (next: Draft) => {
+            const savedId = idRef.current;
+            if (savedId === null) {
+                await create(next);
+                return;
+            }
             if (next.name !== saved.current.name) {
-                const result = await renameInitiative(initiative.id, next.name);
+                const result = await renameInitiative(savedId, next.name);
                 if (result.status === "renamed") {
                     saved.current.name = next.name;
                     savedName.current = result.initiative.name;
@@ -147,12 +222,12 @@ export function InitiativeForm({
                     description: next.description,
                     raciRole: next.raciRole,
                 };
-                const updated = await updateInitiative(initiative.id, changes);
+                const updated = await updateInitiative(savedId, changes);
                 saved.current = { ...saved.current, ...changes };
                 onSavedRef.current(toSummary(updated));
             }
         },
-        [initiative.id],
+        [create],
     );
     const { status, retry, flush } = useAutosave(draft, save);
     const failureToast = useFailureToast();
@@ -172,6 +247,8 @@ export function InitiativeForm({
         }
     }
 
+    const completedAt = initiative?.completedAt ?? null;
+
     const changeDescription = useCallback(
         (description: string) =>
             setDraft((current) => ({ ...current, description })),
@@ -185,7 +262,7 @@ export function InitiativeForm({
         <div
             className={cn(
                 "grid min-h-0 flex-1",
-                initiative.completedAt === null
+                completedAt === null
                     ? "grid-rows-[auto_auto_minmax(0,1fr)_auto]"
                     : "grid-rows-[auto_auto_auto_minmax(0,1fr)_auto]",
             )}
@@ -223,7 +300,9 @@ export function InitiativeForm({
                         )}
                     </div>
                     <div className="flex h-10 shrink-0 items-center">
-                        <SaveStatus status={status} onRetry={retry} />
+                        {(id !== null || status === "error") && (
+                            <SaveStatus status={status} onRetry={retry} />
+                        )}
                     </div>
                 </div>
             </div>
@@ -251,26 +330,31 @@ export function InitiativeForm({
                     ))}
                 </NativeSelect>
             </div>
-            {initiative.completedAt !== null && (
+            {completedAt !== null && (
                 <p className="px-6 pb-4 text-sm text-muted-foreground">
-                    Completed on {completionDate(initiative.completedAt)}
+                    Completed on {completionDate(completedAt)}
                 </p>
             )}
             <MarkdownEditor
-                initialMarkdown={initiative.description}
+                initialMarkdown={initiative?.description ?? ""}
                 onChange={changeDescription}
                 label="Description"
             />
             <div className="flex items-center justify-between border-t px-6 py-4">
-                <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={deleting}
-                    onClick={() => void deleteInitiative()}
-                >
-                    <Trash2Icon />
-                    Delete
-                </Button>
+                {id !== null ? (
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        disabled={deleting}
+                        onClick={() => void deleteInitiative()}
+                    >
+                        <Trash2Icon />
+                        Delete
+                    </Button>
+                ) : (
+                    // Keeps "Save" at the right.
+                    <span />
+                )}
                 <Button size="sm" onClick={onSave}>
                     Save
                 </Button>

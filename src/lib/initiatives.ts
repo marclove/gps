@@ -51,6 +51,17 @@ export type InitiativeChanges = {
     raciRole: RaciRole | null;
 };
 
+/** The first values of a new initiative, which `createInitiative` saves. */
+export type NewInitiative = {
+    name: string;
+    description: string;
+    raciRole: RaciRole | null;
+};
+
+/** The answer of the backend to a create. */
+export type CreateResult =
+    { status: "created"; initiative: Initiative } | { status: "nameTaken" };
+
 /** The answer of the backend to a rename. */
 export type RenameResult =
     { status: "renamed"; initiative: Initiative } | { status: "nameTaken" };
@@ -58,7 +69,7 @@ export type RenameResult =
 /** The answer of the backend to a restore of a deleted initiative. */
 export type RestoreResult = { status: "restored" } | { status: "nameTaken" };
 
-/** The name that the backend gives a new initiative. Also shown for an initiative with an empty name. */
+/** The name that is shown for an initiative with an empty name. */
 export const DEFAULT_INITIATIVE_NAME = "Untitled initiative";
 
 /** The RACI roles with their labels, in the order of the RACI model. */
@@ -146,9 +157,18 @@ export function listInitiatives(options: {
     });
 }
 
-/** Creates an initiative with the default name, an empty description, and no role. */
-export function createInitiative(): Promise<Initiative> {
-    return invoke<Initiative>("create_initiative", {});
+/**
+ * Creates an initiative with the given values at the top of Later. The backend removes the
+ * spaces at the start and end of the name. The result is "nameTaken" if another initiative
+ * that is not deleted has the same name, and then nothing is saved. The backend rejects the
+ * values when the name is empty, the description is empty, and the role is `null`.
+ */
+export function createInitiative(values: NewInitiative): Promise<CreateResult> {
+    return invoke<CreateResult>("create_initiative", {
+        name: values.name,
+        description: values.description,
+        raciRole: values.raciRole,
+    });
 }
 
 /** Returns the initiative with the given identifier, or `null` if it does not exist. */

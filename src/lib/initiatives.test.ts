@@ -28,7 +28,11 @@ beforeEach(() => {
 describe("initiative commands", () => {
     it("calls the backend commands with their arguments", async () => {
         await listInitiatives({ includeArchived: true });
-        await createInitiative();
+        await createInitiative({
+            name: " Launch ",
+            description: "- Ship it",
+            raciRole: "informed",
+        });
         await getInitiative(3);
         await renameInitiative(3, "Launch");
         await updateInitiative(3, {
@@ -42,7 +46,14 @@ describe("initiative commands", () => {
 
         expect(invoke.mock.calls).toEqual([
             ["list_initiatives", { includeArchived: true }],
-            ["create_initiative", {}],
+            [
+                "create_initiative",
+                {
+                    name: " Launch ",
+                    description: "- Ship it",
+                    raciRole: "informed",
+                },
+            ],
             ["get_initiative", { id: 3 }],
             ["rename_initiative", { id: 3, name: "Launch" }],
             [

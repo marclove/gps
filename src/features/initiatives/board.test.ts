@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Column, InitiativeSummary } from "@/lib/initiatives";
 import {
+    addCard,
     buildBoard,
     columnOf,
     moveCard,
@@ -225,6 +226,40 @@ describe("moveCard", () => {
         moveCard(board, 1, "later", 0);
 
         expect(ids(board)).toEqual(before);
+    });
+});
+
+describe("addCard", () => {
+    it("puts the card at the top of Later and keeps the other cards", () => {
+        const withSix = addCard(
+            sampleBoard(),
+            summary(6, { horizon: "later", position: 0 }),
+        );
+        const board = addCard(
+            withSix,
+            summary(7, { horizon: "later", position: 0 }),
+        );
+
+        expect(ids(board)).toEqual({
+            now: [1, 2],
+            next: [3],
+            later: [7, 6],
+            done: [5, 4],
+        });
+    });
+
+    it("returns the same board when a column already holds the card", () => {
+        const board = sampleBoard();
+
+        expect(addCard(board, summary(3, { name: "Launch" }))).toBe(board);
+    });
+
+    it("does not change the board that it gets", () => {
+        const board = sampleBoard();
+
+        addCard(board, summary(6, { horizon: "later" }));
+
+        expect(board.later).toEqual([]);
     });
 });
 
