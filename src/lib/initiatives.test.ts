@@ -3,6 +3,7 @@ import {
     archiveInitiative,
     COLUMNS,
     createInitiative,
+    deletedInitiativeChoices,
     getInitiative,
     initiativeChoiceGroups,
     initiativeDisplayName,
@@ -139,7 +140,7 @@ describe("initiativeChoiceGroups", () => {
         ]);
     });
 
-    it("puts completed and deleted initiatives in their own groups, sorted by name", () => {
+    it("puts completed initiatives in their own group, sorted by name, and leaves out deleted ones", () => {
         const groups = initiativeChoiceGroups([
             summary({ id: 1, name: "zeta", completedAt: COMPLETED }),
             summary({ id: 2, name: "Alpha", completedAt: COMPLETED }),
@@ -161,14 +162,25 @@ describe("initiativeChoiceGroups", () => {
                     { id: 1, label: "zeta" },
                 ],
             },
-            {
-                label: "Deleted",
-                choices: [
-                    { id: 3, label: "beta" },
-                    { id: 4, label: "Gamma" },
-                    { id: 5, label: "Untitled initiative" },
-                ],
-            },
+        ]);
+    });
+
+    it("lists the deleted initiatives, completed or not, with their shown names", () => {
+        const choices = deletedInitiativeChoices([
+            summary({ id: 1, name: "Open" }),
+            summary({ id: 2, name: "Won", completedAt: COMPLETED }),
+            summary({
+                id: 3,
+                name: "beta",
+                completedAt: COMPLETED,
+                archivedAt: DELETED,
+            }),
+            summary({ id: 5, name: "", archivedAt: DELETED }),
+        ]);
+
+        expect(choices).toEqual([
+            { id: 3, label: "beta" },
+            { id: 5, label: "Untitled initiative" },
         ]);
     });
 

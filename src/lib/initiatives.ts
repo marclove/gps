@@ -79,13 +79,16 @@ export function initiativeDisplayName(name: string): string {
     return name.trim() === "" ? DEFAULT_INITIATIVE_NAME : name;
 }
 
+/** An initiative choice in the select box of a meeting: its identifier and its shown name. */
+export type InitiativeChoice = { id: number; label: string };
+
 /** A group of initiative choices in the select box of a meeting. */
 export type ChoiceGroup = {
     label: string;
-    choices: { id: number; label: string }[];
+    choices: InitiativeChoice[];
 };
 
-function choice(initiative: InitiativeSummary): { id: number; label: string } {
+function choice(initiative: InitiativeSummary): InitiativeChoice {
     return {
         id: initiative.id,
         label: initiativeDisplayName(initiative.name),
@@ -99,9 +102,8 @@ function byLabel(a: { label: string }, b: { label: string }): number {
 /**
  * Returns the groups of initiative choices for the select box of a meeting, without the empty
  * choice. The groups are "Now", "Next", and "Later", sorted by position and then by
- * identifier, then "Completed" and "Deleted", sorted by the shown name without regard to case.
- * A deleted initiative goes into "Deleted" also when it is completed. Empty groups are not
- * included.
+ * identifier, then "Completed", sorted by the shown name without regard to case. Deleted
+ * initiatives are not included. Empty groups are not included.
  */
 export function initiativeChoiceGroups(
     all: InitiativeSummary[],
@@ -122,14 +124,17 @@ export function initiativeChoiceGroups(
             .map(choice)
             .sort(byLabel),
     });
-    groups.push({
-        label: "Deleted",
-        choices: all
-            .filter((i) => i.archivedAt !== null)
-            .map(choice)
-            .sort(byLabel),
-    });
     return groups.filter((group) => group.choices.length > 0);
+}
+
+/**
+ * Returns the choices for the deleted initiatives, also the completed ones. The select box of
+ * a meeting shows one of them only while it is the initiative that the meeting is assigned to.
+ */
+export function deletedInitiativeChoices(
+    all: InitiativeSummary[],
+): InitiativeChoice[] {
+    return all.filter((i) => i.archivedAt !== null).map(choice);
 }
 
 /** Returns summaries of initiatives. Deleted initiatives are included only when asked. */

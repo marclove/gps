@@ -47,11 +47,14 @@ const LAUNCH = summary(1, "Launch");
 const PILOT = summary(2, "Pilot");
 
 /** Renders the select inside the providers of the toasts that report its failures. */
-function element() {
+function element(initiativeId: number | null = null) {
     return (
         <Toaster toastManager={toast}>
             <FailureToastProvider>
-                <MeetingInitiativeSelect meetingId={7} initiativeId={null} />
+                <MeetingInitiativeSelect
+                    meetingId={7}
+                    initiativeId={initiativeId}
+                />
             </FailureToastProvider>
         </Toaster>
     );
@@ -83,17 +86,22 @@ describe("MeetingInitiativeSelect", () => {
                   ])
                 : Promise.reject(`unexpected command ${command}`),
         );
-        render(element());
+        render(element(4));
         await waitFor(() => expect(select()).toBeEnabled());
 
         const children = Array.from(select().children);
         expect(children[0]).toBeInstanceOf(HTMLOptionElement);
         expect((children[0] as HTMLOptionElement).value).toBe("");
-        const groups = children.slice(1) as HTMLOptGroupElement[];
+        // The deleted initiative that the meeting is assigned to is the last choice,
+        // outside the groups.
+        const last = children[children.length - 1] as HTMLOptionElement;
+        expect(last).toBeInstanceOf(HTMLOptionElement);
+        expect(last.text).toBe("Old");
+        expect(select()).toHaveValue("4");
+        const groups = children.slice(1, -1) as HTMLOptGroupElement[];
         expect(groups.map((group) => group.label)).toEqual([
             "Now",
             "Completed",
-            "Deleted",
         ]);
         expect(
             groups.map((group) =>
@@ -101,7 +109,7 @@ describe("MeetingInitiativeSelect", () => {
                     (option) => (option as HTMLOptionElement).text,
                 ),
             ),
-        ).toEqual([["Launch", "Pilot"], ["Won"], ["Old"]]);
+        ).toEqual([["Launch", "Pilot"], ["Won"]]);
     });
 
     it("keeps the latest choice without a toast when an earlier save fails after it", async () => {

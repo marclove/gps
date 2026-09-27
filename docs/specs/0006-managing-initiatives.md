@@ -125,10 +125,9 @@ The terms "meeting", "Meetings page", and "editor page" are defined in [Spec 000
 - The meeting details sidebar has a row with the label "Initiative" and a select box named "Meeting initiative", below the "Date" row and above the "Archive" button.
 - The select box has an empty choice first, which means that the meeting is not assigned. Then it has groups of choices, in this order, each with the name of the group as its label:
   1. "Now", "Next", and "Later", with the initiatives in each column in the order of the roadmap,
-  2. "Completed", with the completed initiatives that are not deleted,
-  3. "Deleted", with the deleted initiatives.
+  2. "Completed", with the completed initiatives that are not deleted, in alphabetical order of their names, without regard to uppercase and lowercase letters.
 
-  The initiatives in "Completed" and "Deleted" are in alphabetical order of their names, without regard to uppercase and lowercase letters. A group with no initiatives is left out. Each choice shows the name of the initiative, or "Untitled initiative" when the name is empty.
+  A group with no initiatives is left out. Each choice shows the name of the initiative, or "Untitled initiative" when the name is empty. Deleted initiatives are not choices, with one exception: if the meeting is assigned to a deleted initiative, that initiative is the last choice, outside the groups. It stays a choice until another choice is saved, so the select box can show it again if saving another choice fails.
 - The choice that is selected is the initiative that the meeting is assigned to, or the empty choice if it is not assigned.
 - When the user chooses an initiative, the assignment is saved at once. When the user chooses the empty choice, the assignment is removed. The save status of the editor page does not change.
 - If the assignment cannot be saved, the select box shows the choice that was saved last again, and a failure toast says "Couldn't assign the initiative. Try again." When a later assignment succeeds, the failure toast closes.

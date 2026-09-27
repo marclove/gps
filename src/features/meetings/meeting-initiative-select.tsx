@@ -7,16 +7,18 @@ import {
 } from "@/components/ui/native-select";
 import { useFailureToast } from "@/components/use-failure-toast";
 import {
+    deletedInitiativeChoices,
     initiativeChoiceGroups,
     listInitiatives,
     type ChoiceGroup,
+    type InitiativeChoice,
 } from "@/lib/initiatives";
 import { setMeetingInitiative } from "@/lib/meetings";
 
 type LoadState =
     | { kind: "loading" }
     | { kind: "error" }
-    | { kind: "loaded"; groups: ChoiceGroup[] };
+    | { kind: "loaded"; groups: ChoiceGroup[]; deleted: InitiativeChoice[] };
 
 /** Returns the value of the select box for an initiative identifier. The empty value means no initiative. */
 function toValue(initiativeId: number | null): string {
@@ -25,7 +27,9 @@ function toValue(initiativeId: number | null): string {
 
 /**
  * The "Initiative" row of the meeting details sidebar. It shows a select box with the
- * initiatives in groups, and the initiative that the meeting is assigned to. When the
+ * initiatives that are not deleted, in groups, and the initiative that the meeting is
+ * assigned to. If that initiative is deleted, it is the last choice, outside the groups,
+ * until the user chooses another one. When the
  * user chooses an initiative, the assignment is saved at once. If the initiatives cannot
  * be loaded, the row shows a message and a Retry button.
  *
@@ -61,6 +65,7 @@ export function MeetingInitiativeSelect({
                 setLoad({
                     kind: "loaded",
                     groups: initiativeChoiceGroups(initiatives),
+                    deleted: deletedInitiativeChoices(initiatives),
                 }),
             () => current && setLoad({ kind: "error" }),
         );
@@ -105,6 +110,13 @@ export function MeetingInitiativeSelect({
             failureToast.show("Couldn't assign the initiative. Try again.");
         }
     }
+
+    // A deleted initiative is a choice only while the select box shows it. The select box
+    // shows it again if saving another choice fails.
+    const shownDeleted =
+        load.kind === "loaded"
+            ? load.deleted.find((choice) => String(choice.id) === shown)
+            : undefined;
 
     return (
         <div className="flex items-center justify-between gap-2">
@@ -155,6 +167,11 @@ export function MeetingInitiativeSelect({
                                 ))}
                             </NativeSelectOptGroup>
                         ))}
+                    {shownDeleted && (
+                        <NativeSelectOption value={String(shownDeleted.id)}>
+                            {shownDeleted.label}
+                        </NativeSelectOption>
+                    )}
                 </NativeSelect>
             )}
         </div>

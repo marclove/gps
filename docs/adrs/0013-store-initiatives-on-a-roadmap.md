@@ -117,7 +117,7 @@ There is no unique index on `(horizon, position)`. SQLite checks a unique index 
 | `set_meeting_initiative` | `id` of the meeting, `initiativeId` or `null`             | the meeting                       |
 
 - A summary has the identifier, the name, the role, the horizon, the position, and the times of the creation, the last change, the completion, and the deletion. It has no description, because the board does not show it.
-- The board asks for the initiatives that are not deleted. The select box of the meeting sidebar asks for all of them, so that a meeting assigned to a deleted initiative still shows its choice and can be switched back to it.
+- The board asks for the initiatives that are not deleted. The select box of the meeting sidebar asks for all of them, so that a meeting assigned to a deleted initiative still shows that initiative as its choice. The select box does not offer other deleted initiatives.
 - A name that another initiative already has is an expected result, not an error. `rename_initiative` and `unarchive_initiative` return `nameTaken` and change nothing, so the frontend can tell the user what happened without reading the text of an error. Other failures still reject with a message, as for every command. `rename_initiative` removes spaces at the start and the end of the name before it compares and writes it.
 - The name has its own command so that a name conflict never stops the description and the role from being saved. `update_initiative` changes only the description and the role.
 - `update_initiative` does not change the column, the position, or the timestamps other than `updated_at`. Only `move_initiative` changes the column and the order. This keeps the automatic saving of the text separate from dragging, so a slow save cannot undo a drag.
@@ -128,7 +128,7 @@ There is no unique index on `(horizon, position)`. SQLite checks a unique index 
 
 ## Consequences
 
-- Two initiatives on the roadmap never have the same name, so the select box of a meeting never shows two choices that look the same, except that a deleted initiative can have the name of one that is not deleted. The two are in different groups of the select box.
+- Two initiatives on the roadmap never have the same name, so the select box of a meeting never shows two choices that look the same, except that the deleted initiative that a meeting is assigned to can have the name of one that is not deleted. The deleted one is then the last choice, outside the groups.
 - "Undo" after a delete can fail because of a name. This happens only if the user gives another initiative the same name in the few seconds while the toast is open.
 
 - One command, `move_initiative`, covers every drag on the board: in a column, between columns, to Done, and out of Done. The frontend never computes positions. It sends the column and the index where the card was dropped.

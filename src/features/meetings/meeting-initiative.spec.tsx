@@ -93,7 +93,7 @@ describe("Assigning a meeting to an initiative", () => {
         ).toBeTruthy();
     });
 
-    it("groups the choices by column in roadmap order, then Completed and Deleted alphabetically", async () => {
+    it("groups the choices by column in roadmap order, then Completed alphabetically, and leaves out deleted initiatives", async () => {
         backend.seedInitiative({ name: "zeta pilot", archived: true });
         backend.seedInitiative({ name: "Launch", horizon: "now" });
         backend.seedInitiative({ name: "Checkout", horizon: "later" });
@@ -116,7 +116,6 @@ describe("Assigning a meeting to an initiative", () => {
             ["Now", ["Launch"]],
             ["Later", ["Checkout", "Untitled initiative"]],
             ["Completed", ["Alpha win", "beta win"]],
-            ["Deleted", ["Alpha program", "Old win", "zeta pilot"]],
         ]);
         expect(initiativeSelect()).toHaveValue("");
         expect(invoke).toHaveBeenCalledWith("list_initiatives", {
@@ -124,15 +123,52 @@ describe("Assigning a meeting to an initiative", () => {
         });
     });
 
-    it("selects the initiative the meeting is assigned to, even if it is deleted", async () => {
+    it("shows the meeting's own deleted initiative as the last choice, and no other deleted one", async () => {
         backend.seedInitiative({ name: "Launch", horizon: "now" });
+        backend.seedInitiative({ name: "Gone", archived: true });
         const pilot = backend.seedInitiative({ name: "Pilot", archived: true });
         backend.seedMeeting("Weekly sync", pilot.id);
         const user = renderApp();
 
         await openMeeting(user, /Weekly sync/);
 
+        expect(choices()).toEqual(["", ["Now", ["Launch"]], "Pilot"]);
         expect(initiativeSelect()).toHaveValue(String(pilot.id));
+        expect(selectedText()).toBe("Pilot");
+    });
+
+    it("removes the deleted initiative from the choices once another choice is saved", async () => {
+        const launch = backend.seedInitiative({
+            name: "Launch",
+            horizon: "now",
+        });
+        const pilot = backend.seedInitiative({ name: "Pilot", archived: true });
+        const meeting = backend.seedMeeting("Weekly sync", pilot.id);
+        const user = renderApp();
+        await openMeeting(user, /Weekly sync/);
+
+        await user.selectOptions(initiativeSelect(), String(launch.id));
+
+        await waitFor(() => expect(meeting.initiativeId).toBe(launch.id));
+        expect(choices()).toEqual(["", ["Now", ["Launch"]]]);
+    });
+
+    it("shows the deleted initiative again when the other choice cannot be saved", async () => {
+        const launch = backend.seedInitiative({
+            name: "Launch",
+            horizon: "now",
+        });
+        const pilot = backend.seedInitiative({ name: "Pilot", archived: true });
+        backend.seedMeeting("Weekly sync", pilot.id);
+        backend.failing.add("set_meeting_initiative");
+        const user = renderApp();
+        await openMeeting(user, /Weekly sync/);
+
+        await user.selectOptions(initiativeSelect(), String(launch.id));
+
+        await waitFor(() =>
+            expect(initiativeSelect()).toHaveValue(String(pilot.id)),
+        );
         expect(selectedText()).toBe("Pilot");
     });
 
@@ -167,19 +203,16 @@ describe("Assigning a meeting to an initiative", () => {
         expect(initiativeSelect()).toHaveValue(String(launch.id));
     });
 
-    it("can reassign a meeting to a completed or deleted initiative", async () => {
+    it("can reassign a meeting to a completed initiative", async () => {
         backend.seedInitiative({ name: "Launch", horizon: "now" });
         const won = backend.seedInitiative({ name: "Won", completed: true });
-        const pilot = backend.seedInitiative({ name: "Pilot", archived: true });
-        const meeting = backend.seedMeeting("Weekly sync", pilot.id);
+        const meeting = backend.seedMeeting("Weekly sync");
         const user = renderApp();
         await openMeeting(user, /Weekly sync/);
 
         await user.selectOptions(initiativeSelect(), String(won.id));
-        await waitFor(() => expect(meeting.initiativeId).toBe(won.id));
-        await user.selectOptions(initiativeSelect(), String(pilot.id));
 
-        await waitFor(() => expect(meeting.initiativeId).toBe(pilot.id));
+        await waitFor(() => expect(meeting.initiativeId).toBe(won.id));
     });
 
     it("removes the assignment when the empty choice is selected", async () => {
