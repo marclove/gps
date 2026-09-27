@@ -7,10 +7,26 @@ import {
     raciRoleLabel,
     type Column,
     type InitiativeSummary,
+    type RaciRole,
 } from "@/lib/initiatives";
 
 const cardClassName =
     "flex w-full flex-col items-start gap-1.5 rounded-lg border bg-card px-3 py-2 text-left text-sm shadow-xs";
+
+/**
+ * The colors of the role pill, from the role that needs the most attention to the least:
+ * red for responsible, orange for accountable, yellow for consulted, and green for informed.
+ */
+const roleClassNames: Record<RaciRole, string> = {
+    responsible:
+        "border-red-200 bg-red-50 text-red-800 dark:border-red-900 dark:bg-red-950 dark:text-red-300",
+    accountable:
+        "border-orange-200 bg-orange-50 text-orange-800 dark:border-orange-900 dark:bg-orange-950 dark:text-orange-300",
+    consulted:
+        "border-yellow-200 bg-yellow-50 text-yellow-800 dark:border-yellow-900 dark:bg-yellow-950 dark:text-yellow-300",
+    informed:
+        "border-green-200 bg-green-50 text-green-800 dark:border-green-900 dark:bg-green-950 dark:text-green-300",
+};
 
 /** The text of a card: the check mark in Done, the name, and the role of the user. */
 function CardContent({
@@ -34,7 +50,12 @@ function CardContent({
                 </span>
             </span>
             {initiative.raciRole !== null && (
-                <span className="rounded-full border px-2 py-0.5 text-xs text-muted-foreground">
+                <span
+                    className={cn(
+                        "rounded-full border px-2 py-0.5 text-xs",
+                        roleClassNames[initiative.raciRole],
+                    )}
+                >
                     {raciRoleLabel(initiative.raciRole)}
                 </span>
             )}
