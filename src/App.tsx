@@ -5,7 +5,7 @@ import { Toaster } from "@/components/toaster";
 import { toast } from "@/components/ui/toast";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { ArchiveProvider } from "@/features/meetings/archive-provider";
+import { ArchiveProvider } from "@/components/archive-provider";
 import { MeetingEditorPage } from "@/features/meetings/meeting-editor-page";
 import { MeetingsPage } from "@/features/meetings/meetings-page";
 

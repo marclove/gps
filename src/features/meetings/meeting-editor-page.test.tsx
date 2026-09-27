@@ -11,7 +11,7 @@ import { MemoryRouter, Route, Routes } from "react-router";
 import { FailureToastProvider } from "@/components/failure-toast-provider";
 import { Toaster } from "@/components/toaster";
 import { toast } from "@/components/ui/toast";
-import { ArchiveProvider } from "./archive-provider";
+import { ArchiveProvider } from "@/components/archive-provider";
 import type { Meeting } from "@/lib/meetings";
 import { MeetingEditorPage } from "./meeting-editor-page";
 

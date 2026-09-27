@@ -12,7 +12,7 @@ import {
     listMeetings,
     type MeetingSummary,
 } from "@/lib/meetings";
-import { useArchive, type RestoredMeeting } from "./use-archive";
+import { useArchive, type RestoredItem } from "@/components/use-archive";
 
 type ListState =
     | { kind: "loading" }
@@ -61,7 +61,7 @@ export function MeetingsPage() {
     // The restored meeting this page has already moved focus for, so a restore that
     // happened before this page opened, or one this page already reacted to, does not
     // move focus again.
-    const handledRestored = useRef<RestoredMeeting | null>(restored);
+    const handledRestored = useRef<RestoredItem | null>(restored);
     // The identifiers of meetings with an archive in progress, so a second click on the
     // same row before the first archive finishes has no effect.
     const pendingArchiveIds = useRef(new Set<number>());
@@ -118,7 +118,14 @@ export function MeetingsPage() {
     }, [list]);
 
     useEffect(() => {
-        if (!restored || restored === handledRestored.current) return;
+        // A restored initiative can have the same identifier as a meeting, so this
+        // page reacts only to a restored meeting.
+        if (
+            restored?.kind !== "meeting" ||
+            restored === handledRestored.current
+        ) {
+            return;
+        }
         if (list.kind !== "loaded") return;
         const link = meetingLinkRefs.current.get(restored.id);
         if (link) {
@@ -151,7 +158,11 @@ export function MeetingsPage() {
         if (pendingArchiveIds.current.has(meeting.id)) return;
         pendingArchiveIds.current.add(meeting.id);
         try {
-            await archive({ id: meeting.id, name: meeting.name });
+            await archive({
+                kind: "meeting",
+                id: meeting.id,
+                name: meeting.name,
+            });
             failureToast.clear();
             // Recorded here, from the list this render sees, rather than computing
             // the focus target itself inside the `setList` updater below: React may
