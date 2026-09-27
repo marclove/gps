@@ -87,22 +87,24 @@ const TOOLBAR: ToolbarItem[] = [
 ];
 
 /**
- * A rich text editor for meeting notes. It reads and writes Markdown.
+ * A rich text editor for Markdown text, such as the notes of a meeting.
  *
  * The editor fills the height of its container. The toolbar stays at the top, and the
- * notes scroll below it. Give the editor a container with a fixed height, such as a grid
+ * text scrolls below it. Give the editor a container with a fixed height, such as a grid
  * row of `minmax(0,1fr)`.
  *
- * `initialMarkdown` is read only when the editor is created. To show a different note,
- * give the component a different `key`. `onChange` receives the notes as Markdown after
- * each change.
+ * `initialMarkdown` is read only when the editor is created. To show a different text,
+ * give the component a different `key`. `onChange` receives the text as Markdown after
+ * each change. `label` is the accessible name of the text area, such as "Notes".
  */
-export function NotesEditor({
+export function MarkdownEditor({
     initialMarkdown,
     onChange,
+    label,
 }: {
     initialMarkdown: string;
     onChange: (markdown: string) => void;
+    label: string;
 }) {
     const [linkOpen, setLinkOpen] = useState(false);
     const editor = useEditor({
@@ -124,9 +126,9 @@ export function NotesEditor({
         editorProps: {
             attributes: {
                 role: "textbox",
-                "aria-label": "Notes",
+                "aria-label": label,
                 "aria-multiline": "true",
-                class: "notes-editor prose prose-sm dark:prose-invert max-w-none flex-1 pb-4 focus:outline-none",
+                class: "markdown-editor prose prose-sm dark:prose-invert max-w-none flex-1 pb-4 focus:outline-none",
             },
         },
         onUpdate: ({ editor }) => onChange(editor.getMarkdown()),
@@ -171,9 +173,9 @@ export function NotesEditor({
                     </Fragment>
                 ))}
             </div>
-            {/* The notes area spans the full width, so its scroll bar is at the edge
+            {/* The text area spans the full width, so its scroll bar is at the edge
                 of the window. The editor stretches to fill it, so that a click below
-                short notes puts the text cursor in the notes. Without `min-w-0`, a
+                short text puts the text cursor in the text. Without `min-w-0`, a
                 long word without spaces makes the editor wider than the window. */}
             <div className="flex overflow-y-auto px-6 pt-6">
                 <EditorContent

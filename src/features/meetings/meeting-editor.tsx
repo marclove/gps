@@ -1,11 +1,14 @@
 import { ArchiveIcon } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useNavigate } from "react-router";
+import { MarkdownEditor } from "@/components/markdown-editor/markdown-editor";
 import { PageHeader } from "@/components/page-header";
+import { SaveStatus } from "@/components/save-status";
 import { useFailureToast } from "@/components/use-failure-toast";
 import { PAGE_TITLE_CLASSES } from "@/components/page-title";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { useAutosave } from "@/hooks/use-autosave";
 import { cn } from "@/lib/utils";
 import {
     displayName,
@@ -16,10 +19,7 @@ import {
 import { ActionItemsPanel } from "@/features/tasks/action-items-panel";
 import { MeetingDetailsSidebar } from "./meeting-details-sidebar";
 import type { MeetingsPageState } from "./meetings-page";
-import { NotesEditor } from "./notes-editor";
-import { SaveStatus } from "./save-status";
 import { useArchive } from "./use-archive";
-import { useAutosave } from "./use-autosave";
 
 /** Matches a complete calendar date in the `YYYY-MM-DD` format that the backend accepts. */
 const COMPLETE_DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -112,9 +112,10 @@ export function MeetingEditor({
                         )}
                     />
                 </div>
-                <NotesEditor
+                <MarkdownEditor
                     initialMarkdown={meeting.notes}
                     onChange={changeNotes}
+                    label="Notes"
                 />
             </div>
             <MeetingDetailsSidebar
