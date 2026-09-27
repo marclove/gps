@@ -86,7 +86,6 @@ The terms "meeting", "Meetings page", and "editor page" are defined in [Spec 000
   5. a button named "Delete" at the left, and a primary button named "Save" at the right.
 
   A button named "Close" is at the top right corner of the sheet. It comes last in the order of the keyboard focus, after "Save".
-- The labels "Name" and "Role" start at the same distance from the left edge as the text inside their fields.
 - The "RACI role" select box has these choices, in this order: an empty choice, which means no role, then "Responsible", "Accountable", "Consulted", and "Informed". For an initiative with no role, the empty choice is selected.
 - When the description is taller than the space it has, only the description scrolls. The name, the role, the toolbar, and the "Delete" and "Save" buttons stay in place.
 - The "Save" button, the "Close" button, the Escape key, and a click on the dimmed roadmap close the sheet. "Save" does nothing else: changes are saved automatically, and a change that was not yet saved is saved when the sheet closes. Keyboard focus then goes back to the card of the initiative.

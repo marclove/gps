@@ -12,7 +12,11 @@ import {
     type Initiative,
     type InitiativeSummary,
 } from "@/lib/initiatives";
-import { FIELD_LABEL_CLASSES, InitiativeForm } from "./initiative-form";
+import {
+    FIELD_LABEL_CLASSES,
+    InitiativeForm,
+    NAME_FIELD_CLASSES,
+} from "./initiative-form";
 
 type LoadState =
     | { kind: "loading" }
@@ -167,7 +171,11 @@ function SheetBody({
         <div className="grid justify-items-start gap-4 py-4 pr-14 pl-6">
             <div className="grid gap-1.5 justify-self-stretch">
                 <span className={FIELD_LABEL_CLASSES}>Name</span>
-                <Input aria-label="Initiative name" disabled />
+                <Input
+                    aria-label="Initiative name"
+                    disabled
+                    className={NAME_FIELD_CLASSES}
+                />
             </div>
             <div className="grid gap-1.5">
                 <span className={FIELD_LABEL_CLASSES}>Role</span>
