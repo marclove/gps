@@ -5,6 +5,7 @@ import {
     NativeSelectOptGroup,
     NativeSelectOption,
 } from "@/components/ui/native-select";
+import { useArchive } from "@/components/use-archive";
 import { useFailureToast } from "@/components/use-failure-toast";
 import {
     deletedInitiativeChoices,
@@ -33,6 +34,9 @@ function toValue(initiativeId: number | null): string {
  * user chooses an initiative, the assignment is saved at once. If the initiatives cannot
  * be loaded, the row shows a message and a Retry button.
  *
+ * The choices load again after an initiative is deleted or restored. The row must be in an
+ * `ArchiveProvider`.
+ *
  * `initiativeId` is the initiative that the meeting is assigned to when the row opens.
  * After that, the row keeps the choice of the user.
  */
@@ -56,6 +60,9 @@ export function MeetingInitiativeSelect({
     // The numbers of the requests that have not ended.
     const pendingRequests = useRef(new Set<number>());
     const failureToast = useFailureToast();
+    // Counts deletes and restores, so the choices load again when an initiative is deleted
+    // or restored, for example with Undo while this row is open.
+    const { version: archiveVersion } = useArchive();
 
     useEffect(() => {
         let current = true;
@@ -72,7 +79,7 @@ export function MeetingInitiativeSelect({
         return () => {
             current = false;
         };
-    }, [attempt]);
+    }, [attempt, archiveVersion]);
 
     async function assign(value: string) {
         const request = ++latestRequest.current;
@@ -121,9 +128,12 @@ export function MeetingInitiativeSelect({
     return (
         <div className="flex items-center justify-between gap-2">
             {load.kind === "error" ? (
-                <span className="text-sm font-medium">Initiative</span>
+                <span className="shrink-0 text-sm font-medium">Initiative</span>
             ) : (
-                <label htmlFor={selectId} className="text-sm font-medium">
+                <label
+                    htmlFor={selectId}
+                    className="shrink-0 text-sm font-medium"
+                >
                     Initiative
                 </label>
             )}
@@ -143,6 +153,8 @@ export function MeetingInitiativeSelect({
                 </div>
             ) : (
                 <NativeSelect
+                    // A long name must not make the select wider than the sidebar.
+                    className="min-w-0"
                     id={selectId}
                     aria-label="Meeting initiative"
                     value={shown}

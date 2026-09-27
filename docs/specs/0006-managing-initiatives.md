@@ -129,6 +129,7 @@ The terms "meeting", "Meetings page", and "editor page" are defined in [Spec 000
 
   A group with no initiatives is left out. Each choice shows the name of the initiative, or "Untitled initiative" when the name is empty. Deleted initiatives are not choices, with one exception: if the meeting is assigned to a deleted initiative, that initiative is the last choice, outside the groups. It stays a choice until another choice is saved, so the select box can show it again if saving another choice fails.
 - The choice that is selected is the initiative that the meeting is assigned to, or the empty choice if it is not assigned.
+- When an initiative is deleted or restored while the editor page is open, for example with "Undo" in the delete toast, the choices change to match. The selected choice does not change.
 - When the user chooses an initiative, the assignment is saved at once. When the user chooses the empty choice, the assignment is removed. The save status of the editor page does not change.
 - If the assignment cannot be saved, the select box shows the choice that was saved last again, and a failure toast says "Couldn't assign the initiative. Try again." When a later assignment succeeds, the failure toast closes.
 - While the initiatives load, the select box is disabled. If they cannot be loaded, the row says "Couldn't load initiatives" and shows a "Retry" button that loads them again. The rest of the editor page works as usual.

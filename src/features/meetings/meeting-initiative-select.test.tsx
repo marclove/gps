@@ -1,6 +1,7 @@
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { ArchiveProvider } from "@/components/archive-provider";
 import { FailureToastProvider } from "@/components/failure-toast-provider";
 import { Toaster } from "@/components/toaster";
 import { toast } from "@/components/ui/toast";
@@ -51,10 +52,12 @@ function element(initiativeId: number | null = null) {
     return (
         <Toaster toastManager={toast}>
             <FailureToastProvider>
-                <MeetingInitiativeSelect
-                    meetingId={7}
-                    initiativeId={initiativeId}
-                />
+                <ArchiveProvider>
+                    <MeetingInitiativeSelect
+                        meetingId={7}
+                        initiativeId={initiativeId}
+                    />
+                </ArchiveProvider>
             </FailureToastProvider>
         </Toaster>
     );

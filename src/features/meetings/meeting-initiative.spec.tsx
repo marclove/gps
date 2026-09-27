@@ -289,4 +289,42 @@ describe("Assigning a meeting to an initiative", () => {
         await waitFor(() => expect(initiativeSelect()).toBeEnabled());
         expect(choices()).toEqual(["", ["Now", ["Launch"]]]);
     });
+
+    it("offers an initiative again when its delete is undone while a meeting is open", async () => {
+        backend.seedInitiative({ name: "Launch", horizon: "now" });
+        backend.seedInitiative({ name: "Pilot", horizon: "next" });
+        backend.seedMeeting("Weekly sync");
+        const user = renderApp();
+        const mainNavigation = () =>
+            screen.getByRole("navigation", { name: "Main" });
+
+        await user.click(
+            within(mainNavigation()).getByRole("link", { name: "Initiatives" }),
+        );
+        await user.click(
+            await screen.findByRole("button", { name: /^Launch/ }),
+        );
+        const sheet = await screen.findByRole("dialog", { name: "Launch" });
+        await user.click(within(sheet).getByRole("button", { name: "Delete" }));
+        await within(notifications()).findByText('Deleted "Launch".');
+
+        await user.click(
+            within(mainNavigation()).getByRole("link", { name: "Meetings" }),
+        );
+        await openMeeting(user, /Weekly sync/);
+        expect(choices()).toEqual(["", ["Next", ["Pilot"]]]);
+
+        await user.click(
+            within(notifications()).getByRole("button", { name: "Undo" }),
+        );
+
+        await waitFor(() =>
+            expect(choices()).toEqual([
+                "",
+                ["Now", ["Launch"]],
+                ["Next", ["Pilot"]],
+            ]),
+        );
+        expect(initiativeSelect()).toHaveValue("");
+    });
 });
