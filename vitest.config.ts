@@ -31,6 +31,11 @@ export default mergeConfig(
                         name: "browser",
                         setupFiles: ["./src/test/browser-setup.ts"],
                         include: ["src/**/*.browser.{test,spec}.tsx"],
+                        // Run one file at a time. When several files run at once, WebKit on
+                        // Linux renders very few animation frames, so CSS transitions and
+                        // the drag and drop code, which work in frames, do not advance in
+                        // time for the tests.
+                        fileParallelism: false,
                         browser: {
                             enabled: true,
                             provider: playwright(),
