@@ -68,7 +68,9 @@ export function InitiativeSheet({
         setShown({ id, name });
     }
     // Each draft gets a new form. The initiative that a draft created stays in the form of
-    // the draft, so that the form is not loaded again.
+    // the draft, so that the form is not loaded again. `id` changes from "new" directly to a
+    // number only when the draft was created: to open another initiative, the sheet must
+    // close first, and then `id` is `null` in between.
     const [draft, setDraft] = useState<{
         count: number;
         createdId: number | null;
@@ -80,6 +82,11 @@ export function InitiativeSheet({
             setDraft((current) => ({
                 count: current.count + 1,
                 createdId: null,
+            }));
+        } else if (id !== null) {
+            setDraft((current) => ({
+                ...current,
+                createdId: previousId === "new" ? id : null,
             }));
         }
     }
@@ -111,10 +118,7 @@ export function InitiativeSheet({
                         id={shown.id}
                         nameRef={nameInput}
                         onSaved={onSaved}
-                        onCreated={(createdId) => {
-                            setDraft((current) => ({ ...current, createdId }));
-                            onCreated(createdId);
-                        }}
+                        onCreated={onCreated}
                         onDelete={onDelete}
                         onClose={onClose}
                     />
@@ -144,17 +148,20 @@ function SheetBody({
     onDelete: (id: number, savedName: string) => Promise<void>;
     onClose: () => void;
 }) {
-    // A body that starts as a draft never loads, because its form has the saved values.
-    const [isDraft] = useState(id === "new");
+    // The initiative that the body loads, or `null` for a body that starts as a draft. Such a
+    // body never loads, because its form has the saved values.
+    const [loadId] = useState(id === "new" ? null : id);
     const [state, setState] = useState<LoadState>(
-        isDraft ? { kind: "loaded", initiative: null } : { kind: "loading" },
+        loadId === null
+            ? { kind: "loaded", initiative: null }
+            : { kind: "loading" },
     );
     const [attempt, setAttempt] = useState(0);
 
     useEffect(() => {
-        if (isDraft || id === "new") return;
+        if (loadId === null) return;
         let current = true;
-        getInitiative(id).then(
+        getInitiative(loadId).then(
             (initiative) =>
                 current &&
                 setState(
@@ -167,7 +174,7 @@ function SheetBody({
         return () => {
             current = false;
         };
-    }, [id, isDraft, attempt]);
+    }, [loadId, attempt]);
 
     if (state.kind === "loaded") {
         return (
@@ -175,11 +182,14 @@ function SheetBody({
                 initiative={state.initiative}
                 onSaved={onSaved}
                 onCreated={onCreated}
-                // The form shows "Delete" only after the draft is created, and then `id` is
-                // the identifier of the initiative.
-                onDelete={(savedName) =>
-                    id === "new" ? Promise.resolve() : onDelete(id, savedName)
-                }
+                onDelete={(savedName) => {
+                    // The form shows "Delete" only after the draft is created, and then `id`
+                    // is the identifier of the initiative.
+                    if (id === "new") {
+                        throw new Error("A draft has no initiative to delete");
+                    }
+                    return onDelete(id, savedName);
+                }}
                 onSave={onClose}
                 nameRef={nameRef}
             />
