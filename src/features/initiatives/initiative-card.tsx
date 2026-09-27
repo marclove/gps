@@ -15,7 +15,8 @@ const cardClassName =
 
 /**
  * The colors of the role pill, from the role that needs the most attention to the least:
- * red for responsible, orange for accountable, yellow for consulted, and green for informed.
+ * red for responsible, orange for accountable, and yellow for consulted. Informed needs
+ * the least attention, so its pill is gray.
  */
 const roleClassNames: Record<RaciRole, string> = {
     responsible:
@@ -24,8 +25,7 @@ const roleClassNames: Record<RaciRole, string> = {
         "border-orange-200 bg-orange-50 text-orange-800 dark:border-orange-900 dark:bg-orange-950 dark:text-orange-300",
     consulted:
         "border-yellow-200 bg-yellow-50 text-yellow-800 dark:border-yellow-900 dark:bg-yellow-950 dark:text-yellow-300",
-    informed:
-        "border-green-200 bg-green-50 text-green-800 dark:border-green-900 dark:bg-green-950 dark:text-green-300",
+    informed: "text-muted-foreground",
 };
 
 /** The text of a card: the check mark in Done, the name, and the role of the user. */
