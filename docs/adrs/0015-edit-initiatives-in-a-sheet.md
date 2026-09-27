@@ -25,7 +25,17 @@ We had to decide:
 
 The Initiatives page keeps the identifier of the open initiative in its own state. Opening a sheet does not change the route, which stays `/initiatives`, and the breadcrumb trail stays "Initiatives". The application uses a `MemoryRouter` with no address bar (ADR 0002), so a route would give no link to share or bookmark. It would only make the sheet close and open again when the user goes back.
 
-When the sheet closes, keyboard focus goes back to the card that opened it, as Base UI does for any dialog. After a delete, the card is gone, so focus goes to the "New initiative" button instead.
+When the sheet closes, keyboard focus goes back to the element that opened it, as Base UI does for any dialog: the card, or the "New initiative" button. After a delete, the card is gone, so focus goes to the "New initiative" button instead.
+
+### Drafts
+
+"New initiative" does not save anything. It opens the sheet for a draft: a new initiative with an empty name, an empty description, and no role, which exists only in the sheet. The draft is saved as an initiative only after the user changes it: a name that is not empty after removing the spaces at its start and end, a role, or any text in the description. The user asked for this so that clicking "New initiative" and closing the sheet leaves nothing behind.
+
+- The first save of a draft calls `create_initiative` with the values of the draft (ADR 0013). The page adds the card at the top of Later without loading the whole list again, and the sheet goes on to edit the saved initiative. From then on, changes are saved as for any other initiative.
+- Autosave and the save on close work in the same way for a draft. A change that is still waiting when the sheet closes is saved, and its card appears.
+- If the name of the draft is taken, the draft is saved with an empty name when it has a role or a description, so that a name conflict never stops the other fields from being saved. The name field shows the message about the name.
+- The draft sheet has no "Delete" button and no save status, because there is nothing saved to delete or report on. A failed first save shows "Couldn't save" with "Retry", as for any other save.
+- The page keeps the open sheet in its state as the identifier of an initiative, as "new" for a draft, or as nothing.
 
 ### Contents
 

@@ -75,7 +75,7 @@ CREATE UNIQUE INDEX initiatives_name ON initiatives(name COLLATE NOCASE)
 - **Only initiatives that are not deleted count.** A deleted initiative gives its name free, so the user can use the name again. The application has no view of deleted initiatives, so a name that a hidden initiative keeps would be an error that the user cannot understand or fix. Completed initiatives count, because they are visible in Done.
 - **Uppercase and lowercase letters do not count.** "Launch" and "launch" are the same name. `COLLATE NOCASE` in SQLite folds only the letters A to Z, so "É" and "é" are different names. This is enough for the names that the user types, and it needs no extension of SQLite.
 - **Spaces at the start and the end do not count.** The backend removes them before it writes a name, so " Launch " is stored as "Launch".
-- **Empty names do not count.** Any number of initiatives can have an empty name. A new initiative starts with an empty name, and the user names it in the sheet.
+- **Empty names do not count.** Any number of initiatives can have an empty name. An initiative can be saved without a name if it has a role or a description.
 - The backend checks for a conflict before it writes, so that it can report the conflict as a result and not as an error. The index is the guard for every other path, such as a restore or a later feature that writes names.
 
 The same migration adds a column to `meetings`:
@@ -107,7 +107,7 @@ There is no unique index on `(horizon, position)`. SQLite checks a unique index 
 | Command                  | Arguments                                                 | Result                            |
 | ------------------------ | --------------------------------------------------------- | --------------------------------- |
 | `list_initiatives`       | `includeArchived`                                         | summaries of the initiatives      |
-| `create_initiative`      | none                                                      | the new initiative                |
+| `create_initiative`      | `name`, `description`, `raciRole`                         | `{ status: "created", initiative }` or `{ status: "nameTaken" }` |
 | `get_initiative`         | `id`                                                      | the initiative, or nothing        |
 | `rename_initiative`      | `id`, `name`                                              | `{ status: "renamed", initiative }` or `{ status: "nameTaken" }` |
 | `update_initiative`      | `id`, `description`, `raciRole`                           | the initiative                    |
@@ -118,7 +118,8 @@ There is no unique index on `(horizon, position)`. SQLite checks a unique index 
 
 - A summary has the identifier, the name, the role, the horizon, the position, and the times of the creation, the last change, the completion, and the deletion. It has no description, because the board does not show it.
 - The board asks for the initiatives that are not deleted. The select box of the meeting sidebar asks for all of them, so that a meeting assigned to a deleted initiative still shows that initiative as its choice. The select box does not offer other deleted initiatives.
-- A name that another initiative already has is an expected result, not an error. `rename_initiative` and `unarchive_initiative` return `nameTaken` and change nothing, so the frontend can tell the user what happened without reading the text of an error. Other failures still reject with a message, as for every command. `rename_initiative` removes spaces at the start and the end of the name before it compares and writes it.
+- An initiative is saved only after the user has changed it (ADR 0015). `create_initiative` receives the first values of the name, the description, and the role. It rejects with a message when the name is empty after removing the spaces at its start and end, the description is empty, and the role is `null`. The frontend never sends such a request, and this check makes sure that no other path saves an initiative that the user did not change.
+- A name that another initiative already has is an expected result, not an error. `create_initiative`, `rename_initiative`, and `unarchive_initiative` return `nameTaken` and change nothing, so the frontend can tell the user what happened without reading the text of an error. Other failures still reject with a message, as for every command. `rename_initiative` removes spaces at the start and the end of the name before it compares and writes it.
 - The name has its own command so that a name conflict never stops the description and the role from being saved. `update_initiative` changes only the description and the role.
 - `update_initiative` does not change the column, the position, or the timestamps other than `updated_at`. Only `move_initiative` changes the column and the order. This keeps the automatic saving of the text separate from dragging, so a slow save cannot undo a drag.
 - `move_initiative` rejects a deleted initiative. All commands reject an unknown identifier and a value outside the allowed values.

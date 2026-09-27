@@ -195,7 +195,7 @@ export class FakeRoadmapBackend {
      * Tells if an initiative that is not deleted, other than `except`, has the same
      * name, without regard to case and to spaces at the start and end.
      */
-    private nameTaken(name: string, except: StoredInitiative): boolean {
+    private nameTaken(name: string, except: StoredInitiative | null): boolean {
         const key = name.trim().toLowerCase();
         return (
             key !== "" &&
@@ -278,12 +278,19 @@ export class FakeRoadmapBackend {
                     )
                     .map((initiative) => summary(initiative));
             case "create_initiative": {
+                const name = (args.name as string).trim();
+                const description = args.description as string;
+                const raciRole = args.raciRole as RaciRole | null;
+                if (name === "" && description === "" && raciRole === null) {
+                    throw "an initiative needs a name, a description, or a role";
+                }
+                if (this.nameTaken(name, null)) return { status: "nameTaken" };
                 const now = this.now();
                 const initiative: StoredInitiative = {
                     id: this.nextId++,
-                    name: "",
-                    description: "",
-                    raciRole: null,
+                    name,
+                    description,
+                    raciRole,
                     horizon: "later",
                     position: 0,
                     createdAt: now,
@@ -293,7 +300,7 @@ export class FakeRoadmapBackend {
                 };
                 this.initiatives.push(initiative);
                 this.insert(initiative, "later", 0);
-                return { ...initiative };
+                return { status: "created", initiative: { ...initiative } };
             }
             case "get_initiative": {
                 const initiative = this.initiatives.find(

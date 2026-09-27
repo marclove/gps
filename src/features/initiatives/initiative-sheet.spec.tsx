@@ -425,21 +425,25 @@ describe("Unique names", () => {
     it("allows more than one initiative with an empty name", async () => {
         const user = await openInitiativesPage();
 
-        await user.click(
-            screen.getByRole("button", { name: "New initiative" }),
-        );
-        await screen.findByRole("dialog", { name: "Untitled initiative" });
-        await user.keyboard("{Escape}");
-        await waitForSheetToClose();
-        await user.click(
-            screen.getByRole("button", { name: "New initiative" }),
-        );
-        await screen.findByRole("dialog", { name: "Untitled initiative" });
+        for (let i = 0; i < 2; i++) {
+            await user.click(
+                screen.getByRole("button", { name: "New initiative" }),
+            );
+            const sheet = await screen.findByRole("dialog", {
+                name: "Untitled initiative",
+            });
+            await user.selectOptions(roleSelect(sheet), "Informed");
+            await user.keyboard("{Escape}");
+            await waitForSheetToClose();
+        }
 
-        expect(cardTexts("Later", { hidden: true })).toEqual([
-            "Untitled initiative",
-            "Untitled initiative",
-        ]);
+        await waitFor(() =>
+            expect(cardTexts("Later")).toEqual([
+                "Untitled initiativeInformed",
+                "Untitled initiativeInformed",
+            ]),
+        );
+        expect(backend.column("later")).toEqual(["", ""]);
     });
 });
 

@@ -70,10 +70,14 @@ The terms "meeting", "Meetings page", and "editor page" are defined in [Spec 000
 
 ### Creating an initiative
 
-- When the user clicks "New initiative", a new initiative is created at the top of Later, and its sheet opens. The new initiative has an empty name, an empty description, and no role.
+- When the user clicks "New initiative", the sheet opens for a new initiative that is not saved yet, called a **draft**. The draft has an empty name, an empty description, and no role. No initiative is saved, and no card is added to the roadmap.
 - The "Initiative name" field has keyboard focus.
-- While the initiative is being created, the "New initiative" button is disabled.
-- If the initiative cannot be created, no sheet opens, the button is enabled again, and a failure toast says "Couldn't create the initiative. Try again."
+- The draft sheet has no "Delete" button and no save status. "Save", "Close", Escape, and a click on the dimmed roadmap close it.
+- The draft is saved as an initiative only after the user changes it: a name that is not empty after removing the spaces at its start and end, a role, or any text in the description. The change is saved after the user pauses, as for any other change, or at once when the sheet closes.
+- When the draft is saved, its card appears at the top of Later, and the sheet shows the save status and the "Delete" button. Later changes are saved as for any other initiative.
+- If the user closes the draft without such a change, nothing is saved, no card is added, and keyboard focus goes back to the "New initiative" button.
+- If the name of the draft is taken, the name field shows the message about the name, as described under "Unique names". If the draft has a role or a description, it is saved with an empty name.
+- If the draft cannot be saved, the save status says "Couldn't save" with a "Retry" button.
 
 ### The sheet
 
@@ -157,7 +161,7 @@ The executable specs replace the Tauri backend with an in-memory fake. They rely
 | Command                  | Arguments                                   | Result                                      |
 | ------------------------ | ------------------------------------------- | ------------------------------------------- |
 | `list_initiatives`       | `includeArchived`                           | list of initiative summaries                |
-| `create_initiative`      | none                                        | the new initiative                          |
+| `create_initiative`      | `name`, `description`, `raciRole`           | `{ status: "created", initiative }` or `{ status: "nameTaken" }` |
 | `get_initiative`         | `id`                                        | the initiative, or `null` if none has the id |
 | `rename_initiative`      | `id`, `name`                                | `{ status: "renamed", initiative }` or `{ status: "nameTaken" }` |
 | `update_initiative`      | `id`, `description`, `raciRole`             | the initiative                              |
@@ -169,7 +173,7 @@ The executable specs replace the Tauri backend with an in-memory fake. They rely
 - An initiative has `id`, `name`, `description`, `raciRole`, `horizon`, `position`, `createdAt`, `updatedAt`, `completedAt`, and `archivedAt`. A summary has the same fields without `description`.
 - `raciRole` is `"responsible"`, `"accountable"`, `"consulted"`, `"informed"`, or `null`. `horizon` is `"now"`, `"next"`, or `"later"`. `completedAt` and `archivedAt` are RFC 3339 timestamps or `null`.
 - `list_initiatives` returns the initiatives that are not deleted, or all of them when `includeArchived` is `true`, in any order. The frontend sorts them.
-- `create_initiative` puts the new initiative at position 0 of Later, and moves the other initiatives in Later down by one.
+- `create_initiative` removes the spaces at the start and the end of the name, and rejects with a message when the name is empty, the description is empty, and the role is `null`, because an initiative that the user did not change is never saved. If another initiative that is not deleted has the same name, and the name is not empty, it returns `nameTaken` and saves nothing. Otherwise it puts the new initiative at position 0 of Later, moves the other initiatives in Later down by one, and returns it.
 - `rename_initiative` removes the spaces at the start and the end of the name. If another initiative that is not deleted has the same name, and the name is not empty, it returns `nameTaken` and changes nothing. Otherwise, it saves the name, changes `updatedAt`, and returns the initiative.
 - `update_initiative` changes only the description, the role, and `updatedAt`.
 - `move_initiative` takes `destination` `"now"`, `"next"`, `"later"`, or `"done"`, and `index`, the place from 0 at which the card was dropped. It keeps the positions of each column as 0, 1, 2, and so on, as [ADR 0013](../adrs/0013-store-initiatives-on-a-roadmap.md) describes. For `"done"`, it sets `completedAt` and ignores `index`. From Done to another column, it clears `completedAt`.

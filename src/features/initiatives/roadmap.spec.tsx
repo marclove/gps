@@ -59,10 +59,6 @@ function cardTexts(
         .map((card) => card.textContent ?? "");
 }
 
-function notifications() {
-    return screen.getByRole("region", { name: "Notifications" });
-}
-
 describe("Initiatives section", () => {
     it("has a link below Meetings that opens the Initiatives page and is marked as current", async () => {
         const user = userEvent.setup();
@@ -235,15 +231,16 @@ describe("Roadmap", () => {
 });
 
 describe("Creating an initiative", () => {
-    it("creates it at the top of Later and opens its sheet with the name field focused", async () => {
-        backend.seedInitiative({ name: "Pilot", horizon: "later" });
-        const user = await openInitiativesPage();
-        await waitFor(() => expect(cardTexts("Later")).toEqual(["Pilot"]));
+    function createCalls() {
+        return invoke.mock.calls.filter(
+            ([command]) => command === "create_initiative",
+        );
+    }
 
+    async function openDraft(user: User) {
         await user.click(
             screen.getByRole("button", { name: "New initiative" }),
         );
-
         const sheet = await screen.findByRole("dialog", {
             name: "Untitled initiative",
         });
@@ -251,58 +248,161 @@ describe("Creating an initiative", () => {
             name: "Initiative name",
         });
         await waitFor(() => expect(name).toHaveFocus());
+        return { sheet, name };
+    }
+
+    it("opens a draft with the name field focused, and saves nothing", async () => {
+        backend.seedInitiative({ name: "Pilot", horizon: "later" });
+        const user = await openInitiativesPage();
+        await waitFor(() => expect(cardTexts("Later")).toEqual(["Pilot"]));
+
+        const { sheet, name } = await openDraft(user);
+
         expect(name).toHaveValue("");
         expect(name).toHaveAttribute("placeholder", "Untitled initiative");
         expect(
             within(sheet).getByRole("combobox", { name: "RACI role" }),
         ).toHaveValue("");
+        expect(
+            within(sheet).queryByRole("button", { name: "Delete" }),
+        ).not.toBeInTheDocument();
+        expect(
+            within(sheet).getByRole("button", { name: "Save" }),
+        ).toBeEnabled();
+        expect(cardTexts("Later", { hidden: true })).toEqual(["Pilot"]);
+        expect(createCalls()).toHaveLength(0);
+    });
+
+    it("saves nothing when the draft closes without a real change, and gives focus back to New initiative", async () => {
+        backend.seedInitiative({ name: "Pilot", horizon: "later" });
+        const user = await openInitiativesPage();
+        await waitFor(() => expect(cardTexts("Later")).toEqual(["Pilot"]));
+        const { name } = await openDraft(user);
+
+        // Spaces alone are not a name.
+        await user.type(name, "   ");
+        await user.keyboard("{Escape}");
+
+        await waitFor(() =>
+            expect(
+                screen.getByRole("button", { name: "New initiative" }),
+            ).toHaveFocus(),
+        );
+        expect(cardTexts("Later")).toEqual(["Pilot"]);
+        expect(createCalls()).toHaveLength(0);
+        expect(backend.initiatives).toHaveLength(1);
+    });
+
+    it("creates the initiative at the top of Later after the first change, and then edits it", async () => {
+        backend.seedInitiative({ name: "Pilot", horizon: "later" });
+        const user = await openInitiativesPage();
+        await waitFor(() => expect(cardTexts("Later")).toEqual(["Pilot"]));
+        const { sheet, name } = await openDraft(user);
+
+        await user.type(name, "Launch");
+
+        expect(await within(sheet).findByText("Saved")).toBeInTheDocument();
+        expect(backend.column("later")).toEqual(["Launch", "Pilot"]);
         expect(cardTexts("Later", { hidden: true })).toEqual([
-            "Untitled initiative",
+            "Launch",
             "Pilot",
         ]);
-        expect(backend.column("later")).toEqual(["", "Pilot"]);
-    });
-
-    it("disables the button while the initiative is being created", async () => {
-        const user = await openInitiativesPage();
-        let finish: () => void = () => {};
-        invoke.mockImplementation((command: string, args) =>
-            command === "create_initiative"
-                ? new Promise((resolve) => {
-                      finish = () => resolve(backend.handle(command, args));
-                  })
-                : backend.handle(command, args),
-        );
-        const button = screen.getByRole("button", { name: "New initiative" });
-
-        await user.click(button);
-
-        expect(button).toBeDisabled();
-        finish();
         expect(
-            await screen.findByRole("dialog", { name: "Untitled initiative" }),
+            screen.getByRole("dialog", { name: "Launch" }),
         ).toBeInTheDocument();
+        expect(
+            within(sheet).getByRole("button", { name: "Delete" }),
+        ).toBeInTheDocument();
+
+        await user.type(name, " v2");
+
+        await waitFor(() =>
+            expect(backend.column("later")).toEqual(["Launch v2", "Pilot"]),
+        );
+        expect(createCalls()).toHaveLength(1);
     });
 
-    it("shows a failure toast and opens no sheet when the initiative cannot be created", async () => {
-        backend.failing.add("create_initiative");
+    it("saves a change that is still waiting when the draft closes", async () => {
         const user = await openInitiativesPage();
-        const button = screen.getByRole("button", { name: "New initiative" });
+        const { name } = await openDraft(user);
 
-        await user.click(button);
+        await user.type(name, "Launch");
+        await user.keyboard("{Escape}");
+
+        await waitFor(() => expect(cardTexts("Later")).toEqual(["Launch"]));
+        expect(backend.column("later")).toEqual(["Launch"]);
+    });
+
+    it("creates a draft that has only a role, with an empty name", async () => {
+        const user = await openInitiativesPage();
+        const { sheet } = await openDraft(user);
+
+        await user.selectOptions(
+            within(sheet).getByRole("combobox", { name: "RACI role" }),
+            "Informed",
+        );
+
+        await waitFor(() =>
+            expect(cardTexts("Later", { hidden: true })).toEqual([
+                "Untitled initiativeInformed",
+            ]),
+        );
+        expect(backend.initiatives[0]).toMatchObject({
+            name: "",
+            raciRole: "informed",
+        });
+    });
+
+    it("does not save a draft whose only change is a name that is taken", async () => {
+        backend.seedInitiative({ name: "Launch", horizon: "now" });
+        const user = await openInitiativesPage();
+        const { sheet, name } = await openDraft(user);
+
+        await user.type(name, "launch");
 
         expect(
-            await within(notifications()).findByText(
-                "Couldn't create the initiative. Try again.",
+            await within(sheet).findByText(
+                'Another initiative is named "launch".',
             ),
         ).toBeInTheDocument();
-        expect(button).toBeEnabled();
-        // A toast also has the role "dialog", so the sheet is identified by its name field.
+        expect(backend.initiatives).toHaveLength(1);
+        expect(cardTexts("Later", { hidden: true })).toEqual([]);
+    });
+
+    it("saves a draft with a taken name and a role, without the name", async () => {
+        backend.seedInitiative({ name: "Launch", horizon: "now" });
+        const user = await openInitiativesPage();
+        const { sheet, name } = await openDraft(user);
+
+        await user.type(name, "launch");
+        await user.selectOptions(
+            within(sheet).getByRole("combobox", { name: "RACI role" }),
+            "Consulted",
+        );
+
+        await waitFor(() => expect(backend.initiatives).toHaveLength(2));
+        expect(backend.initiatives[1]).toMatchObject({
+            name: "",
+            raciRole: "consulted",
+        });
         expect(
-            screen.queryByRole("textbox", {
-                name: "Initiative name",
-                hidden: true,
-            }),
-        ).not.toBeInTheDocument();
+            within(sheet).getByText('Another initiative is named "launch".'),
+        ).toBeInTheDocument();
+    });
+
+    it("shows Couldn't save when the draft cannot be saved, and saves it on Retry", async () => {
+        backend.failingOnce.add("create_initiative");
+        const user = await openInitiativesPage();
+        const { sheet, name } = await openDraft(user);
+
+        await user.type(name, "Launch");
+
+        expect(
+            await within(sheet).findByText("Couldn't save"),
+        ).toBeInTheDocument();
+        await user.click(within(sheet).getByRole("button", { name: "Retry" }));
+
+        expect(await within(sheet).findByText("Saved")).toBeInTheDocument();
+        expect(backend.column("later")).toEqual(["Launch"]);
     });
 });
