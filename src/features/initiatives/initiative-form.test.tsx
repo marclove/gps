@@ -51,6 +51,7 @@ function renderForm() {
         void savedName;
         return Promise.resolve();
     });
+    const onSave = vi.fn();
     const view = render(
         <Toaster toastManager={toast}>
             <FailureToastProvider>
@@ -58,12 +59,13 @@ function renderForm() {
                     initiative={PILOT}
                     onSaved={onSaved}
                     onDelete={onDelete}
+                    onSave={onSave}
                 />
             </FailureToastProvider>
         </Toaster>,
     );
     const name = screen.getByRole("textbox", { name: "Initiative name" });
-    return { ...view, onSaved, onDelete, name };
+    return { ...view, onSaved, onDelete, onSave, name };
 }
 
 describe("InitiativeForm", () => {
@@ -185,6 +187,16 @@ describe("InitiativeForm", () => {
                 name: "Launch",
             });
         });
+    });
+
+    it("calls onSave when Save is clicked, and saves nothing itself", async () => {
+        const user = userEvent.setup();
+        const { onSave } = renderForm();
+
+        await user.click(screen.getByRole("button", { name: "Save" }));
+
+        expect(onSave).toHaveBeenCalledTimes(1);
+        expect(invoke).not.toHaveBeenCalled();
     });
 
     describe("Delete", () => {

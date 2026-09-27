@@ -26,7 +26,7 @@ type LoadState =
  * - `name` is the saved name of the initiative. The sheet uses it as its title.
  * - `newInitiative` is an initiative that was just created. If its identifier is `id`, the
  *   sheet shows it without loading it, and the name field gets the focus.
- * - `onClose` is called when the user closes the sheet.
+ * - `onClose` is called when the user closes the sheet, also with the "Save" button.
  * - `onSaved` receives the summary of the initiative after each save that succeeds.
  * - `onDelete` is called when the user clicks "Delete", after the changes that were waiting
  *   are saved. It receives the identifier and the saved name of the initiative.
@@ -86,6 +86,7 @@ export function InitiativeSheet({
                         nameRef={nameInput}
                         onSaved={onSaved}
                         onDelete={onDelete}
+                        onClose={onClose}
                     />
                 )}
             </SheetContent>
@@ -100,12 +101,14 @@ function SheetBody({
     nameRef,
     onSaved,
     onDelete,
+    onClose,
 }: {
     id: number;
     initial: Initiative | null;
     nameRef: RefObject<HTMLInputElement | null>;
     onSaved: (summary: InitiativeSummary) => void;
     onDelete: (id: number, savedName: string) => Promise<void>;
+    onClose: () => void;
 }) {
     const [state, setState] = useState<LoadState>(
         initial ? { kind: "loaded", initiative: initial } : { kind: "loading" },
@@ -137,6 +140,7 @@ function SheetBody({
                 initiative={state.initiative}
                 onSaved={onSaved}
                 onDelete={(savedName) => onDelete(id, savedName)}
+                onSave={onClose}
                 nameRef={nameRef}
             />
         );

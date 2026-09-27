@@ -83,18 +83,18 @@ The terms "meeting", "Meetings page", and "editor page" are defined in [Spec 000
   2. a select box named "RACI role", with a visible label "Role",
   3. for a completed initiative only, the text `Completed on <date>`, such as "Completed on September 26, 2026", in the user's local time zone,
   4. the formatting toolbar and the description, in an editor named "Description", with the same formatting as the notes of a meeting,
-  5. a button named "Delete".
+  5. a button named "Delete" at the left, and a primary button named "Save" at the right.
 
-  A button named "Close" is at the top right corner of the sheet. It comes last in the order of the keyboard focus, after "Delete".
+  A button named "Close" is at the top right corner of the sheet. It comes last in the order of the keyboard focus, after "Save".
 - The "RACI role" select box has these choices, in this order: an empty choice, which means no role, then "Responsible", "Accountable", "Consulted", and "Informed". For an initiative with no role, the empty choice is selected.
-- When the description is taller than the space it has, only the description scrolls. The name, the role, the toolbar, and the "Delete" button stay in place.
-- The "Close" button, the Escape key, and a click on the dimmed roadmap close the sheet. Keyboard focus then goes back to the card of the initiative.
+- When the description is taller than the space it has, only the description scrolls. The name, the role, the toolbar, and the "Delete" and "Save" buttons stay in place.
+- The "Save" button, the "Close" button, the Escape key, and a click on the dimmed roadmap close the sheet. "Save" does nothing else: changes are saved automatically, and a change that was not yet saved is saved when the sheet closes. Keyboard focus then goes back to the card of the initiative.
 - While the initiative loads, the fields are disabled. If it cannot be loaded, the sheet says "Couldn't load the initiative" and shows a "Retry" button.
 
 ### Saving
 
 - Changes to the name, the description, and the role are saved automatically after the user pauses for about half a second. The save status shows "Saving…", "Saved", or "Couldn't save" with a "Retry" button, as on the editor page of a meeting.
-- If the user closes the sheet before the pause ends, the change is saved at once.
+- If the user closes the sheet before the pause ends, for example with "Save", the change is saved at once.
 - After a change is saved, the card on the roadmap shows the new name and role. The card stays in its place.
 - The name, the description, and the role are kept when the user closes the sheet and opens it again, and after the application is closed and opened again.
 - A name is saved without the spaces at its start and end. The card and the title of the sheet show the saved name. The name field keeps the text as the user typed it.

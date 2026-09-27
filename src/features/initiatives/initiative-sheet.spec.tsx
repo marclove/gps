@@ -113,7 +113,7 @@ function follows(first: Element, second: Element) {
 }
 
 describe("The sheet", () => {
-    it("shows the name, role, toolbar, description, and Delete, in that order, and Close last", async () => {
+    it("shows the name, role, toolbar, description, Delete, and Save, in that order, and Close last", async () => {
         backend.seedInitiative({
             name: "Launch",
             horizon: "now",
@@ -130,6 +130,7 @@ describe("The sheet", () => {
             within(sheet).getByRole("toolbar", { name: "Formatting" }),
             description(sheet),
             within(sheet).getByRole("button", { name: "Delete" }),
+            within(sheet).getByRole("button", { name: "Save" }),
             within(sheet).getByRole("button", { name: "Close" }),
         ];
         for (let i = 1; i < parts.length; i++) {
@@ -254,6 +255,23 @@ describe("Saving", () => {
         await waitFor(() => expect(cardTexts("Now")).toEqual(["Launch!"]));
         sheet = await openSheet(user, /^Launch!/, "Launch!");
         expect(nameField(sheet)).toHaveValue("Launch!");
+    });
+
+    it("saves a pending change at once when Save is clicked, closes the sheet, and gives focus back to the card", async () => {
+        backend.seedInitiative({ name: "Launch", horizon: "now" });
+        const user = await openInitiativesPage();
+        const sheet = await openSheet(user, /^Launch/, "Launch");
+
+        await user.type(nameField(sheet), "!");
+        await user.click(within(sheet).getByRole("button", { name: "Save" }));
+
+        await waitForSheetToClose();
+        expect(invoke).toHaveBeenCalledWith(
+            "rename_initiative",
+            expect.objectContaining({ name: "Launch!" }),
+        );
+        await waitFor(() => expect(cardTexts("Now")).toEqual(["Launch!"]));
+        expect(await card(/^Launch!/)).toHaveFocus();
     });
 
     it("shows Couldn't save when a save fails, and saves on Retry", async () => {

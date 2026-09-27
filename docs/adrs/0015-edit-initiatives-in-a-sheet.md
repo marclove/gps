@@ -35,9 +35,9 @@ The sheet opens from the right side, is 40rem wide or the width of the window if
 2. A select box labeled "RACI role", with an empty choice for no role, and "Responsible", "Accountable", "Consulted", and "Informed".
 3. For a completed initiative only, the text "Completed on" and the date of completion, such as "Completed on September 26, 2026".
 4. The description, in the Markdown editor with its formatting toolbar, labeled "Description".
-5. A "Delete" button.
+5. A "Delete" button at the left, and a primary "Save" button at the right.
 
-The button that closes the sheet is the one that the shadcn `SheetContent` puts at the top right corner. It is last in the order of the keyboard focus, after "Delete". Many dialogs put their close button there, and using the component as it is keeps the code smaller. The Escape key also closes the sheet.
+The button that closes the sheet is the one that the shadcn `SheetContent` puts at the top right corner. It is last in the order of the keyboard focus, after "Save". Many dialogs put their close button there, and using the component as it is keeps the code smaller. The Escape key also closes the sheet.
 
 Parts 1, 2, 3, 5, and the toolbar stay in place. Only the text of the description scrolls, in a grid row sized `minmax(0,1fr)`, as ADR 0005 describes for pages.
 
@@ -71,5 +71,5 @@ There is no button to complete or reopen an initiative. Dragging a card, with th
 
 - **A dialog in the middle of the window.** It covers the board and has a fixed height, which leaves less room for a long description than a sheet as tall as the window.
 - **A route for each open sheet**, such as `/initiatives/3`. It gives nothing without an address bar, and it couples the sheet to navigation, so going back would open and close sheets.
-- **Save and Cancel buttons.** The user chose automatic saving, as for meetings, so the two editors behave the same way.
+- **Save and Cancel buttons that confirm or discard changes.** The user chose automatic saving, as for meetings, so the two editors behave the same way. The sheet does have a "Save" button, which the user asked for so that the sheet looks like other forms with a primary action. It only closes the sheet, in the same way as the close button, and closing saves any change that is waiting. There is no Cancel, because there is nothing to discard.
 - **Complete and Reopen buttons in the sheet.** They would be a second way to do what dragging does. Keyboard dragging already makes the columns reachable without a pointer.

@@ -55,8 +55,9 @@ function completionDate(completedAt: string): string {
 
 /**
  * The fields of one initiative: its name with the save status, its role, the date of
- * completion if it is completed, its description, and a "Delete" button. Changes are saved
- * automatically.
+ * completion if it is completed, its description, a "Delete" button, and a "Save" button.
+ * Changes are saved automatically. "Save" only calls `onSave`, which closes the sheet, and
+ * the form then saves the changes that are waiting when it unmounts.
  *
  * A name change is saved with a rename. If another initiative has the name, the name field
  * shows a message, and the other changes are still saved. `onSaved` receives the summary of
@@ -72,11 +73,13 @@ export function InitiativeForm({
     initiative,
     onSaved,
     onDelete,
+    onSave,
     nameRef,
 }: {
     initiative: Initiative;
     onSaved: (summary: InitiativeSummary) => void;
     onDelete: (savedName: string) => Promise<void>;
+    onSave: () => void;
     nameRef?: Ref<HTMLInputElement>;
 }) {
     const [draft, setDraft] = useState<Draft>({
@@ -164,7 +167,7 @@ export function InitiativeForm({
 
     return (
         // The header, the role, and the completion date are at the top, and the "Delete"
-        // button is at the bottom. The description gets the remaining height and scrolls
+        // and "Save" buttons are at the bottom. The description gets the remaining height and scrolls
         // its text itself.
         <div
             className={cn(
@@ -239,7 +242,7 @@ export function InitiativeForm({
                 onChange={changeDescription}
                 label="Description"
             />
-            <div className="border-t px-6 py-4">
+            <div className="flex items-center justify-between border-t px-6 py-4">
                 <Button
                     variant="outline"
                     size="sm"
@@ -248,6 +251,9 @@ export function InitiativeForm({
                 >
                     <Trash2Icon />
                     Delete
+                </Button>
+                <Button size="sm" onClick={onSave}>
+                    Save
                 </Button>
             </div>
         </div>
