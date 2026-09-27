@@ -21,6 +21,7 @@ type Meeting = {
     name: string;
     date: string;
     notes: string;
+    initiativeId: number | null;
     createdAt: string;
     updatedAt: string;
 };
@@ -38,6 +39,7 @@ class FakeBackend {
         const meeting: Meeting = {
             id: this.nextId++,
             notes: "",
+            initiativeId: null,
             createdAt: now,
             updatedAt: now,
             ...fields,
@@ -86,6 +88,8 @@ class FakeBackend {
                     date: args.date as string,
                 });
             case "list_meeting_tasks":
+                return [];
+            case "list_initiatives":
                 return [];
             case "get_meeting":
                 return this.meetings.find((m) => m.id === args.id) ?? null;

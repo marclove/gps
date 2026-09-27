@@ -20,15 +20,16 @@ import { ActionItemsPanel } from "@/features/tasks/action-items-panel";
 import { MeetingDetailsSidebar } from "./meeting-details-sidebar";
 import type { MeetingsPageState } from "./meetings-page";
 import { useArchive } from "@/components/use-archive";
+import { MeetingInitiativeSelect } from "./meeting-initiative-select";
 
 /** Matches a complete calendar date in the `YYYY-MM-DD` format that the backend accepts. */
 const COMPLETE_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 /**
  * The editor for one meeting: its name and its notes at the left, and a sidebar with
- * its date, the Archive button, and its action items at the right. Changes are saved
- * automatically. If `isNew` is true, the name field gets the focus and its text is
- * selected.
+ * its date, its initiative, the Archive button, and its action items at the right.
+ * Changes are saved automatically. If `isNew` is true, the name field gets the focus
+ * and its text is selected.
  */
 export function MeetingEditor({
     meeting,
@@ -121,28 +122,41 @@ export function MeetingEditor({
             </div>
             <MeetingDetailsSidebar
                 properties={
-                    <div className="flex items-center justify-between gap-2">
-                        <label htmlFor={dateId} className="text-sm font-medium">
-                            Date
-                        </label>
-                        <Input
-                            id={dateId}
-                            type="date"
-                            aria-label="Meeting date"
-                            value={draft.date}
-                            required
-                            onChange={(event) => {
-                                const date = event.target.value;
-                                // An incomplete or out of range value keeps the last complete
-                                // date, because the backend accepts only `YYYY-MM-DD`.
-                                if (!COMPLETE_DATE.test(date)) return;
-                                setDraft((current) => ({ ...current, date }));
-                            }}
-                            // The base Input has `min-w-0`, so without `shrink-0` the label
-                            // squeezes this field and cuts off the year.
-                            className="w-auto shrink-0"
+                    <>
+                        <div className="flex items-center justify-between gap-2">
+                            <label
+                                htmlFor={dateId}
+                                className="text-sm font-medium"
+                            >
+                                Date
+                            </label>
+                            <Input
+                                id={dateId}
+                                type="date"
+                                aria-label="Meeting date"
+                                value={draft.date}
+                                required
+                                onChange={(event) => {
+                                    const date = event.target.value;
+                                    // An incomplete or out of range value keeps the last
+                                    // complete date, because the backend accepts only
+                                    // `YYYY-MM-DD`.
+                                    if (!COMPLETE_DATE.test(date)) return;
+                                    setDraft((current) => ({
+                                        ...current,
+                                        date,
+                                    }));
+                                }}
+                                // The base Input has `min-w-0`, so without `shrink-0` the
+                                // label squeezes this field and cuts off the year.
+                                className="w-auto shrink-0"
+                            />
+                        </div>
+                        <MeetingInitiativeSelect
+                            meetingId={meeting.id}
+                            initiativeId={meeting.initiativeId}
                         />
-                    </div>
+                    </>
                 }
                 actions={
                     <Button

@@ -45,6 +45,7 @@ describe("App", () => {
                 name: "Standup",
                 date: "2026-09-22",
                 notes: "",
+                initiativeId: null,
                 createdAt: "2026-09-22T10:00:00.000Z",
                 updatedAt: "2026-09-22T10:00:00.000Z",
             },
@@ -53,6 +54,7 @@ describe("App", () => {
                 name: "Weekly sync",
                 date: "2026-09-24",
                 notes: "",
+                initiativeId: null,
                 createdAt: "2026-09-24T10:00:00.000Z",
                 updatedAt: "2026-09-24T10:00:00.000Z",
             },
@@ -65,6 +67,8 @@ describe("App", () => {
                 case "get_meeting":
                     return meetings.find((m) => m.id === args?.id) ?? null;
                 case "list_meeting_tasks":
+                    return [];
+                case "list_initiatives":
                     return [];
                 case "archive_meeting":
                     if (failArchive) throw "database is locked";

@@ -25,6 +25,7 @@ const MEETING = {
     name: "Weekly sync",
     date: "2026-09-24",
     notes: "Discussed the roadmap",
+    initiativeId: null,
     createdAt: "2026-09-24T10:00:00.000Z",
     updatedAt: "2026-09-24T10:00:00.000Z",
 };
@@ -55,6 +56,8 @@ async function handle(command: string, args: Record<string, unknown> = {}) {
             return MEETING;
         case "list_meeting_tasks":
             return tasks.map((t) => ({ ...t }));
+        case "list_initiatives":
+            return [];
         case "create_task": {
             seedTask(args.description as string);
             return { ...tasks[tasks.length - 1] };
