@@ -137,7 +137,15 @@ describe("The sheet", () => {
             expect(follows(parts[i - 1], parts[i])).toBe(true);
         }
         expect(nameField(sheet)).toHaveValue("Launch");
-        expect(within(sheet).getByText("Role")).toBeInTheDocument();
+        // Each field has a visible label above it, linked to the field.
+        for (const [text, field] of [
+            ["Name", nameField(sheet)],
+            ["Role", roleSelect(sheet)],
+        ] as const) {
+            const label = within(sheet).getByText(text, { selector: "label" });
+            expect(label).toHaveAttribute("for", field.id);
+            expect(follows(label, field)).toBe(true);
+        }
         expect(roleSelect(sheet)).toHaveValue("consulted");
         expect(within(description(sheet)).getByText("v2").tagName).toBe(
             "STRONG",

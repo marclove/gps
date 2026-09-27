@@ -379,6 +379,44 @@ describe("Layout", () => {
         expect(Math.round(sheet.width)).toBe(640);
     });
 
+    it("aligns each label in the sheet with the text inside its field", async () => {
+        seedColumn("now", ["A"]);
+        await openInitiativesPage();
+        await userEvent.click(
+            await screen.findByRole("button", { name: /^A/ }),
+        );
+        const sheet = await screen.findByRole("dialog", { name: "A" });
+        const dialogRight = () => sheet.getBoundingClientRect().right;
+        await expect.poll(dialogRight).toBe(window.innerWidth);
+
+        /** Where the text starts inside an element: its left edge, border, and padding. */
+        function textStart(element: Element) {
+            const style = getComputedStyle(element);
+            return (
+                element.getBoundingClientRect().left +
+                parseFloat(style.borderLeftWidth) +
+                parseFloat(style.paddingLeft)
+            );
+        }
+
+        const name = await within(sheet).findByRole("textbox", {
+            name: "Initiative name",
+        });
+        const role = within(sheet).getByRole("combobox", { name: "RACI role" });
+        for (const [text, field] of [
+            ["Name", name],
+            ["Role", role],
+        ] as const) {
+            const label = within(sheet).getByText(text, { selector: "label" });
+            expect(label.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+                field.getBoundingClientRect().top,
+            );
+            expect(Math.abs(textStart(label) - textStart(field))).toBeLessThan(
+                0.5,
+            );
+        }
+    });
+
     it("scrolls only a long description in the sheet", async () => {
         backend.seedInitiative({
             name: "A",

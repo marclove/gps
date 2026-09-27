@@ -54,6 +54,13 @@ function completionDate(completedAt: string): string {
 }
 
 /**
+ * The classes of a label above a field. The label starts where the text inside the field
+ * starts: after the border (1px) and the left padding of the field.
+ */
+export const FIELD_LABEL_CLASSES =
+    "pl-[calc(--spacing(2.5)+1px)] text-sm font-medium";
+
+/**
  * The fields of one initiative: its name with the save status, its role, the date of
  * completion if it is completed, its description, a "Delete" button, and a "Save" button.
  * Changes are saved automatically. "Save" only calls `onSave`, which closes the sheet, and
@@ -96,6 +103,7 @@ export function InitiativeForm({
     const saved = useRef<Draft>({ ...draft });
     const mounted = useRef(true);
     const onSavedRef = useRef(onSaved);
+    const nameId = useId();
     const roleId = useId();
     const messageId = useId();
 
@@ -178,38 +186,44 @@ export function InitiativeForm({
             )}
         >
             {/* The right padding keeps the close button of the sheet clear of the save status. */}
-            <div className="flex items-start gap-2 py-4 pr-14 pl-6">
-                <div className="min-w-0 flex-1">
-                    <Input
-                        ref={nameRef}
-                        aria-label="Initiative name"
-                        value={draft.name}
-                        placeholder={initiativeDisplayName("")}
-                        aria-invalid={takenName !== null || undefined}
-                        aria-describedby={
-                            takenName !== null ? messageId : undefined
-                        }
-                        onChange={(event) => {
-                            const name = event.target.value;
-                            setDraft((current) => ({ ...current, name }));
-                        }}
-                        className="text-base font-semibold"
-                    />
-                    {takenName !== null && (
-                        <p
-                            id={messageId}
-                            className="mt-1 text-sm text-destructive"
-                        >
-                            Another initiative is named "{takenName}".
-                        </p>
-                    )}
-                </div>
-                <div className="flex h-8 shrink-0 items-center">
-                    <SaveStatus status={status} onRetry={retry} />
+            <div className="flex flex-col gap-1.5 py-4 pr-14 pl-6">
+                <label htmlFor={nameId} className={FIELD_LABEL_CLASSES}>
+                    Name
+                </label>
+                <div className="flex items-start gap-2">
+                    <div className="min-w-0 flex-1">
+                        <Input
+                            ref={nameRef}
+                            id={nameId}
+                            aria-label="Initiative name"
+                            value={draft.name}
+                            placeholder={initiativeDisplayName("")}
+                            aria-invalid={takenName !== null || undefined}
+                            aria-describedby={
+                                takenName !== null ? messageId : undefined
+                            }
+                            onChange={(event) => {
+                                const name = event.target.value;
+                                setDraft((current) => ({ ...current, name }));
+                            }}
+                            className="text-base font-semibold"
+                        />
+                        {takenName !== null && (
+                            <p
+                                id={messageId}
+                                className="mt-1 text-sm text-destructive"
+                            >
+                                Another initiative is named "{takenName}".
+                            </p>
+                        )}
+                    </div>
+                    <div className="flex h-8 shrink-0 items-center">
+                        <SaveStatus status={status} onRetry={retry} />
+                    </div>
                 </div>
             </div>
-            <div className="flex items-center gap-2 px-6 pb-4">
-                <label htmlFor={roleId} className="text-sm font-medium">
+            <div className="flex flex-col items-start gap-1.5 px-6 pb-4">
+                <label htmlFor={roleId} className={FIELD_LABEL_CLASSES}>
                     Role
                 </label>
                 <NativeSelect

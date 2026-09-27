@@ -12,7 +12,7 @@ import {
     type Initiative,
     type InitiativeSummary,
 } from "@/lib/initiatives";
-import { InitiativeForm } from "./initiative-form";
+import { FIELD_LABEL_CLASSES, InitiativeForm } from "./initiative-form";
 
 type LoadState =
     | { kind: "loading" }
@@ -163,11 +163,18 @@ function SheetBody({
         );
     }
     return (
-        <div className="grid gap-4 py-4 pr-14 pl-6">
-            <Input aria-label="Initiative name" disabled />
-            <NativeSelect aria-label="RACI role" disabled>
-                <NativeSelectOption value="" />
-            </NativeSelect>
+        // The same labels and fields as the form, so nothing moves when it loads.
+        <div className="grid justify-items-start gap-4 py-4 pr-14 pl-6">
+            <div className="grid gap-1.5 justify-self-stretch">
+                <span className={FIELD_LABEL_CLASSES}>Name</span>
+                <Input aria-label="Initiative name" disabled />
+            </div>
+            <div className="grid gap-1.5">
+                <span className={FIELD_LABEL_CLASSES}>Role</span>
+                <NativeSelect aria-label="RACI role" disabled>
+                    <NativeSelectOption value="" />
+                </NativeSelect>
+            </div>
         </div>
     );
 }
