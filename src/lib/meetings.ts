@@ -12,6 +12,8 @@ export type Meeting = {
     createdAt: string;
     /** The time when the meeting was last changed, as an RFC 3339 timestamp in UTC. */
     updatedAt: string;
+    /** The initiative that the meeting is assigned to, or `null` if it is not assigned. */
+    initiativeId: number | null;
 };
 
 /** The part of a meeting that the list of meetings shows. */
@@ -47,6 +49,17 @@ export function updateMeeting(
     changes: MeetingChanges,
 ): Promise<Meeting> {
     return invoke<Meeting>("update_meeting", { id, ...changes });
+}
+
+/**
+ * Assigns a meeting to an initiative, or removes the assignment when `initiativeId` is
+ * `null`, and returns the stored meeting.
+ */
+export function setMeetingInitiative(
+    id: number,
+    initiativeId: number | null,
+): Promise<Meeting> {
+    return invoke<Meeting>("set_meeting_initiative", { id, initiativeId });
 }
 
 /** Archives a meeting, so it no longer appears in the list of meetings. */
