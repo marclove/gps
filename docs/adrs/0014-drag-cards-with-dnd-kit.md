@@ -37,6 +37,7 @@ We use `@dnd-kit/core`, `@dnd-kit/sortable`, and `@dnd-kit/utilities`.
 - The keyboard sensor starts and ends a drag with Space only, and cancels with Escape. Enter stays free to open the sheet. The Up and Down arrow keys move the card in its column, and the Left and Right arrow keys move it to the next column. The cards fill the width of their list, because the standard keyboard coordinates of dnd-kit compare left edges, and a card narrower than its list would not reach the next column.
 - While a card moves over another column, the board moves it into that column in its own state, as the "multiple containers" example of dnd-kit does, so that the other cards make room.
 - Done does not take part in sorting. A card over Done shows at its top. A drag inside Done changes nothing.
+- The board draws the dragged card in a `DragOverlay` of dnd-kit, which is outside the columns and above them. The list of each column scrolls, so it cuts off anything that goes past its edges. A card that moved by a CSS transform, as `useSortable` moves it, was cut off at the edge of its column while it was dragged toward another column, and it could disappear while the pointer was over a heading or a gap. The copy in the overlay is only a picture: screen readers and the keyboard ignore it, so each initiative still has exactly one button. The card itself stays in its list as a faded placeholder, and it keeps the keyboard focus and the `data-initiative-id` attribute.
 
 ### Saving a drop
 

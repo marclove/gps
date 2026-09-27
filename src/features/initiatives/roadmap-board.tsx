@@ -1,6 +1,7 @@
 import {
     closestCenter,
     DndContext,
+    DragOverlay,
     KeyboardSensor,
     pointerWithin,
     rectIntersection,
@@ -14,10 +15,12 @@ import {
 } from "@dnd-kit/core";
 import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { COLUMNS, type Column } from "@/lib/initiatives";
 import { announcements, dropTarget } from "./announcements";
 import { CardPointerSensor } from "./card-pointer-sensor";
 import { columnOf, moveCard, type Board } from "./board";
+import { InitiativeCardCopy } from "./initiative-card";
 import { RoadmapColumn } from "./roadmap-column";
 
 /** The column and the index of a card, counted from 0. */
@@ -66,7 +69,9 @@ const findTarget: CollisionDetection = (args) => {
  *
  * The user drags a card with the pointer, or with the keyboard: Space picks the card up and
  * drops it, the arrow keys move it, and Escape puts it back. While a card is dragged over
- * another column, the board shows it in that column. When a card drops at a new place, the
+ * another column, the board shows it in that column. While a card is dragged, the board draws
+ * a copy of it below the pointer, above the columns, because the scrolling list of a column
+ * would cut off the card itself at the edge of the column. When a card drops at a new place, the
  * board calls `onMove` with the identifier, the column, and the index of the card in that
  * column, counted without the card. The board then shows `board` again, so the page must
  * move the card in `board` when `onMove` is called.
@@ -86,7 +91,10 @@ export function RoadmapBoard({
     const [dragBoard, setDragBoard] = useState<Board | null>(null);
     // The place of the dragged card before the drag.
     const origin = useRef<Place | null>(null);
+    // The identifier of the dragged card.
+    const [activeId, setActiveId] = useState<number | null>(null);
     const shown = dragBoard ?? board;
+    const activePlace = activeId === null ? null : placeOf(shown, activeId);
     const sensors = useSensors(
         useSensor(CardPointerSensor, { distance: 8 }),
         useSensor(KeyboardSensor, {
@@ -114,6 +122,7 @@ export function RoadmapBoard({
 
     function start({ active }: DragStartEvent) {
         origin.current = placeOf(board, Number(active.id));
+        setActiveId(Number(active.id));
         setDragBoard(board);
     }
 
@@ -132,6 +141,7 @@ export function RoadmapBoard({
         const from = origin.current;
         const target = over === null ? null : dropTarget(active, over);
         origin.current = null;
+        setActiveId(null);
         setDragBoard(null);
         if (from === null || target === null) return;
         const unchanged =
@@ -142,6 +152,7 @@ export function RoadmapBoard({
 
     function cancel() {
         origin.current = null;
+        setActiveId(null);
         setDragBoard(null);
     }
 
@@ -166,6 +177,19 @@ export function RoadmapBoard({
                     />
                 ))}
             </div>
+            {createPortal(
+                <DragOverlay>
+                    {activePlace && (
+                        <InitiativeCardCopy
+                            initiative={
+                                shown[activePlace.column][activePlace.index]
+                            }
+                            column={activePlace.column}
+                        />
+                    )}
+                </DragOverlay>,
+                document.body,
+            )}
         </DndContext>
     );
 }
