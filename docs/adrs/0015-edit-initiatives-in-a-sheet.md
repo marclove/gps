@@ -31,11 +31,13 @@ When the sheet closes, keyboard focus goes back to the card that opened it, as B
 
 The sheet opens from the right side, is 40rem wide or the width of the window if that is less, and is as tall as the window. Its accessible name is the name of the initiative, or "Untitled initiative" when the name is empty. From top to bottom, it has:
 
-1. The name field, labeled "Initiative name", with the save status next to it, and the button that closes the sheet.
+1. The name field, labeled "Initiative name", with the save status next to it.
 2. A select box labeled "RACI role", with an empty choice for no role, and "Responsible", "Accountable", "Consulted", and "Informed".
 3. For a completed initiative only, the text "Completed on" and the date of completion, such as "Completed on September 26, 2026".
 4. The description, in the Markdown editor with its formatting toolbar, labeled "Description".
 5. A "Delete" button.
+
+The button that closes the sheet is the one that the shadcn `SheetContent` puts at the top right corner. It is last in the order of the keyboard focus, after "Delete". Many dialogs put their close button there, and using the component as it is keeps the code smaller. The Escape key also closes the sheet.
 
 Parts 1, 2, 3, 5, and the toolbar stay in place. Only the text of the description scrolls, in a grid row sized `minmax(0,1fr)`, as ADR 0005 describes for pages.
 

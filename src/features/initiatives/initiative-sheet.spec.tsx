@@ -86,7 +86,7 @@ function follows(first: Element, second: Element) {
 }
 
 describe("The sheet", () => {
-    it("shows the name, save status, Close, role, toolbar, description, and Delete, in that order", async () => {
+    it("shows the name, role, toolbar, description, and Delete, in that order, and Close last", async () => {
         backend.seedInitiative({
             name: "Launch",
             horizon: "now",
@@ -99,11 +99,11 @@ describe("The sheet", () => {
 
         const parts = [
             nameField(sheet),
-            within(sheet).getByRole("button", { name: "Close" }),
             roleSelect(sheet),
             within(sheet).getByRole("toolbar", { name: "Formatting" }),
             description(sheet),
             within(sheet).getByRole("button", { name: "Delete" }),
+            within(sheet).getByRole("button", { name: "Close" }),
         ];
         for (let i = 1; i < parts.length; i++) {
             expect(follows(parts[i - 1], parts[i])).toBe(true);
