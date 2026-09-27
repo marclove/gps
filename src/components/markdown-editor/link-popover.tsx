@@ -69,7 +69,7 @@ export function LinkPopover({
             </PopoverTrigger>
             <PopoverContent
                 // `contextElement` lets the popover follow the text when the editor text
-                // scroll, not only when the window scrolls.
+                // scrolls, not only when the window scrolls.
                 anchor={() => ({
                     getBoundingClientRect: () => linkTextRect(editor),
                     contextElement: editor.view.dom,
