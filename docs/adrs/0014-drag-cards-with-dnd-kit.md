@@ -32,7 +32,8 @@ We use `@dnd-kit/core`, `@dnd-kit/sortable`, and `@dnd-kit/utilities`.
 ### Board
 
 - One `DndContext` holds the four columns. Each column is a `SortableContext` with a vertical list, and each card uses `useSortable`. The whole list area of a column, also when it is empty, is a place to drop.
-- The pointer sensor starts a drag only after the pointer moves 8 pixels, so a click on a card opens its sheet.
+- The pointer sensor starts a drag only after the pointer moves 8 pixels, so a click on a card opens its sheet. It is our own sensor, `CardPointerSensor`, and not the `PointerSensor` of dnd-kit. After a drop, `PointerSensor` ignores every click in the whole document for about 50 milliseconds, so that the end of the drag does not count as a click. A click on a link in that time, such as a section in the sidebar, then skips React Router, and the webview follows the link as a normal page load, which reloads the application. `CardPointerSensor` works in the same way, but after a drop it ignores clicks only on cards.
+- Our own collision function, `findTarget`, decides which card or column is under the dragged card. With the pointer, it uses the elements under the pointer (`pointerWithin`). With the keyboard, it uses the elements that overlap the card (`rectIntersection`). In both cases, it prefers a card over the list area of a column, and inside a list area it takes the nearest card. The `closestCorners` function of dnd-kit could not target an empty column, because each list area is as tall as its column.
 - The keyboard sensor starts and ends a drag with Space only, and cancels with Escape. Enter stays free to open the sheet. The Up and Down arrow keys move the card in its column, and the Left and Right arrow keys move it to the next column. The cards fill the width of their list, because the standard keyboard coordinates of dnd-kit compare left edges, and a card narrower than its list would not reach the next column.
 - While a card moves over another column, the board moves it into that column in its own state, as the "multiple containers" example of dnd-kit does, so that the other cards make room.
 - Done does not take part in sorting. A card over Done shows at its top. A drag inside Done changes nothing.
@@ -40,7 +41,7 @@ We use `@dnd-kit/core`, `@dnd-kit/sortable`, and `@dnd-kit/utilities`.
 ### Saving a drop
 
 - When the card drops, the board keeps the new order in its state at once, and calls `move_initiative` with the column and the index where the card dropped. The frontend computes no positions. The backend renumbers the columns (ADR 0013).
-- If `move_initiative` fails, the board puts back the order from before the drag and shows a failure toast, "Couldn't move the initiative. Try again." (ADR 0012).
+- If `move_initiative` fails, the page shows a failure toast, "Couldn't move the initiative. Try again." (ADR 0012), and loads the board again from the backend once no other move is still being saved. For a single move, this puts the card back where it was before the drag. Restoring a copy of the board from before the drag would be wrong when the user made a second move that succeeded before the first one failed, because the copy would also undo the second move. A list that the backend sent before a move started is ignored, so it cannot overwrite a move that the board already shows.
 - The board does not load the list again after a move that succeeds, because its state already matches the backend.
 
 ### Messages for screen readers
@@ -58,7 +59,7 @@ dnd-kit asks for a message before the board updates its state for a drop. So a m
 ### Tests
 
 - Dragging is tested in the WebKit browser project with `userEvent.dragAndDrop(source, target, { steps: 10 })` from `vitest/browser`. Without the steps, the pointer jumps to the target in one move, and dnd-kit never sees it pass over another card. For the keyboard, the test focuses a card and sends Space, arrow keys, and Space with `userEvent.keyboard`.
-- After a drag ends, dnd-kit ignores clicks for about 50 milliseconds, so that the end of a drag does not count as a click. A test that clicks right after a drag must wait for that time.
+- After a drag ends, the board ignores clicks on cards for about 50 milliseconds, so that the end of a drag does not count as a click. A test that clicks a card right after a drag must wait for that time.
 - The jsdom tests render the board and use clicks and Enter, but do not drag.
 
 ## Consequences
