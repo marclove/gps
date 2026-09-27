@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import {
     createInitiative,
     listInitiatives,
+    moveInitiative,
+    type Column,
     type Initiative,
     type InitiativeSummary,
 } from "@/lib/initiatives";
@@ -14,6 +16,7 @@ import {
     buildBoard,
     columnOf,
     emptyBoard,
+    moveCard,
     removeCard,
     replaceCard,
     type Board,
@@ -37,7 +40,9 @@ function nameOnBoard(board: Board, id: number): string | null {
  * opens the sheet of its initiative. "New initiative" creates an initiative and opens its
  * sheet. "Delete" in the sheet deletes the initiative, and the archive toast can restore it.
  * The page loads the board again after each archive and restore, and focuses the card of a
- * restored initiative.
+ * restored initiative. A dragged card moves on the board at once. If the backend cannot save
+ * the move, the page shows a failure toast and loads the board again when no other move is
+ * waiting for the backend, so that the board shows what the backend has.
  */
 export function InitiativesPage() {
     const [state, setState] = useState<BoardState>({ kind: "loading" });
@@ -57,13 +62,33 @@ export function InitiativesPage() {
     // The restored item that the page already focused, or that was restored before the page
     // opened. The page does not focus it again.
     const handledRestored = useRef<RestoredItem | null>(restored);
+    // The number of moves that wait for the backend.
+    const pendingMoves = useRef(0);
+    // The number of moves that the page started, so that a load can find out that a move
+    // started while it waited for the backend.
+    const startedMoves = useRef(0);
+    // True when the board can differ from the backend, and the page must load it again when
+    // no move waits for the backend.
+    const reloadAfterMoves = useRef(false);
 
     useEffect(() => {
         let current = true;
+        const movesBefore = startedMoves.current;
         listInitiatives({ includeArchived: false }).then(
-            (summaries) =>
-                current &&
-                setState({ kind: "loaded", board: buildBoard(summaries) }),
+            (summaries) => {
+                if (!current) return;
+                if (startedMoves.current !== movesBefore) {
+                    // The list can be older than a move that the board shows. Load it again
+                    // after the moves.
+                    if (pendingMoves.current > 0) {
+                        reloadAfterMoves.current = true;
+                    } else {
+                        setAttempt((value) => value + 1);
+                    }
+                    return;
+                }
+                setState({ kind: "loaded", board: buildBoard(summaries) });
+            },
             () => current && setState({ kind: "error" }),
         );
         return () => {
@@ -135,6 +160,33 @@ export function InitiativesPage() {
         }
     }
 
+    async function move(id: number, to: Column, index: number) {
+        setState((current) =>
+            current.kind === "loaded"
+                ? {
+                      kind: "loaded",
+                      board: moveCard(current.board, id, to, index),
+                  }
+                : current,
+        );
+        pendingMoves.current += 1;
+        startedMoves.current += 1;
+        try {
+            await moveInitiative(id, to, index);
+        } catch {
+            failureToast.show("Couldn't move the initiative. Try again.");
+            // A later move can have succeeded, so the board loads the list from the backend
+            // instead of putting back an earlier board.
+            reloadAfterMoves.current = true;
+        } finally {
+            pendingMoves.current -= 1;
+            if (pendingMoves.current === 0 && reloadAfterMoves.current) {
+                reloadAfterMoves.current = false;
+                setAttempt((value) => value + 1);
+            }
+        }
+    }
+
     function showSaved(summary: InitiativeSummary) {
         setState((current) =>
             current.kind === "loaded"
@@ -176,6 +228,7 @@ export function InitiativesPage() {
                             state.kind === "loaded" ? state.board : emptyBoard()
                         }
                         onOpen={openInitiative}
+                        onMove={move}
                         loading={state.kind === "loading"}
                     />
                 </div>
