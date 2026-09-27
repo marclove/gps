@@ -100,12 +100,15 @@ export function RoadmapBoard({
     );
     const messages = useMemo(
         () =>
-            announcements((id: UniqueIdentifier) => {
-                const place = placeOf(board, Number(id));
-                return place === null
-                    ? ""
-                    : board[place.column][place.index].name;
-            }),
+            announcements(
+                (id: UniqueIdentifier) => {
+                    const place = placeOf(board, Number(id));
+                    return place === null
+                        ? ""
+                        : board[place.column][place.index].name;
+                },
+                (id: UniqueIdentifier) => columnOf(board, Number(id)),
+            ),
         [board],
     );
 

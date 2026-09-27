@@ -106,6 +106,17 @@ describe("buildBoard", () => {
             done: [2, 3, 1],
         });
     });
+
+    it("orders cards of Done with the same time of completion by identifier, the largest first", () => {
+        const completedAt = "2026-09-02T00:00:00Z";
+        const board = buildBoard([
+            summary(1, { completedAt }),
+            summary(3, { completedAt }),
+            summary(2, { completedAt }),
+        ]);
+
+        expect(board.done.map((card) => card.id)).toEqual([3, 2, 1]);
+    });
 });
 
 describe("columnOf", () => {

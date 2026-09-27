@@ -16,7 +16,7 @@ export function emptyBoard(): Board {
  * Makes the board from the initiative summaries. A completed initiative goes into Done, and
  * another initiative goes into the column of its horizon. Now, Next, and Later are sorted by
  * position and then by identifier. Done is sorted by the time of completion, the initiative
- * completed last first.
+ * completed last first, and then by identifier, the largest first.
  */
 export function buildBoard(summaries: InitiativeSummary[]): Board {
     const board = emptyBoard();
@@ -29,8 +29,10 @@ export function buildBoard(summaries: InitiativeSummary[]): Board {
         board[column].sort((a, b) => a.position - b.position || a.id - b.id);
     }
     // RFC 3339 timestamps in UTC sort correctly as text.
-    board.done.sort((a, b) =>
-        (b.completedAt ?? "").localeCompare(a.completedAt ?? ""),
+    board.done.sort(
+        (a, b) =>
+            (b.completedAt ?? "").localeCompare(a.completedAt ?? "") ||
+            b.id - a.id,
     );
     return board;
 }

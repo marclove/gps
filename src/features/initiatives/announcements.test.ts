@@ -5,7 +5,17 @@ import { announcements, dropTarget } from "./announcements";
 
 const names: Record<number, string> = { 1: "A", 2: "B", 3: "C", 4: "" };
 
-const messages = announcements((id) => names[id as number] ?? "");
+const starts: Record<number, Column> = {
+    1: "now",
+    2: "done",
+    3: "next",
+    4: "later",
+};
+
+const messages = announcements(
+    (id) => names[id as number] ?? "",
+    (id) => starts[id as number] ?? null,
+);
 
 function active(id: number): Active {
     return {
@@ -119,6 +129,21 @@ describe("announcements", () => {
                 over: overList("done", []),
             }),
         ).toBe("A was completed.");
+    });
+
+    it("says that a card of Done dropped in Done was put back", () => {
+        expect(
+            messages.onDragEnd({
+                active: active(2),
+                over: overCard(1, "done", 0, [1, 2]),
+            }),
+        ).toBe("B was put back.");
+        expect(
+            messages.onDragEnd({
+                active: active(2),
+                over: overList("done", [2]),
+            }),
+        ).toBe("B was put back.");
     });
 
     it("says that the card was put back after a cancel or a drop outside the columns", () => {

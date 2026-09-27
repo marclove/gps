@@ -73,11 +73,13 @@ function title(column: Column): string {
 
 /**
  * Returns the messages that screen readers announce while a card of the roadmap is dragged.
- * `nameOf` returns the saved name of the initiative with the identifier. A message uses the
- * shown name, and positions count from 1.
+ * `nameOf` returns the saved name of the initiative with the identifier. `startOf` returns the
+ * column that held the card before the drag, or `null` if no column held it. A message uses
+ * the shown name, and positions count from 1. A card of Done that drops in Done was put back.
  */
 export function announcements(
     nameOf: (id: UniqueIdentifier) => string,
+    startOf: (id: UniqueIdentifier) => Column | null,
 ): Announcements {
     const name = (active: Active) => initiativeDisplayName(nameOf(active.id));
     return {
@@ -90,6 +92,8 @@ export function announcements(
         onDragEnd: ({ active, over }) => {
             const target = over && dropTarget(active, over);
             if (!target) return `${name(active)} was put back.`;
+            if (target.column === "done" && startOf(active.id) === "done")
+                return `${name(active)} was put back.`;
             if (target.column === "done")
                 return `${name(active)} was completed.`;
             return `${name(active)} was moved to ${title(target.column)}, position ${target.index + 1} of ${target.count}.`;
