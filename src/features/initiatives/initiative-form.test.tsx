@@ -44,15 +44,19 @@ afterEach(() => {
 
 function renderForm() {
     const onSaved = vi.fn();
+    const onDelete = vi.fn((savedName: string) => {
+        void savedName;
+        return Promise.resolve();
+    });
     const view = render(
         <InitiativeForm
             initiative={PILOT}
             onSaved={onSaved}
-            onDelete={() => {}}
+            onDelete={onDelete}
         />,
     );
     const name = screen.getByRole("textbox", { name: "Initiative name" });
-    return { ...view, onSaved, name };
+    return { ...view, onSaved, onDelete, name };
 }
 
 describe("InitiativeForm", () => {
@@ -173,6 +177,68 @@ describe("InitiativeForm", () => {
                 id: 7,
                 name: "Launch",
             });
+        });
+    });
+
+    describe("Delete", () => {
+        it("saves a waiting rename first and gives the name that the backend stored", async () => {
+            const rename = deferred<RenameResult>();
+            invoke.mockImplementation((command: string) => {
+                if (command === "rename_initiative") return rename.promise;
+                return Promise.reject(new Error(`Unexpected ${command}`));
+            });
+            const user = userEvent.setup();
+            const { onDelete, name } = renderForm();
+
+            await user.type(name, " v2 ");
+            await user.click(screen.getByRole("button", { name: "Delete" }));
+            expect(invoke).toHaveBeenCalledWith("rename_initiative", {
+                id: 7,
+                name: "Pilot v2 ",
+            });
+            expect(onDelete).not.toHaveBeenCalled();
+
+            await act(async () =>
+                rename.resolve({
+                    status: "renamed",
+                    initiative: { ...PILOT, name: "Pilot v2" },
+                }),
+            );
+
+            expect(onDelete).toHaveBeenCalledExactlyOnceWith("Pilot v2");
+        });
+
+        it("gives the old name when another initiative has the new name", async () => {
+            invoke.mockImplementation((command: string) => {
+                if (command === "rename_initiative")
+                    return Promise.resolve({ status: "nameTaken" });
+                return Promise.reject(new Error(`Unexpected ${command}`));
+            });
+            const user = userEvent.setup();
+            const { onDelete, name } = renderForm();
+
+            await user.clear(name);
+            await user.type(name, "Launch");
+            await user.click(screen.getByRole("button", { name: "Delete" }));
+
+            await waitFor(() =>
+                expect(onDelete).toHaveBeenCalledExactlyOnceWith("Pilot"),
+            );
+        });
+
+        it("is disabled until the delete finishes", async () => {
+            const done = deferred<void>();
+            const user = userEvent.setup();
+            const { onDelete } = renderForm();
+            onDelete.mockReturnValue(done.promise);
+            const button = screen.getByRole("button", { name: "Delete" });
+
+            await user.click(button);
+            expect(onDelete).toHaveBeenCalledExactlyOnceWith("Pilot");
+            expect(button).toBeDisabled();
+
+            await act(async () => done.resolve());
+            expect(button).toBeEnabled();
         });
     });
 });

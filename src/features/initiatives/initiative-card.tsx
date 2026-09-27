@@ -10,7 +10,8 @@ import {
  * A card on the roadmap. It is a button as wide as its column that shows the name of the
  * initiative, and the role of the user when there is one. A card in Done also shows a check
  * mark, and its text is muted. A click on the card, or the Enter key, calls `onOpen` with the
- * identifier of the initiative.
+ * identifier of the initiative. The button has the identifier in its `data-initiative-id`
+ * attribute, so that the page can find the card and focus it.
  */
 export function InitiativeCard({
     initiative,
@@ -24,6 +25,7 @@ export function InitiativeCard({
     return (
         <button
             type="button"
+            data-initiative-id={initiative.id}
             onClick={() => onOpen(initiative.id)}
             className={cn(
                 "flex w-full flex-col items-start gap-1.5 rounded-lg border bg-card px-3 py-2 text-left text-sm shadow-xs transition-colors outline-none hover:bg-muted focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50",

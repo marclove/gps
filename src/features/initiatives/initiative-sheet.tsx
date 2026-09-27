@@ -28,6 +28,10 @@ type LoadState =
  *   sheet shows it without loading it, and the name field gets the focus.
  * - `onClose` is called when the user closes the sheet.
  * - `onSaved` receives the summary of the initiative after each save that succeeds.
+ * - `onDelete` is called when the user clicks "Delete", after the changes that were waiting
+ *   are saved. It receives the identifier and the saved name of the initiative.
+ * - `finalFocus` receives the focus when the sheet closes. If it is not given, the focus
+ *   goes back to the element that opened the sheet.
  */
 export function InitiativeSheet({
     id,
@@ -35,12 +39,16 @@ export function InitiativeSheet({
     newInitiative = null,
     onClose,
     onSaved,
+    onDelete,
+    finalFocus,
 }: {
     id: number | null;
     name: string;
     newInitiative?: Initiative | null;
     onClose: () => void;
     onSaved: (summary: InitiativeSummary) => void;
+    onDelete: (id: number, savedName: string) => Promise<void>;
+    finalFocus?: RefObject<HTMLElement | null>;
 }) {
     // While the sheet closes, it keeps the last initiative that it showed.
     const [shown, setShown] = useState({ id, name });
@@ -60,6 +68,7 @@ export function InitiativeSheet({
             <SheetContent
                 side="right"
                 initialFocus={focusName ? nameInput : true}
+                finalFocus={finalFocus ?? true}
                 className="gap-0 data-[side=right]:w-[min(40rem,100vw)] data-[side=right]:sm:max-w-none"
             >
                 <SheetTitle className="sr-only">
@@ -76,6 +85,7 @@ export function InitiativeSheet({
                         }
                         nameRef={nameInput}
                         onSaved={onSaved}
+                        onDelete={onDelete}
                     />
                 )}
             </SheetContent>
@@ -89,11 +99,13 @@ function SheetBody({
     initial,
     nameRef,
     onSaved,
+    onDelete,
 }: {
     id: number;
     initial: Initiative | null;
     nameRef: RefObject<HTMLInputElement | null>;
     onSaved: (summary: InitiativeSummary) => void;
+    onDelete: (id: number, savedName: string) => Promise<void>;
 }) {
     const [state, setState] = useState<LoadState>(
         initial ? { kind: "loaded", initiative: initial } : { kind: "loading" },
@@ -124,8 +136,7 @@ function SheetBody({
             <InitiativeForm
                 initiative={state.initiative}
                 onSaved={onSaved}
-                // Deleting is not available yet.
-                onDelete={() => {}}
+                onDelete={(savedName) => onDelete(id, savedName)}
                 nameRef={nameRef}
             />
         );

@@ -148,4 +148,77 @@ describe("useAutosave", () => {
 
         expect(save).not.toHaveBeenCalled();
     });
+
+    describe("flush", () => {
+        it("saves a waiting change now and resolves when the save finishes", async () => {
+            const { save, calls } = controlledSave();
+            const { result, rerender } = renderAutosave(save);
+            rerender({ value: { text: "now" } });
+
+            let done = false;
+            act(() => {
+                void result.current.flush().then(() => {
+                    done = true;
+                });
+            });
+            expect(save).toHaveBeenCalledTimes(1);
+            expect(save).toHaveBeenLastCalledWith({ text: "now" });
+            expect(done).toBe(false);
+
+            await act(async () => calls[0].resolve());
+            expect(done).toBe(true);
+            expect(result.current.status).toBe("saved");
+
+            act(() => vi.advanceTimersByTime(1000));
+            expect(save).toHaveBeenCalledTimes(1);
+        });
+
+        it("waits for a save in progress and for the change made during it", async () => {
+            const { save, calls } = controlledSave();
+            const { result, rerender } = renderAutosave(save);
+            rerender({ value: { text: "first" } });
+            act(() => vi.advanceTimersByTime(500));
+            rerender({ value: { text: "second" } });
+
+            let done = false;
+            act(() => {
+                void result.current.flush().then(() => {
+                    done = true;
+                });
+            });
+            await act(async () => calls[0].resolve());
+            expect(save).toHaveBeenCalledTimes(2);
+            expect(save).toHaveBeenLastCalledWith({ text: "second" });
+            expect(done).toBe(false);
+
+            await act(async () => calls[1].resolve());
+            expect(done).toBe(true);
+        });
+
+        it("resolves immediately when nothing is waiting", async () => {
+            const { save } = controlledSave();
+            const { result } = renderAutosave(save);
+
+            await act(() => result.current.flush());
+
+            expect(save).not.toHaveBeenCalled();
+        });
+
+        it("resolves and reports the error when the save fails", async () => {
+            const { save, calls } = controlledSave();
+            const { result, rerender } = renderAutosave(save);
+            rerender({ value: { text: "bad" } });
+
+            let done = false;
+            act(() => {
+                void result.current.flush().then(() => {
+                    done = true;
+                });
+            });
+            await act(async () => calls[0].reject());
+
+            expect(done).toBe(true);
+            expect(result.current.status).toBe("error");
+        });
+    });
 });

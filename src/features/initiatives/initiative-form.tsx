@@ -60,8 +60,10 @@ function completionDate(completedAt: string): string {
  * A name change is saved with a rename. If another initiative has the name, the name field
  * shows a message, and the other changes are still saved. `onSaved` receives the summary of
  * the initiative after each save that succeeds, also when the save finishes after the form
- * unmounts. `onDelete` is called when the user clicks "Delete". `nameRef` receives the name
- * field.
+ * unmounts. When the user clicks "Delete", the form first saves the changes that are
+ * waiting, and then calls `onDelete` with the name that the backend has for the initiative.
+ * The button is disabled until the promise of `onDelete` settles. `nameRef` receives the
+ * name field.
  */
 export function InitiativeForm({
     initiative,
@@ -71,7 +73,7 @@ export function InitiativeForm({
 }: {
     initiative: Initiative;
     onSaved: (summary: InitiativeSummary) => void;
-    onDelete: () => void;
+    onDelete: (savedName: string) => Promise<void>;
     nameRef?: Ref<HTMLInputElement>;
 }) {
     const [draft, setDraft] = useState<Draft>({
@@ -80,6 +82,9 @@ export function InitiativeForm({
         raciRole: initiative.raciRole,
     });
     const [takenName, setTakenName] = useState<string | null>(null);
+    const [deleting, setDeleting] = useState(false);
+    // The name that the backend has for the initiative. The backend trims names.
+    const savedName = useRef(initiative.name);
     // The values that the backend has now. They are refs, so that a save that finishes after
     // the form unmounts still compares with the correct values.
     const saved = useRef<Draft>({ ...draft });
@@ -105,6 +110,7 @@ export function InitiativeForm({
                 const result = await renameInitiative(initiative.id, next.name);
                 if (result.status === "renamed") {
                     saved.current.name = next.name;
+                    savedName.current = result.initiative.name;
                     onSavedRef.current(toSummary(result.initiative));
                     if (mounted.current) setTakenName(null);
                 } else if (mounted.current) {
@@ -129,7 +135,17 @@ export function InitiativeForm({
         },
         [initiative.id],
     );
-    const { status, retry } = useAutosave(draft, save);
+    const { status, retry, flush } = useAutosave(draft, save);
+
+    async function deleteInitiative() {
+        setDeleting(true);
+        try {
+            await flush();
+            await onDelete(savedName.current);
+        } finally {
+            if (mounted.current) setDeleting(false);
+        }
+    }
 
     const changeDescription = useCallback(
         (description: string) =>
@@ -215,7 +231,12 @@ export function InitiativeForm({
                 label="Description"
             />
             <div className="border-t px-6 py-4">
-                <Button variant="outline" size="sm" onClick={onDelete}>
+                <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={deleting}
+                    onClick={() => void deleteInitiative()}
+                >
                     <Trash2Icon />
                     Delete
                 </Button>

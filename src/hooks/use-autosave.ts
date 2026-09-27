@@ -19,6 +19,8 @@ export type AutosaveStatus = "idle" | "saving" | "saved" | "error";
  * - Only one save runs at a time. Changes made during a save are saved when it finishes.
  * - The value that the component first gives is not saved.
  * - When the component unmounts, a change that is waiting is saved immediately.
+ * - `flush` saves a change that is waiting now. Its promise resolves when no save is in
+ *   progress and no change is waiting, or when a save fails. It does not reject.
  *
  * Give a new value (a new object) for each change. Values are compared with `Object.is`.
  */
@@ -26,12 +28,14 @@ export function useAutosave<T>(
     value: T,
     save: (value: T) => Promise<unknown>,
     delay: number = AUTOSAVE_DELAY_MS,
-): { status: AutosaveStatus; retry: () => void } {
+): { status: AutosaveStatus; retry: () => void; flush: () => Promise<void> } {
     const [status, setStatus] = useState<AutosaveStatus>("idle");
     const latest = useRef(value);
     const saveRef = useRef(save);
     const dirty = useRef(false);
     const inFlight = useRef(false);
+    // The saves that run now. It is only valid while `inFlight` is true.
+    const running = useRef<Promise<void>>(Promise.resolve());
     const mounted = useRef(true);
     const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -39,12 +43,7 @@ export function useAutosave<T>(
         saveRef.current = save;
     }, [save]);
 
-    const flush = useCallback(async (): Promise<void> => {
-        clearTimeout(timer.current);
-        timer.current = undefined;
-        if (inFlight.current || !dirty.current) return;
-
-        inFlight.current = true;
+    const runSaves = useCallback(async (): Promise<void> => {
         // Changes made while a save is in progress are saved by the next pass of the loop.
         while (dirty.current) {
             dirty.current = false;
@@ -62,6 +61,18 @@ export function useAutosave<T>(
         inFlight.current = false;
         if (mounted.current) setStatus("saved");
     }, []);
+
+    const flush = useCallback((): Promise<void> => {
+        clearTimeout(timer.current);
+        timer.current = undefined;
+        // The saves in progress also save the changes made during them.
+        if (inFlight.current) return running.current;
+        if (!dirty.current) return Promise.resolve();
+
+        inFlight.current = true;
+        running.current = runSaves();
+        return running.current;
+    }, [runSaves]);
 
     useEffect(() => {
         if (Object.is(value, latest.current)) return;
@@ -83,5 +94,5 @@ export function useAutosave<T>(
         void flush();
     }, [flush]);
 
-    return { status, retry };
+    return { status, retry, flush };
 }
