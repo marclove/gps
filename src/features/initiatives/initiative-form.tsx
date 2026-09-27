@@ -9,6 +9,7 @@ import {
 } from "react";
 import { MarkdownEditor } from "@/components/markdown-editor/markdown-editor";
 import { SaveStatus } from "@/components/save-status";
+import { useFailureToast } from "@/components/use-failure-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -62,6 +63,8 @@ function completionDate(completedAt: string): string {
  * the initiative after each save that succeeds, also when the save finishes after the form
  * unmounts. When the user clicks "Delete", the form first saves the changes that are
  * waiting, and then calls `onDelete` with the name that the backend has for the initiative.
+ * If a change cannot be saved, the form does not call `onDelete` and shows the failure toast
+ * "Couldn't delete the initiative. Try again." The form must be in a `FailureToastProvider`.
  * The button is disabled until the promise of `onDelete` settles. `nameRef` receives the
  * name field.
  */
@@ -136,11 +139,17 @@ export function InitiativeForm({
         [initiative.id],
     );
     const { status, retry, flush } = useAutosave(draft, save);
+    const failureToast = useFailureToast();
 
     async function deleteInitiative() {
         setDeleting(true);
         try {
-            await flush();
+            // A change that is not saved would be saved again when the form unmounts, and
+            // could rename the initiative after the archive toast shows its name.
+            if (!(await flush())) {
+                failureToast.show("Couldn't delete the initiative. Try again.");
+                return;
+            }
             await onDelete(savedName.current);
         } finally {
             if (mounted.current) setDeleting(false);

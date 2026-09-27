@@ -1,6 +1,9 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { FailureToastProvider } from "@/components/failure-toast-provider";
+import { Toaster } from "@/components/toaster";
+import { toast } from "@/components/ui/toast";
 import type { Initiative, RenameResult } from "@/lib/initiatives";
 import { InitiativeForm } from "./initiative-form";
 
@@ -49,11 +52,15 @@ function renderForm() {
         return Promise.resolve();
     });
     const view = render(
-        <InitiativeForm
-            initiative={PILOT}
-            onSaved={onSaved}
-            onDelete={onDelete}
-        />,
+        <Toaster toastManager={toast}>
+            <FailureToastProvider>
+                <InitiativeForm
+                    initiative={PILOT}
+                    onSaved={onSaved}
+                    onDelete={onDelete}
+                />
+            </FailureToastProvider>
+        </Toaster>,
     );
     const name = screen.getByRole("textbox", { name: "Initiative name" });
     return { ...view, onSaved, onDelete, name };
@@ -224,6 +231,29 @@ describe("InitiativeForm", () => {
             await waitFor(() =>
                 expect(onDelete).toHaveBeenCalledExactlyOnceWith("Pilot"),
             );
+        });
+
+        it("does not delete and shows a failure toast when a waiting change cannot be saved", async () => {
+            invoke.mockImplementation((command: string) => {
+                if (command === "rename_initiative")
+                    return Promise.reject(new Error("disk full"));
+                return Promise.reject(new Error(`Unexpected ${command}`));
+            });
+            const user = userEvent.setup();
+            const { onDelete, name } = renderForm();
+
+            await user.type(name, " v2");
+            await user.click(screen.getByRole("button", { name: "Delete" }));
+
+            expect(
+                await within(
+                    screen.getByRole("region", { name: "Notifications" }),
+                ).findByText("Couldn't delete the initiative. Try again."),
+            ).toBeInTheDocument();
+            expect(onDelete).not.toHaveBeenCalled();
+            expect(
+                screen.getByRole("button", { name: "Delete" }),
+            ).toBeEnabled();
         });
 
         it("is disabled until the delete finishes", async () => {

@@ -19,8 +19,9 @@ export type AutosaveStatus = "idle" | "saving" | "saved" | "error";
  * - Only one save runs at a time. Changes made during a save are saved when it finishes.
  * - The value that the component first gives is not saved.
  * - When the component unmounts, a change that is waiting is saved immediately.
- * - `flush` saves a change that is waiting now. Its promise resolves when no save is in
- *   progress and no change is waiting, or when a save fails. It does not reject.
+ * - `flush` saves a change that is waiting now. Its promise resolves to `true` when no save is
+ *   in progress and no change is waiting, or to `false` when a save fails. It does not
+ *   reject.
  *
  * Give a new value (a new object) for each change. Values are compared with `Object.is`.
  */
@@ -28,14 +29,18 @@ export function useAutosave<T>(
     value: T,
     save: (value: T) => Promise<unknown>,
     delay: number = AUTOSAVE_DELAY_MS,
-): { status: AutosaveStatus; retry: () => void; flush: () => Promise<void> } {
+): {
+    status: AutosaveStatus;
+    retry: () => void;
+    flush: () => Promise<boolean>;
+} {
     const [status, setStatus] = useState<AutosaveStatus>("idle");
     const latest = useRef(value);
     const saveRef = useRef(save);
     const dirty = useRef(false);
     const inFlight = useRef(false);
     // The saves that run now. It is only valid while `inFlight` is true.
-    const running = useRef<Promise<void>>(Promise.resolve());
+    const running = useRef<Promise<boolean>>(Promise.resolve(true));
     const mounted = useRef(true);
     const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
@@ -43,7 +48,7 @@ export function useAutosave<T>(
         saveRef.current = save;
     }, [save]);
 
-    const runSaves = useCallback(async (): Promise<void> => {
+    const runSaves = useCallback(async (): Promise<boolean> => {
         // Changes made while a save is in progress are saved by the next pass of the loop.
         while (dirty.current) {
             dirty.current = false;
@@ -55,19 +60,20 @@ export function useAutosave<T>(
                 dirty.current = true;
                 inFlight.current = false;
                 if (mounted.current) setStatus("error");
-                return;
+                return false;
             }
         }
         inFlight.current = false;
         if (mounted.current) setStatus("saved");
+        return true;
     }, []);
 
-    const flush = useCallback((): Promise<void> => {
+    const flush = useCallback((): Promise<boolean> => {
         clearTimeout(timer.current);
         timer.current = undefined;
         // The saves in progress also save the changes made during them.
         if (inFlight.current) return running.current;
-        if (!dirty.current) return Promise.resolve();
+        if (!dirty.current) return Promise.resolve(true);
 
         inFlight.current = true;
         running.current = runSaves();
