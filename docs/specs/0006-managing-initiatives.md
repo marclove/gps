@@ -79,11 +79,11 @@ The terms "meeting", "Meetings page", and "editor page" are defined in [Spec 000
 
 - The sheet opens from the right side of the window and is as tall as the window. The roadmap stays visible at its left, dimmed. The sheet is a dialog whose accessible name is the name of the initiative, or "Untitled initiative" when the name is empty.
 - From top to bottom, the sheet shows:
-  1. a text field named "Initiative name", with the visible label "Name" above it, and the save status at its right. When the name is empty, the field shows "Untitled initiative" as a placeholder.
-  2. a select box named "RACI role", with the visible label "Role" above it,
+  1. a text field named "Initiative name" and the save status. When the name is empty, the field shows "Untitled initiative" as a placeholder.
+  2. a select box named "RACI role",
   3. for a completed initiative only, the text `Completed on <date>`, such as "Completed on September 26, 2026", in the user's local time zone,
   4. the formatting toolbar and the description, in an editor named "Description", with the same formatting as the notes of a meeting,
-  5. a button named "Delete" at the left, and a primary button named "Save" at the right.
+  5. a button named "Delete" and a button named "Save".
 
   A button named "Close" is at the top right corner of the sheet. It comes last in the order of the keyboard focus, after "Save".
 - The "RACI role" select box has these choices, in this order: an empty choice, which means no role, then "Responsible", "Accountable", "Consulted", and "Informed". For an initiative with no role, the empty choice is selected.
