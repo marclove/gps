@@ -1467,7 +1467,7 @@ mod tests {
     /// `OLD_TIME`, and returns its identifier.
     fn meeting_of(connection: &Connection, id: i64) -> i64 {
         let meeting = meetings::create(connection, "2026-09-24").unwrap();
-        meetings::set_initiative(connection, meeting.id, Some(id)).unwrap();
+        meetings::add_initiative(connection, meeting.id, id).unwrap();
         connection
             .execute(
                 "UPDATE meetings SET updated_at = ?2 WHERE id = ?1",

@@ -3,10 +3,9 @@ import {
     COLUMNS,
     compareRanks,
     createInitiative,
-    deletedInitiativeChoices,
     deleteInitiative,
     getInitiative,
-    initiativeChoiceGroups,
+    initiativeChoices,
     initiativeDisplayName,
     listInitiatives,
     moveInitiative,
@@ -154,113 +153,52 @@ describe("compareRanks", () => {
     });
 });
 
-describe("initiativeChoiceGroups", () => {
-    it("sorts by rank when the order of the ranks differs from the order of the ids", () => {
-        const groups = initiativeChoiceGroups(
+describe("initiativeChoices", () => {
+    it("sorts the choices alphabetically without regard to case", () => {
+        const choices = initiativeChoices(
             [
-                summary({ id: 1, name: "Third", rank: "c" }),
-                summary({ id: 2, name: "First", rank: "4" }),
-                summary({ id: 3, name: "Second", rank: "81f" }),
+                summary({ id: 1, name: "zeta" }),
+                summary({ id: 2, name: "Beta", horizon: "later" }),
+                summary({ id: 3, name: "alpha", horizon: "next" }),
+                summary({ id: 4, name: "   " }),
             ],
             1,
-        );
-
-        expect(groups).toEqual([
-            {
-                label: "Now",
-                choices: [
-                    { id: 2, label: "First" },
-                    { id: 3, label: "Second" },
-                    { id: 1, label: "Third" },
-                ],
-            },
-        ]);
-    });
-
-    it("groups the open initiatives by horizon, sorted by rank and then by id", () => {
-        const groups = initiativeChoiceGroups(
-            [
-                summary({ id: 5, name: "Later one", horizon: "later" }),
-                summary({ id: 4, name: "Now second", rank: "c" }),
-                summary({ id: 3, name: "Next one", horizon: "next" }),
-                summary({ id: 2, name: "Now tie", rank: "8" }),
-                summary({ id: 1, name: "Now first", rank: "8" }),
-            ],
-            1,
-        );
-
-        expect(groups).toEqual([
-            {
-                label: "Now",
-                choices: [
-                    { id: 1, label: "Now first" },
-                    { id: 2, label: "Now tie" },
-                    { id: 4, label: "Now second" },
-                ],
-            },
-            { label: "Next", choices: [{ id: 3, label: "Next one" }] },
-            { label: "Later", choices: [{ id: 5, label: "Later one" }] },
-        ]);
-    });
-
-    it("puts completed initiatives in their own group, sorted by name, and leaves out deleted ones", () => {
-        const groups = initiativeChoiceGroups(
-            [
-                summary({ id: 1, name: "zeta", completedAt: COMPLETED }),
-                summary({ id: 2, name: "Alpha", completedAt: COMPLETED }),
-                summary({
-                    id: 3,
-                    name: "beta",
-                    completedAt: COMPLETED,
-                    deletedAt: DELETED,
-                }),
-                summary({ id: 4, name: "Gamma", deletedAt: DELETED }),
-                summary({ id: 5, name: "", deletedAt: DELETED }),
-            ],
-            1,
-        );
-
-        expect(groups).toEqual([
-            {
-                label: "Completed",
-                choices: [
-                    { id: 2, label: "Alpha" },
-                    { id: 1, label: "zeta" },
-                ],
-            },
-        ]);
-    });
-
-    it("lists the deleted initiatives, completed or not, with their shown names", () => {
-        const choices = deletedInitiativeChoices(
-            [
-                summary({ id: 1, name: "Open" }),
-                summary({ id: 2, name: "Won", completedAt: COMPLETED }),
-                summary({
-                    id: 3,
-                    name: "beta",
-                    completedAt: COMPLETED,
-                    deletedAt: DELETED,
-                }),
-                summary({ id: 5, name: "", deletedAt: DELETED }),
-            ],
-            1,
+            new Set(),
         );
 
         expect(choices).toEqual([
-            { id: 3, label: "beta" },
-            { id: 5, label: "Untitled initiative" },
+            { id: 3, label: "alpha", deleted: false },
+            { id: 2, label: "Beta", deleted: false },
+            { id: 4, label: "Untitled initiative", deleted: false },
+            { id: 1, label: "zeta", deleted: false },
         ]);
     });
 
-    it("shows the default name for an initiative with an empty name", () => {
+    it("includes a completed initiative", () => {
         expect(
-            initiativeChoiceGroups([summary({ id: 1, name: "   " })], 1),
-        ).toEqual([
-            {
-                label: "Now",
-                choices: [{ id: 1, label: "Untitled initiative" }],
-            },
+            initiativeChoices(
+                [summary({ id: 1, name: "Won", completedAt: COMPLETED })],
+                1,
+                new Set(),
+            ),
+        ).toEqual([{ id: 1, label: "Won", deleted: false }]);
+    });
+
+    it("includes a deleted initiative only when it is linked, with (deleted) after its name", () => {
+        const all = [
+            summary({ id: 1, name: "Old", deletedAt: DELETED }),
+            summary({
+                id: 2,
+                name: "",
+                completedAt: COMPLETED,
+                deletedAt: DELETED,
+            }),
+            summary({ id: 3, name: "Gone", deletedAt: DELETED }),
+        ];
+
+        expect(initiativeChoices(all, 1, new Set([1, 2]))).toEqual([
+            { id: 1, label: "Old (deleted)", deleted: true },
+            { id: 2, label: "Untitled initiative (deleted)", deleted: true },
         ]);
     });
 
@@ -268,43 +206,25 @@ describe("initiativeChoiceGroups", () => {
         const all = [
             summary({ id: 1, name: "Launch" }),
             summary({ id: 2, name: "Invoices", projectId: 2 }),
-            summary({ id: 3, name: "Won", completedAt: COMPLETED }),
             summary({
-                id: 4,
-                name: "Paid",
-                projectId: 2,
-                completedAt: COMPLETED,
-            }),
-            summary({ id: 5, name: "Old", deletedAt: DELETED }),
-            summary({
-                id: 6,
+                id: 3,
                 name: "Gone",
                 projectId: 2,
                 deletedAt: DELETED,
             }),
         ];
 
-        expect(initiativeChoiceGroups(all, 1)).toEqual([
-            { label: "Now", choices: [{ id: 1, label: "Launch" }] },
-            { label: "Completed", choices: [{ id: 3, label: "Won" }] },
-        ]);
-        expect(deletedInitiativeChoices(all, 1)).toEqual([
-            { id: 5, label: "Old" },
+        expect(initiativeChoices(all, 1, new Set([3]))).toEqual([
+            { id: 1, label: "Launch", deleted: false },
         ]);
     });
 
     it("returns no choices when there is no project", () => {
         const all = [
             summary({ id: 1, name: "Launch" }),
-            summary({ id: 2, name: "Won", completedAt: COMPLETED }),
-            summary({ id: 3, name: "Old", deletedAt: DELETED }),
+            summary({ id: 2, name: "Old", deletedAt: DELETED }),
         ];
 
-        expect(initiativeChoiceGroups(all, null)).toEqual([]);
-        expect(deletedInitiativeChoices(all, null)).toEqual([]);
-    });
-
-    it("returns no groups when there are no initiatives", () => {
-        expect(initiativeChoiceGroups([], 1)).toEqual([]);
+        expect(initiativeChoices(all, null, new Set([2]))).toEqual([]);
     });
 });

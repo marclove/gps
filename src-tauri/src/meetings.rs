@@ -204,58 +204,6 @@ pub fn update(
     get(connection, id)?.ok_or(Error::NotFound(id))
 }
 
-/// Makes a meeting cover only the initiative `initiative_id`, or no initiative when
-/// `initiative_id` is `None`. The initiative can be completed or deleted. Sets the time the
-/// meeting was last changed. Returns the meeting as it is stored after the change.
-///
-/// When the meeting covers an initiative after the change, also sets the project of the
-/// meeting to the project of that initiative. When the meeting covers no initiative after the
-/// change, does not change the project.
-pub fn set_initiative(
-    connection: &Connection,
-    id: i64,
-    initiative_id: Option<i64>,
-) -> Result<Meeting, Error> {
-    let transaction = connection.unchecked_transaction()?;
-    let changed = if let Some(initiative_id) = initiative_id {
-        let project_id: i64 = transaction
-            .query_row(
-                "SELECT project_id FROM initiatives WHERE id = ?1",
-                params![initiative_id],
-                |row| row.get(0),
-            )
-            .optional()?
-            .ok_or(Error::InitiativeNotFound(initiative_id))?;
-        transaction.execute(
-            &format!("UPDATE meetings SET project_id = ?2, updated_at = {NOW} WHERE id = ?1"),
-            params![id, project_id],
-        )?
-    } else {
-        transaction.execute(
-            &format!("UPDATE meetings SET updated_at = {NOW} WHERE id = ?1"),
-            params![id],
-        )?
-    };
-    if changed == 0 {
-        return Err(Error::NotFound(id));
-    }
-    transaction.execute(
-        "DELETE FROM meeting_initiatives WHERE meeting_id = ?1",
-        params![id],
-    )?;
-    if let Some(initiative_id) = initiative_id {
-        transaction.execute(
-            &format!(
-                "INSERT INTO meeting_initiatives (meeting_id, initiative_id, created_at)
-                 VALUES (?1, ?2, {NOW})"
-            ),
-            params![id, initiative_id],
-        )?;
-    }
-    transaction.commit()?;
-    get(connection, id)?.ok_or(Error::NotFound(id))
-}
-
 /// Makes a meeting cover the initiative `initiative_id`, in addition to the initiatives that it
 /// covers. The initiative can be completed. Returns the meeting as it is stored after the
 /// change.
@@ -660,75 +608,11 @@ mod tests {
     }
 
     #[test]
-    fn set_initiative_assigns_removes_and_changes_updated_at() {
-        let connection = open_in_memory();
-        let initiative = new_initiative(&connection);
-        let created = create(&connection, "2026-09-24").unwrap();
-        set_updated_at(&connection, created.id, OLD_TIME);
-
-        let assigned = set_initiative(&connection, created.id, Some(initiative.id)).unwrap();
-        assert_eq!(assigned.initiative_ids, vec![initiative.id]);
-        assert_ne!(assigned.updated_at, OLD_TIME);
-        assert_eq!(get(&connection, created.id).unwrap(), Some(assigned));
-
-        set_updated_at(&connection, created.id, OLD_TIME);
-        let removed = set_initiative(&connection, created.id, None).unwrap();
-        assert!(removed.initiative_ids.is_empty());
-        assert_ne!(removed.updated_at, OLD_TIME);
-        assert_eq!(get(&connection, created.id).unwrap(), Some(removed));
-    }
-
-    #[test]
-    fn set_initiative_accepts_deleted_and_completed_initiatives() {
-        let connection = open_in_memory();
-        let deleted = new_initiative(&connection);
-        initiatives::delete(&connection, deleted.id).unwrap();
-        let completed = new_initiative(&connection);
-        initiatives::move_to(&connection, completed.id, "done", 0).unwrap();
-        let meeting = create(&connection, "2026-09-24").unwrap();
-
-        let assigned = set_initiative(&connection, meeting.id, Some(deleted.id)).unwrap();
-        assert_eq!(assigned.initiative_ids, vec![deleted.id]);
-        let assigned = set_initiative(&connection, meeting.id, Some(completed.id)).unwrap();
-        assert_eq!(assigned.initiative_ids, vec![completed.id]);
-    }
-
-    #[test]
-    fn set_initiative_refuses_a_missing_initiative() {
-        let connection = open_in_memory();
-        let created = create(&connection, "2026-09-24").unwrap();
-
-        assert!(matches!(
-            set_initiative(&connection, created.id, Some(999)),
-            Err(Error::InitiativeNotFound(999))
-        ));
-        assert_eq!(
-            Error::InitiativeNotFound(999).to_string(),
-            "initiative 999 not found"
-        );
-        assert_eq!(get(&connection, created.id).unwrap(), Some(created));
-    }
-
-    #[test]
-    fn set_initiative_on_a_missing_meeting_returns_not_found() {
-        let connection = open_in_memory();
-        let initiative = new_initiative(&connection);
-        assert!(matches!(
-            set_initiative(&connection, 42, Some(initiative.id)),
-            Err(Error::NotFound(42))
-        ));
-        assert!(matches!(
-            set_initiative(&connection, 42, None),
-            Err(Error::NotFound(42))
-        ));
-    }
-
-    #[test]
     fn update_does_not_change_the_initiative() {
         let connection = open_in_memory();
         let initiative = new_initiative(&connection);
         let created = create(&connection, "2026-09-24").unwrap();
-        set_initiative(&connection, created.id, Some(initiative.id)).unwrap();
+        add_initiative(&connection, created.id, initiative.id).unwrap();
 
         let updated = update(&connection, created.id, "Weekly sync", "2026-09-25", "").unwrap();
 
@@ -744,33 +628,12 @@ mod tests {
     }
 
     #[test]
-    fn set_initiative_sets_the_project_of_the_initiative() {
-        let connection = open_in_memory();
-        let billing = new_project(&connection, "Billing");
-        let checkout = new_project(&connection, "Checkout");
-        let initiative = initiative_in(&connection, checkout);
-        let meeting = create(&connection, "2026-09-24").unwrap();
-        set_project(&connection, meeting.id, Some(billing)).unwrap();
-
-        let assigned = set_initiative(&connection, meeting.id, Some(initiative.id)).unwrap();
-
-        assert_eq!(assigned.initiative_ids, vec![initiative.id]);
-        assert_eq!(assigned.project_id, Some(checkout));
-        assert_eq!(get(&connection, meeting.id).unwrap(), Some(assigned));
-        assert_eq!(list(&connection).unwrap()[0].project_id, Some(checkout));
-
-        let removed = set_initiative(&connection, meeting.id, None).unwrap();
-        assert!(removed.initiative_ids.is_empty());
-        assert_eq!(removed.project_id, Some(checkout));
-    }
-
-    #[test]
     fn set_project_clears_the_initiative_when_it_changes() {
         let connection = open_in_memory();
         let billing = new_project(&connection, "Billing");
         let initiative = new_initiative(&connection);
         let meeting = create(&connection, "2026-09-24").unwrap();
-        set_initiative(&connection, meeting.id, Some(initiative.id)).unwrap();
+        add_initiative(&connection, meeting.id, initiative.id).unwrap();
         set_updated_at(&connection, meeting.id, OLD_TIME);
 
         let moved = set_project(&connection, meeting.id, Some(billing)).unwrap();
@@ -791,7 +654,7 @@ mod tests {
         let connection = open_in_memory();
         let initiative = new_initiative(&connection);
         let meeting = create(&connection, "2026-09-24").unwrap();
-        set_initiative(&connection, meeting.id, Some(initiative.id)).unwrap();
+        add_initiative(&connection, meeting.id, initiative.id).unwrap();
         set_updated_at(&connection, meeting.id, OLD_TIME);
         let before = get(&connection, meeting.id).unwrap().unwrap();
 
@@ -931,6 +794,10 @@ mod tests {
             add_initiative(&connection, meeting.id, 999),
             Err(Error::InitiativeNotFound(999))
         ));
+        assert_eq!(
+            Error::InitiativeNotFound(999).to_string(),
+            "initiative 999 not found"
+        );
         assert_eq!(get(&connection, meeting.id).unwrap(), Some(meeting));
     }
 

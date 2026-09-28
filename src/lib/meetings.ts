@@ -60,18 +60,6 @@ export function updateMeeting(
 }
 
 /**
- * Assigns a meeting to an initiative, or removes the assignment when `initiativeId` is
- * `null`, and returns the stored meeting. An assignment also sets the project of the meeting
- * to the project of the initiative.
- */
-export function setMeetingInitiative(
-    id: number,
-    initiativeId: number | null,
-): Promise<Meeting> {
-    return invoke<Meeting>("set_meeting_initiative", { id, initiativeId });
-}
-
-/**
  * Makes a meeting cover an initiative, in addition to the initiatives that it covers, and
  * returns the stored meeting. The backend rejects an initiative that is deleted or does not
  * exist. If the meeting already covers the initiative, nothing changes. If the initiative
@@ -101,8 +89,8 @@ export function removeMeetingInitiative(
 
 /**
  * Sets the project of a meeting, or no project when `projectId` is `null`, and returns the
- * stored meeting. If the project changes, the backend also removes the assignment to an
- * initiative. If the meeting already has the project, nothing changes. The backend rejects a
+ * stored meeting. If the project changes, the backend also removes all initiatives of the
+ * meeting. If the meeting already has the project, nothing changes. The backend rejects a
  * project that is deleted or does not exist.
  */
 export function setMeetingProject(
