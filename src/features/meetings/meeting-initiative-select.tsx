@@ -5,7 +5,7 @@ import {
     NativeSelectOptGroup,
     NativeSelectOption,
 } from "@/components/ui/native-select";
-import { useArchive } from "@/components/use-archive";
+import { useDelete } from "@/components/use-delete";
 import { useFailureToast } from "@/components/use-failure-toast";
 import {
     deletedInitiativeChoices,
@@ -35,7 +35,7 @@ function toValue(initiativeId: number | null): string {
  * be loaded, the row shows a message and a Retry button.
  *
  * The choices load again after an initiative is deleted or restored. The row must be in an
- * `ArchiveProvider`.
+ * `DeleteProvider`.
  *
  * `initiativeId` is the initiative that the meeting is assigned to when the row opens.
  * After that, the row keeps the choice of the user.
@@ -62,11 +62,11 @@ export function MeetingInitiativeSelect({
     const failureToast = useFailureToast();
     // Counts deletes and restores, so the choices load again when an initiative is deleted
     // or restored, for example with Undo while this row is open.
-    const { version: archiveVersion } = useArchive();
+    const { version: deleteVersion } = useDelete();
 
     useEffect(() => {
         let current = true;
-        listInitiatives({ includeArchived: true }).then(
+        listInitiatives({ includeDeleted: true }).then(
             (initiatives) =>
                 current &&
                 setLoad({
@@ -79,7 +79,7 @@ export function MeetingInitiativeSelect({
         return () => {
             current = false;
         };
-    }, [attempt, archiveVersion]);
+    }, [attempt, deleteVersion]);
 
     async function assign(value: string) {
         const request = ++latestRequest.current;

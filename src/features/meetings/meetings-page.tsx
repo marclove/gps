@@ -1,4 +1,4 @@
-import { ArchiveIcon, PlusIcon } from "lucide-react";
+import { PlusIcon, Trash2Icon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import { PageHeader } from "@/components/page-header";
@@ -12,7 +12,7 @@ import {
     listMeetings,
     type MeetingSummary,
 } from "@/lib/meetings";
-import { useArchive, type RestoredItem } from "@/components/use-archive";
+import { useDelete, type RestoredItem } from "@/components/use-delete";
 
 type ListState =
     | { kind: "loading" }
@@ -23,20 +23,20 @@ type ListState =
 export type NewMeetingState = { isNew: true };
 
 /**
- * State that the editor page gives the Meetings page after it archives a meeting. The
+ * State that the editor page gives the Meetings page after it deletes a meeting. The
  * Meetings page then moves focus to the "New note" button, because the button that the
  * user clicked is gone.
  */
 export type MeetingsPageState = { focusNewNote: true };
 
 /**
- * Records an archive so the effect that watches the list can move focus once the
- * backend truth catches up, even if another archive changes the list first.
+ * Records a delete so the effect that watches the list can move focus once the
+ * backend truth catches up, even if another delete changes the list first.
  */
-type ArchivedNeighbors = {
-    /** The identifier of the archived meeting. */
-    archivedId: number;
-    /** The identifiers of every meeting in the list, in order, as of the archive. */
+type DeletedNeighbors = {
+    /** The identifier of the deleted meeting. */
+    deletedId: number;
+    /** The identifiers of every meeting in the list, in order, as of the delete. */
     orderedIds: number[];
 };
 
@@ -46,7 +46,7 @@ export function MeetingsPage() {
     const location = useLocation();
     const focusNewNote =
         (location.state as MeetingsPageState | null)?.focusNewNote === true;
-    const { archive, version, restored } = useArchive();
+    const { deleteItem, version, restored } = useDelete();
     const [list, setList] = useState<ListState>({ kind: "loading" });
     const [attempt, setAttempt] = useState(0);
     const [creating, setCreating] = useState(false);
@@ -54,17 +54,17 @@ export function MeetingsPage() {
     const failureToast = useFailureToast();
     const newNoteButtonRef = useRef<HTMLButtonElement>(null);
     const meetingLinkRefs = useRef(new Map<number, HTMLAnchorElement>());
-    const archiveButtonRefs = useRef(new Map<number, HTMLButtonElement>());
-    // The most recent archive that is still waiting for the list to catch up, so the
+    const deleteButtonRefs = useRef(new Map<number, HTMLButtonElement>());
+    // The most recent delete that is still waiting for the list to catch up, so the
     // effect below can move focus once it does. `null` means nothing is waiting.
-    const archivedNeighbors = useRef<ArchivedNeighbors | null>(null);
+    const deletedNeighbors = useRef<DeletedNeighbors | null>(null);
     // The restored meeting this page has already moved focus for, so a restore that
     // happened before this page opened, or one this page already reacted to, does not
     // move focus again.
     const handledRestored = useRef<RestoredItem | null>(restored);
-    // The identifiers of meetings with an archive in progress, so a second click on the
-    // same row before the first archive finishes has no effect.
-    const pendingArchiveIds = useRef(new Set<number>());
+    // The identifiers of meetings with a delete in progress, so a second click on the
+    // same row before the first delete finishes has no effect.
+    const pendingDeleteIds = useRef(new Set<number>());
 
     useEffect(() => {
         if (focusNewNote) newNoteButtonRef.current?.focus();
@@ -82,36 +82,34 @@ export function MeetingsPage() {
     }, [attempt, version]);
 
     useEffect(() => {
-        const neighbors = archivedNeighbors.current;
+        const neighbors = deletedNeighbors.current;
         if (!neighbors || list.kind !== "loaded") return;
-        archivedNeighbors.current = null;
+        deletedNeighbors.current = null;
 
-        // Focus the first surviving meeting that was after the archived one, in the
-        // order the archive saw, or otherwise the nearest surviving one before it.
+        // Focus the first surviving meeting that was after the deleted one, in the
+        // order the delete saw, or otherwise the nearest surviving one before it.
         // Using that recorded order, rather than the current list's order, is what
-        // keeps the target correct when a second archive removed a meeting in
-        // between: a meeting between the archived one and its recorded neighbor can
-        // no longer be there to stand in for it. It does not wait for the archived
+        // keeps the target correct when a second delete removed a meeting in
+        // between: a meeting between the deleted one and its recorded neighbor can
+        // no longer be there to stand in for it. It does not wait for the deleted
         // meeting itself to disappear from `list` first: the row it is choosing
         // between is the row after or before it, never its own.
         const currentIds = new Set(list.meetings.map((meeting) => meeting.id));
-        const archivedIndex = neighbors.orderedIds.indexOf(
-            neighbors.archivedId,
-        );
+        const deletedIndex = neighbors.orderedIds.indexOf(neighbors.deletedId);
         const after =
-            archivedIndex === -1
+            deletedIndex === -1
                 ? []
-                : neighbors.orderedIds.slice(archivedIndex + 1);
+                : neighbors.orderedIds.slice(deletedIndex + 1);
         const before =
-            archivedIndex === -1
+            deletedIndex === -1
                 ? []
-                : neighbors.orderedIds.slice(0, archivedIndex).reverse();
+                : neighbors.orderedIds.slice(0, deletedIndex).reverse();
         const nextId =
             after.find((id) => currentIds.has(id)) ??
             before.find((id) => currentIds.has(id));
 
         if (nextId !== undefined) {
-            archiveButtonRefs.current.get(nextId)?.focus();
+            deleteButtonRefs.current.get(nextId)?.focus();
         } else {
             newNoteButtonRef.current?.focus();
         }
@@ -152,13 +150,13 @@ export function MeetingsPage() {
         }
     }
 
-    async function handleArchive(meeting: MeetingSummary) {
-        // Ignore a second click on the same row while its archive is still in flight,
+    async function handleDelete(meeting: MeetingSummary) {
+        // Ignore a second click on the same row while its delete is still in flight,
         // so it cannot run twice.
-        if (pendingArchiveIds.current.has(meeting.id)) return;
-        pendingArchiveIds.current.add(meeting.id);
+        if (pendingDeleteIds.current.has(meeting.id)) return;
+        pendingDeleteIds.current.add(meeting.id);
         try {
-            await archive({
+            await deleteItem({
                 kind: "meeting",
                 id: meeting.id,
                 name: meeting.name,
@@ -167,13 +165,13 @@ export function MeetingsPage() {
             // Recorded here, from the list this render sees, rather than computing
             // the focus target itself inside the `setList` updater below: React may
             // call that updater more than once, so it must stay pure, and by the time
-            // it runs another archive may already have changed the list, which would
+            // it runs another delete may already have changed the list, which would
             // make an index computed from a stale snapshot point at the wrong row.
             // The effect that watches `list` picks the actual target once the list
             // catches up, from the always-current list at that later time.
             if (list.kind === "loaded") {
-                archivedNeighbors.current = {
-                    archivedId: meeting.id,
+                deletedNeighbors.current = {
+                    deletedId: meeting.id,
                     orderedIds: list.meetings.map((candidate) => candidate.id),
                 };
             }
@@ -194,9 +192,9 @@ export function MeetingsPage() {
                 };
             });
         } catch {
-            failureToast.show("Couldn't archive the meeting. Try again.");
+            failureToast.show("Couldn't delete the meeting. Try again.");
         } finally {
-            pendingArchiveIds.current.delete(meeting.id);
+            pendingDeleteIds.current.delete(meeting.id);
         }
     }
 
@@ -275,23 +273,23 @@ export function MeetingsPage() {
                                 <Button
                                     ref={(button) => {
                                         if (button) {
-                                            archiveButtonRefs.current.set(
+                                            deleteButtonRefs.current.set(
                                                 meeting.id,
                                                 button,
                                             );
                                         } else {
-                                            archiveButtonRefs.current.delete(
+                                            deleteButtonRefs.current.delete(
                                                 meeting.id,
                                             );
                                         }
                                     }}
                                     variant="ghost"
                                     size="icon-sm"
-                                    aria-label={`Archive "${displayName(meeting.name)}"`}
+                                    aria-label={`Delete "${displayName(meeting.name)}"`}
                                     className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
-                                    onClick={() => handleArchive(meeting)}
+                                    onClick={() => handleDelete(meeting)}
                                 >
-                                    <ArchiveIcon />
+                                    <Trash2Icon />
                                 </Button>
                             </li>
                         ))}

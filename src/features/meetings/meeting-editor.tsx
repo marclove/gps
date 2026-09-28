@@ -1,4 +1,4 @@
-import { ArchiveIcon } from "lucide-react";
+import { Trash2Icon } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { MarkdownEditor } from "@/components/markdown-editor/markdown-editor";
@@ -19,7 +19,7 @@ import {
 import { ActionItemsPanel } from "@/features/tasks/action-items-panel";
 import { MeetingDetailsSidebar } from "./meeting-details-sidebar";
 import type { MeetingsPageState } from "./meetings-page";
-import { useArchive } from "@/components/use-archive";
+import { useDelete } from "@/components/use-delete";
 import { MeetingInitiativeSelect } from "./meeting-initiative-select";
 
 /** Matches a complete calendar date in the `YYYY-MM-DD` format that the backend accepts. */
@@ -27,7 +27,7 @@ const COMPLETE_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 /**
  * The editor for one meeting: its name and its notes at the left, and a sidebar with
- * its date, its initiative, the Archive button, and its action items at the right.
+ * its date, its initiative, the Delete button, and its action items at the right.
  * Changes are saved automatically. If `isNew` is true, the name field gets the focus
  * and its text is selected.
  */
@@ -51,8 +51,8 @@ export function MeetingEditor({
     const nameInput = useRef<HTMLInputElement>(null);
     const dateId = useId();
     const navigate = useNavigate();
-    const { archive: archiveInProvider } = useArchive();
-    const [archiving, setArchiving] = useState(false);
+    const { deleteItem: deleteInProvider } = useDelete();
+    const [deleting, setDeleting] = useState(false);
     const failureToast = useFailureToast();
 
     useEffect(() => {
@@ -67,10 +67,10 @@ export function MeetingEditor({
         [],
     );
 
-    async function archive() {
-        setArchiving(true);
+    async function handleDelete() {
+        setDeleting(true);
         try {
-            await archiveInProvider({
+            await deleteInProvider({
                 kind: "meeting",
                 id: meeting.id,
                 name: draft.name,
@@ -79,8 +79,8 @@ export function MeetingEditor({
             const state: MeetingsPageState = { focusNewNote: true };
             navigate("/meetings", { state });
         } catch {
-            failureToast.show("Couldn't archive the meeting. Try again.");
-            setArchiving(false);
+            failureToast.show("Couldn't delete the meeting. Try again.");
+            setDeleting(false);
         }
     }
 
@@ -162,11 +162,11 @@ export function MeetingEditor({
                     <Button
                         variant="outline"
                         size="sm"
-                        disabled={archiving}
-                        onClick={archive}
+                        disabled={deleting}
+                        onClick={handleDelete}
                     >
-                        <ArchiveIcon />
-                        Archive
+                        <Trash2Icon />
+                        Delete
                     </Button>
                 }
                 lists={<ActionItemsPanel meetingId={meeting.id} />}

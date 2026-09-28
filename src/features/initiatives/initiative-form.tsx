@@ -236,7 +236,7 @@ export function InitiativeForm({
         setDeleting(true);
         try {
             // A change that is not saved would be saved again when the form unmounts, and
-            // could rename the initiative after the archive toast shows its name.
+            // could rename the initiative after the delete toast shows its name.
             if (!(await flush())) {
                 failureToast.show("Couldn't delete the initiative. Try again.");
                 return;

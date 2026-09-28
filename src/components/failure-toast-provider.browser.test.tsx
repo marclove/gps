@@ -7,7 +7,7 @@ import { FailureToastProvider } from "./failure-toast-provider";
 import { useFailureToast } from "./use-failure-toast";
 
 // Checks that the user can read both toasts and reach both Close buttons when an
-// archive toast and a failure toast are open together. This depends on the layout of
+// delete toast and a failure toast are open together. This depends on the layout of
 // the stacked toasts, so it runs in WebKit with the application's CSS.
 
 type Api = {
@@ -57,29 +57,29 @@ function isOnTop(element: Element): boolean {
 /** How long to wait for the toasts to finish moving, in milliseconds. */
 const SETTLE_TIMEOUT = { timeout: 4000 };
 
-const ARCHIVED = 'Archived "Standup".';
-const FAILURE = "Couldn't archive the meeting. Try again.";
+const DELETED = 'Deleted "Standup".';
+const FAILURE = "Couldn't delete the meeting. Try again.";
 
 beforeEach(async () => {
     await page.viewport(1200, 800);
 });
 
 describe("Stacked toasts", () => {
-    it("shows both messages and both Close buttons when an archive toast and a failure toast are open", async () => {
+    it("shows both messages and both Close buttons when a delete toast and a failure toast are open", async () => {
         const api = renderHarness();
 
         act(() => {
             api().manager.add({
-                title: ARCHIVED,
+                title: DELETED,
                 timeout: 0,
                 actionProps: { children: "Undo" },
             });
         });
-        await within(notifications()).findByText(ARCHIVED);
+        await within(notifications()).findByText(DELETED);
         act(() => api().failure.show(FAILURE));
         await within(notifications()).findByText(FAILURE);
 
-        const archived = within(notifications()).getByText(ARCHIVED);
+        const deleted = within(notifications()).getByText(DELETED);
         const failure = within(notifications()).getByText(FAILURE);
         const closeOf = (text: HTMLElement) =>
             within(
@@ -89,17 +89,17 @@ describe("Stacked toasts", () => {
         await expect
             .poll(
                 () => ({
-                    archived: isOnTop(archived),
+                    deleted: isOnTop(deleted),
                     failure: isOnTop(failure),
-                    archivedClose: isOnTop(closeOf(archived)),
+                    deletedClose: isOnTop(closeOf(deleted)),
                     failureClose: isOnTop(closeOf(failure)),
                 }),
                 SETTLE_TIMEOUT,
             )
             .toEqual({
-                archived: true,
+                deleted: true,
                 failure: true,
-                archivedClose: true,
+                deletedClose: true,
                 failureClose: true,
             });
 
@@ -111,17 +111,17 @@ describe("Stacked toasts", () => {
                 ).not.toBeInTheDocument(),
             SETTLE_TIMEOUT,
         );
-        const archivedClose = closeOf(
-            within(notifications()).getByText(ARCHIVED),
+        const deletedClose = closeOf(
+            within(notifications()).getByText(DELETED),
         );
         await expect
-            .poll(() => isOnTop(archivedClose), SETTLE_TIMEOUT)
+            .poll(() => isOnTop(deletedClose), SETTLE_TIMEOUT)
             .toBe(true);
-        await userEvent.click(archivedClose);
+        await userEvent.click(deletedClose);
         await waitFor(
             () =>
                 expect(
-                    within(notifications()).queryByText(ARCHIVED),
+                    within(notifications()).queryByText(DELETED),
                 ).not.toBeInTheDocument(),
             SETTLE_TIMEOUT,
         );

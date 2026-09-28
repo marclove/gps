@@ -11,11 +11,11 @@ import { MemoryRouter, Route, Routes } from "react-router";
 import { FailureToastProvider } from "@/components/failure-toast-provider";
 import { Toaster } from "@/components/toaster";
 import { toast } from "@/components/ui/toast";
-import { ArchiveProvider } from "@/components/archive-provider";
+import { DeleteProvider } from "@/components/delete-provider";
 import type { Meeting } from "@/lib/meetings";
 import { MeetingEditorPage } from "./meeting-editor-page";
 
-/** Shows the Meetings list route the editor page opens after an archive. */
+/** Shows the Meetings list route the editor page opens after a delete. */
 function MeetingsListRoute() {
     return <p>Meetings list</p>;
 }
@@ -65,7 +65,7 @@ function renderPage(path: string) {
         <MemoryRouter initialEntries={[path]}>
             <Toaster toastManager={toast}>
                 <FailureToastProvider>
-                    <ArchiveProvider>
+                    <DeleteProvider>
                         <Routes>
                             <Route
                                 path="/meetings"
@@ -76,7 +76,7 @@ function renderPage(path: string) {
                                 element={<MeetingEditorPage />}
                             />
                         </Routes>
-                    </ArchiveProvider>
+                    </DeleteProvider>
                 </FailureToastProvider>
             </Toaster>
         </MemoryRouter>,
@@ -229,37 +229,37 @@ describe("MeetingEditorPage", () => {
         expect(await screen.findByText("Saved")).toBeInTheDocument();
     });
 
-    it("archives once when Archive is clicked twice quickly", async () => {
-        let resolveArchive: (() => void) | undefined;
+    it("deletes once when Delete is clicked twice quickly", async () => {
+        let resolveDelete: (() => void) | undefined;
         serveMeeting({
-            archive_meeting: () =>
+            delete_meeting: () =>
                 new Promise<void>((resolve) => {
-                    resolveArchive = resolve;
+                    resolveDelete = resolve;
                 }),
         });
         const user = userEvent.setup();
         renderPage("/meetings/42");
-        const archiveButton = await screen.findByRole("button", {
-            name: "Archive",
+        const deleteButton = await screen.findByRole("button", {
+            name: "Delete",
         });
 
-        await user.click(archiveButton);
-        await user.click(archiveButton);
+        await user.click(deleteButton);
+        await user.click(deleteButton);
 
         expect(
             invoke.mock.calls.filter(
-                ([command]) => command === "archive_meeting",
+                ([command]) => command === "delete_meeting",
             ),
         ).toHaveLength(1);
-        expect(invoke).toHaveBeenCalledWith("archive_meeting", { id: 42 });
+        expect(invoke).toHaveBeenCalledWith("delete_meeting", { id: 42 });
 
-        resolveArchive?.();
+        resolveDelete?.();
 
         expect(await screen.findByText("Meetings list")).toBeInTheDocument();
     });
 
     it("shows a toast naming the meeting with the name that the user typed", async () => {
-        serveMeeting({ archive_meeting: () => null });
+        serveMeeting({ delete_meeting: () => null });
         const user = userEvent.setup();
         renderPage("/meetings/42");
 
@@ -267,15 +267,15 @@ describe("MeetingEditorPage", () => {
             await screen.findByRole("textbox", { name: "Meeting name" }),
             { target: { value: "Retro" } },
         );
-        await user.click(screen.getByRole("button", { name: "Archive" }));
+        await user.click(screen.getByRole("button", { name: "Delete" }));
 
         expect(await screen.findByText("Meetings list")).toBeInTheDocument();
         expect(
-            within(notifications()).getByText('Archived "Retro".'),
+            within(notifications()).getByText('Deleted "Retro".'),
         ).toBeInTheDocument();
     });
 
-    it("moves focus from the date to the initiative to Archive to the action items with Tab", async () => {
+    it("moves focus from the date to the initiative to Delete to the action items with Tab", async () => {
         serveMeeting();
         const user = userEvent.setup();
         renderPage("/meetings/42");
@@ -290,7 +290,7 @@ describe("MeetingEditorPage", () => {
         expect(initiative).toHaveFocus();
 
         await user.tab();
-        expect(screen.getByRole("button", { name: "Archive" })).toHaveFocus();
+        expect(screen.getByRole("button", { name: "Delete" })).toHaveFocus();
 
         await user.tab();
         expect(

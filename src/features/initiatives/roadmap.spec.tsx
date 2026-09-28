@@ -5,7 +5,8 @@ import App from "@/App";
 import { FakeRoadmapBackend } from "@/test/fake-roadmap-backend";
 
 // Feature spec for the section, the roadmap, and creating an initiative in
-// docs/specs/0006-managing-initiatives.md.
+// docs/specs/0006-managing-initiatives.md, with the changes of
+// docs/specs/0007-deleted-rows-and-ranked-order.md.
 // The Tauri backend is replaced by an in-memory fake of the meeting and initiative commands.
 
 const invoke = vi.hoisted(() => vi.fn());
@@ -126,6 +127,17 @@ describe("Roadmap", () => {
         expect(cardTexts("Done")).toEqual(["New win", "Old win"]);
     });
 
+    it("orders Now, Next, and Later by rank as text, not by identifier or length (spec 0007)", async () => {
+        backend.seedInitiative({ name: "Third", horizon: "now", rank: "c" });
+        backend.seedInitiative({ name: "First", horizon: "now", rank: "8" });
+        backend.seedInitiative({ name: "Second", horizon: "now", rank: "81f" });
+        await openInitiativesPage();
+
+        await waitFor(() =>
+            expect(cardTexts("Now")).toEqual(["First", "Second", "Third"]),
+        );
+    });
+
     it("says No initiatives in an empty column", async () => {
         backend.seedInitiative({ name: "Launch", horizon: "now" });
         await openInitiativesPage();
@@ -146,19 +158,19 @@ describe("Roadmap", () => {
         backend.seedInitiative({
             name: "Gone",
             horizon: "now",
-            archived: true,
+            deleted: true,
         });
         backend.seedInitiative({
             name: "Gone too",
             completed: true,
-            archived: true,
+            deleted: true,
         });
         await openInitiativesPage();
 
         await waitFor(() => expect(cardTexts("Now")).toEqual(["Launch"]));
         expect(cardTexts("Done")).toEqual([]);
         expect(invoke).toHaveBeenCalledWith("list_initiatives", {
-            includeArchived: false,
+            includeDeleted: false,
         });
     });
 

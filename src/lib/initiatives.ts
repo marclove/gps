@@ -30,8 +30,12 @@ export type Initiative = {
     raciRole: RaciRole | null;
     /** The column of the initiative when it is not completed. */
     horizon: Horizon;
-    /** The position of the initiative in its column, counted from 0. */
-    position: number;
+    /**
+     * The key that gives the place of the initiative in its column. Initiatives sort from the
+     * top in the order of their ranks. Compare ranks only with `compareRanks`. A completed or
+     * deleted initiative keeps the rank that it had last.
+     */
+    rank: string;
     /** The time when the initiative was created, as an RFC 3339 timestamp in UTC. */
     createdAt: string;
     /** The time when the initiative was last changed, as an RFC 3339 timestamp in UTC. */
@@ -39,8 +43,18 @@ export type Initiative = {
     /** The time when the initiative was completed, as an RFC 3339 timestamp in UTC, or `null` if it is not completed. */
     completedAt: string | null;
     /** The time when the initiative was deleted, as an RFC 3339 timestamp in UTC, or `null` if it is not deleted. */
-    archivedAt: string | null;
+    deletedAt: string | null;
 };
+
+/**
+ * Compares two ranks by the codes of their characters, and not by the rules of a language.
+ * Returns -1 if `a` sorts first, 1 if `b` sorts first, and 0 if they are equal.
+ */
+export function compareRanks(a: string, b: string): number {
+    if (a < b) return -1;
+    if (a > b) return 1;
+    return 0;
+}
 
 /** The part of an initiative that the roadmap shows. */
 export type InitiativeSummary = Omit<Initiative, "description">;
@@ -112,7 +126,7 @@ function byLabel(a: { label: string }, b: { label: string }): number {
 
 /**
  * Returns the groups of initiative choices for the select box of a meeting, without the empty
- * choice. The groups are "Now", "Next", and "Later", sorted by position and then by
+ * choice. The groups are "Now", "Next", and "Later", sorted by rank and then by
  * identifier, then "Completed", sorted by the shown name without regard to case. Deleted
  * initiatives are not included. Empty groups are not included.
  */
@@ -120,8 +134,8 @@ export function initiativeChoiceGroups(
     all: InitiativeSummary[],
 ): ChoiceGroup[] {
     const open = all
-        .filter((i) => i.archivedAt === null && i.completedAt === null)
-        .sort((a, b) => a.position - b.position || a.id - b.id);
+        .filter((i) => i.deletedAt === null && i.completedAt === null)
+        .sort((a, b) => compareRanks(a.rank, b.rank) || a.id - b.id);
     const groups: ChoiceGroup[] = COLUMNS.filter(
         (column) => column.id !== "done",
     ).map((column) => ({
@@ -131,7 +145,7 @@ export function initiativeChoiceGroups(
     groups.push({
         label: "Completed",
         choices: all
-            .filter((i) => i.archivedAt === null && i.completedAt !== null)
+            .filter((i) => i.deletedAt === null && i.completedAt !== null)
             .map(choice)
             .sort(byLabel),
     });
@@ -145,15 +159,15 @@ export function initiativeChoiceGroups(
 export function deletedInitiativeChoices(
     all: InitiativeSummary[],
 ): InitiativeChoice[] {
-    return all.filter((i) => i.archivedAt !== null).map(choice);
+    return all.filter((i) => i.deletedAt !== null).map(choice);
 }
 
 /** Returns summaries of initiatives. Deleted initiatives are included only when asked. */
 export function listInitiatives(options: {
-    includeArchived: boolean;
+    includeDeleted: boolean;
 }): Promise<InitiativeSummary[]> {
     return invoke<InitiativeSummary[]>("list_initiatives", {
-        includeArchived: options.includeArchived,
+        includeDeleted: options.includeDeleted,
     });
 }
 
@@ -196,7 +210,7 @@ export function updateInitiative(
 }
 
 /**
- * Moves an initiative to a column. The index is the position that the initiative gets in that
+ * Moves an initiative to a column. The index is the place that the initiative gets in that
  * column, counted without the initiative. Moving to "done" completes the initiative, and
  * moving out of "done" reopens it.
  */
@@ -209,14 +223,14 @@ export function moveInitiative(
 }
 
 /** Deletes an initiative, so it no longer appears on the roadmap. The user can restore it. */
-export function archiveInitiative(id: number): Promise<void> {
-    return invoke<void>("archive_initiative", { id });
+export function deleteInitiative(id: number): Promise<void> {
+    return invoke<void>("delete_initiative", { id });
 }
 
 /**
  * Restores a deleted initiative, so it appears on the roadmap again. The result is
  * "nameTaken" if another initiative that is not deleted has the same name.
  */
-export function unarchiveInitiative(id: number): Promise<RestoreResult> {
-    return invoke<RestoreResult>("unarchive_initiative", { id });
+export function restoreInitiative(id: number): Promise<RestoreResult> {
+    return invoke<RestoreResult>("restore_initiative", { id });
 }

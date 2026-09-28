@@ -83,12 +83,12 @@ impl From<rusqlite::Error> for Error {
 /// The SQL expression for the current time, as an RFC 3339 timestamp in UTC with milliseconds.
 pub(crate) const NOW: &str = "strftime('%Y-%m-%dT%H:%M:%fZ', 'now')";
 
-/// Returns summaries of the meetings that are not archived. The newest date is first. For
+/// Returns summaries of the meetings that are not deleted. The newest date is first. For
 /// meetings with the same date, the meeting that was created last is first.
 pub fn list(connection: &Connection) -> Result<Vec<MeetingSummary>, Error> {
     let mut statement = connection.prepare(
         "SELECT id, name, date, updated_at FROM meetings
-         WHERE archived_at IS NULL
+         WHERE deleted_at IS NULL
          ORDER BY date DESC, created_at DESC, id DESC",
     )?;
     let summaries = statement
@@ -183,12 +183,13 @@ pub fn set_initiative(
     get(connection, id)?.ok_or(Error::NotFound(id))
 }
 
-/// Hides a meeting from the list of meetings without deleting it. Records the current time as
-/// the time the meeting was archived. Archiving a meeting that is already archived keeps the
-/// time that was recorded first, and does not change the name, date, notes, or `updated_at`.
-pub fn archive(connection: &Connection, id: i64) -> Result<(), Error> {
+/// Marks a meeting as deleted, so that the list of meetings does not show it. The row stays in
+/// the database. Records the current time as the time the meeting was deleted. Deleting a
+/// meeting that is already deleted keeps the time that was recorded first, and does not change
+/// the name, date, notes, or `updated_at`.
+pub fn delete(connection: &Connection, id: i64) -> Result<(), Error> {
     let changed = connection.execute(
-        &format!("UPDATE meetings SET archived_at = coalesce(archived_at, {NOW}) WHERE id = ?1"),
+        &format!("UPDATE meetings SET deleted_at = coalesce(deleted_at, {NOW}) WHERE id = ?1"),
         params![id],
     )?;
     if changed == 0 {
@@ -197,10 +198,10 @@ pub fn archive(connection: &Connection, id: i64) -> Result<(), Error> {
     Ok(())
 }
 
-/// Makes an archived meeting appear in the list of meetings again.
-pub fn unarchive(connection: &Connection, id: i64) -> Result<(), Error> {
+/// Makes a deleted meeting appear in the list of meetings again.
+pub fn restore(connection: &Connection, id: i64) -> Result<(), Error> {
     let changed = connection.execute(
-        "UPDATE meetings SET archived_at = NULL WHERE id = ?1",
+        "UPDATE meetings SET deleted_at = NULL WHERE id = ?1",
         params![id],
     )?;
     if changed == 0 {
@@ -324,87 +325,84 @@ mod tests {
     }
 
     #[test]
-    fn list_leaves_out_archived_meetings() {
+    fn list_leaves_out_deleted_meetings() {
         let connection = open_in_memory();
         let kept = create(&connection, "2026-09-18").unwrap();
-        let archived = create(&connection, "2026-09-24").unwrap();
+        let deleted = create(&connection, "2026-09-24").unwrap();
 
-        archive(&connection, archived.id).unwrap();
+        delete(&connection, deleted.id).unwrap();
 
         let ids: Vec<i64> = list(&connection).unwrap().iter().map(|m| m.id).collect();
         assert_eq!(ids, vec![kept.id]);
     }
 
     #[test]
-    fn archive_keeps_name_date_notes_and_updated_at() {
+    fn delete_keeps_name_date_notes_and_updated_at() {
         let connection = open_in_memory();
         let created = create(&connection, "2026-09-24").unwrap();
         let notes = "## Agenda\n\n- [ ] Send notes to team\n";
         let updated = update(&connection, created.id, "Weekly sync", "2026-09-25", notes).unwrap();
 
-        archive(&connection, created.id).unwrap();
+        delete(&connection, created.id).unwrap();
 
         assert_eq!(get(&connection, created.id).unwrap(), Some(updated));
     }
 
     #[test]
-    fn archive_twice_keeps_the_first_time() {
+    fn delete_twice_keeps_the_first_time() {
         let connection = open_in_memory();
         let created = create(&connection, "2026-09-24").unwrap();
 
-        archive(&connection, created.id).unwrap();
+        delete(&connection, created.id).unwrap();
         connection
             .execute(
-                "UPDATE meetings SET archived_at = '2026-01-01T00:00:00.000Z' WHERE id = ?1",
+                "UPDATE meetings SET deleted_at = '2026-01-01T00:00:00.000Z' WHERE id = ?1",
                 params![created.id],
             )
             .unwrap();
-        archive(&connection, created.id).unwrap();
+        delete(&connection, created.id).unwrap();
 
-        let archived_at: String = connection
+        let deleted_at: String = connection
             .query_row(
-                "SELECT archived_at FROM meetings WHERE id = ?1",
+                "SELECT deleted_at FROM meetings WHERE id = ?1",
                 params![created.id],
                 |row| row.get(0),
             )
             .unwrap();
-        assert_eq!(archived_at, "2026-01-01T00:00:00.000Z");
+        assert_eq!(deleted_at, "2026-01-01T00:00:00.000Z");
     }
 
     #[test]
-    fn archive_reports_unknown_id() {
+    fn delete_reports_unknown_id() {
         let connection = open_in_memory();
-        assert!(matches!(archive(&connection, 42), Err(Error::NotFound(42))));
+        assert!(matches!(delete(&connection, 42), Err(Error::NotFound(42))));
     }
 
     #[test]
-    fn unarchive_returns_the_meeting_to_the_list() {
+    fn restore_returns_the_meeting_to_the_list() {
         let connection = open_in_memory();
         let kickoff = create(&connection, "2026-09-18").unwrap();
         let weekly_sync = create(&connection, "2026-09-24").unwrap();
 
-        archive(&connection, weekly_sync.id).unwrap();
-        unarchive(&connection, weekly_sync.id).unwrap();
+        delete(&connection, weekly_sync.id).unwrap();
+        restore(&connection, weekly_sync.id).unwrap();
 
         let ids: Vec<i64> = list(&connection).unwrap().iter().map(|m| m.id).collect();
         assert_eq!(ids, vec![weekly_sync.id, kickoff.id]);
     }
 
     #[test]
-    fn unarchive_reports_unknown_id() {
+    fn restore_reports_unknown_id() {
         let connection = open_in_memory();
-        assert!(matches!(
-            unarchive(&connection, 42),
-            Err(Error::NotFound(42))
-        ));
+        assert!(matches!(restore(&connection, 42), Err(Error::NotFound(42))));
     }
 
     #[test]
-    fn update_changes_an_archived_meeting() {
+    fn update_changes_a_deleted_meeting() {
         let connection = open_in_memory();
         let created = create(&connection, "2026-09-24").unwrap();
 
-        archive(&connection, created.id).unwrap();
+        delete(&connection, created.id).unwrap();
         let updated = update(
             &connection,
             created.id,
@@ -467,7 +465,7 @@ mod tests {
     fn set_initiative_accepts_deleted_and_completed_initiatives() {
         let connection = open_in_memory();
         let deleted = new_initiative(&connection);
-        initiatives::archive(&connection, deleted.id).unwrap();
+        initiatives::delete(&connection, deleted.id).unwrap();
         let completed = new_initiative(&connection);
         initiatives::move_to(&connection, completed.id, "done", 0).unwrap();
         let meeting = create(&connection, "2026-09-24").unwrap();

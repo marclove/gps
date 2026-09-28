@@ -3,8 +3,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import App from "@/App";
 
-// Feature spec for docs/specs/0004-archive-meeting-notes.md, for the visibility of
-// the archive button and the position of the archive toast, which depend on the
+// Feature spec for docs/specs/0004-archive-meeting-notes.md, with the words of
+// docs/specs/0007-deleted-rows-and-ranked-order.md, for the visibility of
+// the delete button and the position of the delete toast, which depend on the
 // application's CSS. It runs in WebKit at the default window size of 1200 by 800
 // pixels. The Tauri backend is replaced by a fake with two meetings.
 
@@ -32,7 +33,7 @@ beforeEach(async () => {
                 },
             ];
         }
-        if (command === "archive_meeting") return null;
+        if (command === "delete_meeting") return null;
         throw `unexpected command ${command}`;
     });
 });
@@ -43,27 +44,27 @@ function opacity(element: Element): number {
 
 async function renderApp() {
     render(<App />);
-    return screen.findByRole("button", { name: 'Archive "Weekly sync"' });
+    return screen.findByRole("button", { name: 'Delete "Weekly sync"' });
 }
 
-describe("Archive button visibility", () => {
+describe("Delete button visibility", () => {
     it("is hidden until the pointer is over the meeting's row", async () => {
-        const archive = await renderApp();
-        const other = screen.getByRole("button", { name: 'Archive "Kickoff"' });
+        const deleteButton = await renderApp();
+        const other = screen.getByRole("button", { name: 'Delete "Kickoff"' });
 
-        expect(opacity(archive)).toBe(0);
+        expect(opacity(deleteButton)).toBe(0);
 
         await userEvent.hover(
             screen.getByRole("link", { name: /Weekly sync/ }),
         );
 
-        await expect.poll(() => opacity(archive)).toBe(1);
+        await expect.poll(() => opacity(deleteButton)).toBe(1);
         expect(opacity(other)).toBe(0);
     });
 
     it("is visible when it has keyboard focus", async () => {
-        const archive = await renderApp();
-        const other = screen.getByRole("button", { name: 'Archive "Kickoff"' });
+        const deleteButton = await renderApp();
+        const other = screen.getByRole("button", { name: 'Delete "Kickoff"' });
         // Move the pointer off the row first. Otherwise a leftover hover from an
         // earlier test could keep the row's hover style active and make this test
         // pass even if focus-visible:opacity-100 were broken.
@@ -74,8 +75,8 @@ describe("Archive button visibility", () => {
         screen.getByRole("link", { name: /Weekly sync/ }).focus();
         await userEvent.tab();
 
-        expect(archive).toHaveFocus();
-        await expect.poll(() => opacity(archive)).toBe(1);
+        expect(deleteButton).toHaveFocus();
+        await expect.poll(() => opacity(deleteButton)).toBe(1);
         expect(opacity(other)).toBe(0);
     });
 });
@@ -89,12 +90,12 @@ const TOAST_EDGE_DISTANCE = 32;
  */
 const POSITION_TIMEOUT = { timeout: 10000 };
 
-describe("Archive toast position", () => {
+describe("Delete toast position", () => {
     it("is at the bottom right of the window", async () => {
-        const archive = await renderApp();
+        const deleteButton = await renderApp();
 
-        await userEvent.click(archive);
-        const text = await screen.findByText('Archived "Weekly sync".');
+        await userEvent.click(deleteButton);
+        const text = await screen.findByText('Deleted "Weekly sync".');
         const toast = text.closest("[data-slot='toast']") ?? text;
 
         // Polls until the toast is fully settled at the bottom right, rather than
@@ -122,10 +123,10 @@ describe("Archive toast position", () => {
     });
 
     it("has the text at the left and Undo and Close at the right", async () => {
-        const archive = await renderApp();
+        const deleteButton = await renderApp();
 
-        await userEvent.click(archive);
-        const text = await screen.findByText('Archived "Weekly sync".');
+        await userEvent.click(deleteButton);
+        const text = await screen.findByText('Deleted "Weekly sync".');
         const toast = text.closest("[data-slot='toast']");
         if (!toast) throw new Error("The text is not in a toast");
         const undo = within(toast as HTMLElement).getByRole("button", {

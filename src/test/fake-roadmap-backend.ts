@@ -1,9 +1,43 @@
 /**
  * An in-memory fake of the backend commands for meetings and initiatives, for the
  * feature specs of the roadmap. It keeps the order of the initiatives in each column
- * in the same way as the real backend: the positions of the initiatives on the board
- * in each column are 0, 1, 2, and so on.
+ * in the same way as the real backend: each initiative has a rank, a text key, and a
+ * change gives only the changed initiative a new rank, between the ranks of its new
+ * neighbors. The keys are not the keys that the real backend makes.
  */
+
+const DIGITS = "0123456789abcdef";
+
+/**
+ * Returns a key that sorts after `a` and before `b`. `a` is empty for the start, and `b`
+ * is `null` for the end. No key ends with "0", so there is always room before a key.
+ */
+function midpoint(a: string, b: string | null): string {
+    if (b !== null) {
+        let shared = 0;
+        while ((a[shared] ?? "0") === b[shared]) shared++;
+        if (shared > 0) {
+            return (
+                b.slice(0, shared) + midpoint(a.slice(shared), b.slice(shared))
+            );
+        }
+    }
+    const low = a === "" ? 0 : DIGITS.indexOf(a[0]);
+    const high = b === null ? DIGITS.length : DIGITS.indexOf(b[0]);
+    if (high - low > 1) return DIGITS[Math.round((low + high) / 2)];
+    if (b !== null && b.length > 1) return b.slice(0, 1);
+    return DIGITS[low] + midpoint(a.slice(1), null);
+}
+
+/** Returns a key between `before` and `after`. Either can be `null`. */
+function keyBetween(before: string | null, after: string | null): string {
+    return midpoint(before ?? "", after);
+}
+
+/** Compares ranks as text, by the codes of the characters, as the frontend must. */
+function byRank(a: { rank: string }, b: { rank: string }): number {
+    return a.rank < b.rank ? -1 : a.rank > b.rank ? 1 : 0;
+}
 
 export type Horizon = "now" | "next" | "later";
 export type RaciRole = "responsible" | "accountable" | "consulted" | "informed";
@@ -14,11 +48,11 @@ export type StoredInitiative = {
     description: string;
     raciRole: RaciRole | null;
     horizon: Horizon;
-    position: number;
+    rank: string;
     createdAt: string;
     updatedAt: string;
     completedAt: string | null;
-    archivedAt: string | null;
+    deletedAt: string | null;
 };
 
 export type StoredMeeting = {
@@ -37,7 +71,9 @@ export type SeedInitiative = {
     raciRole?: RaciRole | null;
     description?: string;
     completed?: boolean;
-    archived?: boolean;
+    deleted?: boolean;
+    /** The rank. By default, a rank after every initiative in the column. */
+    rank?: string;
 };
 
 /** The names of the commands that the fake can be told to fail. */
@@ -48,10 +84,10 @@ export type FailingCommand =
     | "rename_initiative"
     | "update_initiative"
     | "move_initiative"
-    | "archive_initiative"
-    | "unarchive_initiative"
+    | "delete_initiative"
+    | "restore_initiative"
     | "set_meeting_initiative"
-    | "archive_meeting";
+    | "delete_meeting";
 
 /** Returns the initiative as `list_initiatives` returns it, without its description. */
 function summary(initiative: StoredInitiative) {
@@ -60,22 +96,22 @@ function summary(initiative: StoredInitiative) {
         name,
         raciRole,
         horizon,
-        position,
+        rank,
         createdAt,
         updatedAt,
         completedAt,
-        archivedAt,
+        deletedAt,
     } = initiative;
     return {
         id,
         name,
         raciRole,
         horizon,
-        position,
+        rank,
         createdAt,
         updatedAt,
         completedAt,
-        archivedAt,
+        deletedAt,
     };
 }
 
@@ -100,39 +136,51 @@ export class FakeRoadmapBackend {
                 (i) =>
                     i.horizon === horizon &&
                     i.completedAt === null &&
-                    i.archivedAt === null,
+                    i.deletedAt === null,
             )
-            .sort((a, b) => a.position - b.position);
+            .sort(byRank);
     }
 
-    /** Gives the initiatives on the board in the column the positions 0, 1, 2, and so on. */
-    private renumber(horizon: Horizon, order: StoredInitiative[]) {
-        order.forEach((initiative, index) => {
-            initiative.horizon = horizon;
-            initiative.position = index;
-        });
-    }
-
+    /**
+     * Puts the initiative in the column at the index, counted without the initiative, by
+     * giving it a rank between the ranks of its new neighbors.
+     */
     private insert(
         initiative: StoredInitiative,
         horizon: Horizon,
         index: number,
     ) {
         const column = this.onBoard(horizon).filter((i) => i !== initiative);
-        column.splice(
-            Math.min(Math.max(index, 0), column.length),
-            0,
-            initiative,
+        const at = Math.min(Math.max(index, 0), column.length);
+        initiative.horizon = horizon;
+        initiative.rank = keyBetween(
+            column[at - 1]?.rank ?? null,
+            column[at]?.rank ?? null,
         );
-        this.renumber(horizon, column);
     }
 
-    /** Closes the gap that the initiative leaves in its column. It keeps its own position. */
-    private remove(initiative: StoredInitiative) {
-        this.renumber(
-            initiative.horizon,
-            this.onBoard(initiative.horizon).filter((i) => i !== initiative),
+    /**
+     * Gives a restored initiative that is not completed a new rank if an initiative on the
+     * board in its column has its rank: the new rank is directly after that initiative.
+     */
+    private keepPlace(initiative: StoredInitiative) {
+        const column = this.onBoard(initiative.horizon).filter(
+            (i) => i !== initiative,
         );
+        const holder = column.findIndex((i) => i.rank === initiative.rank);
+        if (holder === -1) return;
+        initiative.rank = keyBetween(
+            column[holder].rank,
+            column[holder + 1]?.rank ?? null,
+        );
+    }
+
+    /** The largest rank of all initiatives in the column, also completed and deleted ones. */
+    private lastRank(horizon: Horizon): string | null {
+        const ranks = this.initiatives
+            .filter((i) => i.horizon === horizon)
+            .sort(byRank);
+        return ranks[ranks.length - 1]?.rank ?? null;
     }
 
     seedInitiative(fields: SeedInitiative): StoredInitiative {
@@ -144,11 +192,11 @@ export class FakeRoadmapBackend {
             description: fields.description ?? "",
             raciRole: fields.raciRole ?? null,
             horizon,
-            position: this.onBoard(horizon).length,
+            rank: fields.rank ?? keyBetween(this.lastRank(horizon), null),
             createdAt: now,
             updatedAt: now,
             completedAt: fields.completed ? now : null,
-            archivedAt: fields.archived ? now : null,
+            deletedAt: fields.deleted ? now : null,
         };
         this.initiatives.push(initiative);
         return initiative;
@@ -180,7 +228,7 @@ export class FakeRoadmapBackend {
     /** The names of the completed initiatives that are not deleted, completed last first. */
     done(): string[] {
         return this.initiatives
-            .filter((i) => i.completedAt !== null && i.archivedAt === null)
+            .filter((i) => i.completedAt !== null && i.deletedAt === null)
             .sort((a, b) => b.completedAt!.localeCompare(a.completedAt!))
             .map((i) => i.name);
     }
@@ -202,7 +250,7 @@ export class FakeRoadmapBackend {
             this.initiatives.some(
                 (i) =>
                     i !== except &&
-                    i.archivedAt === null &&
+                    i.deletedAt === null &&
                     i.name.trim().toLowerCase() === key,
             )
         );
@@ -254,8 +302,8 @@ export class FakeRoadmapBackend {
                 });
                 return meeting;
             }
-            case "archive_meeting":
-            case "unarchive_meeting":
+            case "delete_meeting":
+            case "restore_meeting":
                 this.meeting(args.id);
                 return null;
             case "set_meeting_initiative": {
@@ -273,8 +321,8 @@ export class FakeRoadmapBackend {
                     .reverse()
                     .filter(
                         (i) =>
-                            args.includeArchived === true ||
-                            i.archivedAt === null,
+                            args.includeDeleted === true ||
+                            i.deletedAt === null,
                     )
                     .map((initiative) => summary(initiative));
             case "create_initiative": {
@@ -292,14 +340,16 @@ export class FakeRoadmapBackend {
                     description,
                     raciRole,
                     horizon: "later",
-                    position: 0,
+                    rank: keyBetween(
+                        null,
+                        this.onBoard("later")[0]?.rank ?? null,
+                    ),
                     createdAt: now,
                     updatedAt: now,
                     completedAt: null,
-                    archivedAt: null,
+                    deletedAt: null,
                 };
                 this.initiatives.push(initiative);
-                this.insert(initiative, "later", 0);
                 return { status: "created", initiative: { ...initiative } };
             }
             case "get_initiative": {
@@ -329,45 +379,32 @@ export class FakeRoadmapBackend {
             }
             case "move_initiative": {
                 const initiative = this.initiative(args.id);
-                if (initiative.archivedAt !== null) {
+                if (initiative.deletedAt !== null) {
                     throw `initiative ${String(args.id)} is deleted`;
                 }
                 const destination = args.destination as Horizon | "done";
                 if (destination === "done") {
-                    if (initiative.completedAt === null) {
-                        this.remove(initiative);
-                        initiative.completedAt = this.now();
-                    }
+                    initiative.completedAt ??= this.now();
                 } else {
-                    if (initiative.completedAt === null)
-                        this.remove(initiative);
                     initiative.completedAt = null;
                     this.insert(initiative, destination, args.index as number);
                 }
                 return null;
             }
-            case "archive_initiative": {
+            case "delete_initiative": {
                 const initiative = this.initiative(args.id);
-                if (initiative.archivedAt === null) {
-                    if (initiative.completedAt === null)
-                        this.remove(initiative);
-                    initiative.archivedAt = this.now();
-                }
+                initiative.deletedAt ??= this.now();
                 return null;
             }
-            case "unarchive_initiative": {
+            case "restore_initiative": {
                 const initiative = this.initiative(args.id);
-                if (initiative.archivedAt !== null) {
+                if (initiative.deletedAt !== null) {
                     if (this.nameTaken(initiative.name, initiative)) {
                         return { status: "nameTaken" };
                     }
-                    initiative.archivedAt = null;
+                    initiative.deletedAt = null;
                     if (initiative.completedAt === null) {
-                        this.insert(
-                            initiative,
-                            initiative.horizon,
-                            initiative.position,
-                        );
+                        this.keepPlace(initiative);
                     }
                 }
                 return { status: "restored" };

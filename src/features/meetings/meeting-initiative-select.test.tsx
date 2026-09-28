@@ -1,7 +1,7 @@
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { ArchiveProvider } from "@/components/archive-provider";
+import { DeleteProvider } from "@/components/delete-provider";
 import { FailureToastProvider } from "@/components/failure-toast-provider";
 import { Toaster } from "@/components/toaster";
 import { toast } from "@/components/ui/toast";
@@ -23,11 +23,11 @@ function summary(
         name,
         raciRole: null,
         horizon: "now",
-        position: id - 1,
+        rank: id.toString(16),
         createdAt: "2026-09-24T10:00:00.000Z",
         updatedAt: "2026-09-24T10:00:00.000Z",
         completedAt: null,
-        archivedAt: null,
+        deletedAt: null,
         ...fields,
     };
 }
@@ -52,12 +52,12 @@ function element(initiativeId: number | null = null) {
     return (
         <Toaster toastManager={toast}>
             <FailureToastProvider>
-                <ArchiveProvider>
+                <DeleteProvider>
                     <MeetingInitiativeSelect
                         meetingId={7}
                         initiativeId={initiativeId}
                     />
-                </ArchiveProvider>
+                </DeleteProvider>
             </FailureToastProvider>
         </Toaster>
     );
@@ -84,7 +84,7 @@ describe("MeetingInitiativeSelect", () => {
                           completedAt: "2026-09-25T10:00:00.000Z",
                       }),
                       summary(4, "Old", {
-                          archivedAt: "2026-09-25T10:00:00.000Z",
+                          deletedAt: "2026-09-25T10:00:00.000Z",
                       }),
                   ])
                 : Promise.reject(`unexpected command ${command}`),

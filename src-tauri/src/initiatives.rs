@@ -1,10 +1,11 @@
 //! Storage of initiatives, their place on the roadmap, and the role of the user in each one,
 //! in the application database.
 //!
-//! An initiative is on the board when it is neither completed nor deleted. In each of the
-//! columns `now`, `next`, and `later`, the initiatives on the board have the positions 0 to
-//! n - 1, with no gap and no repeated number. Every function that changes the order keeps this
-//! rule inside one transaction.
+//! An initiative is on the board when it is neither completed nor deleted. Each initiative has a
+//! rank, a text key from `crate::rank`. In each of the columns `now`, `next`, and `later`, the
+//! initiatives on the board sort from the top in the order of their ranks, compared as text, and
+//! no two of them have the same rank. A unique index in the database enforces this rule. A
+//! move, a complete, a delete, and a restore each change only one initiative.
 
 use std::fmt;
 
@@ -12,6 +13,7 @@ use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde::Serialize;
 
 use crate::meetings::NOW;
+use crate::rank;
 
 /// The roles of the RACI model that the user can have in an initiative, as they are stored.
 pub const RACI_ROLES: [&str; 4] = ["responsible", "accountable", "consulted", "informed"];
@@ -38,9 +40,10 @@ pub struct Initiative {
     /// The column of the initiative, one of `HORIZONS`. For a completed or deleted
     /// initiative, the column that it was in last.
     pub horizon: String,
-    /// The place in the column, from 0 at the top. For a completed or deleted initiative, the
-    /// place that it had last.
-    pub position: i64,
+    /// The key that gives the place in the column. Initiatives sort from the top in the order
+    /// of their ranks, compared as text. A completed or deleted initiative keeps the rank that
+    /// it had last.
+    pub rank: String,
     /// The time when the initiative was created, as an RFC 3339 timestamp in UTC.
     pub created_at: String,
     /// The time when the name, the description, or the role was last changed, as an RFC 3339
@@ -51,7 +54,7 @@ pub struct Initiative {
     pub completed_at: Option<String>,
     /// The time when the initiative was deleted, as an RFC 3339 timestamp in UTC, or `None`
     /// if it is not deleted.
-    pub archived_at: Option<String>,
+    pub deleted_at: Option<String>,
 }
 
 /// The part of an initiative that the roadmap shows. It does not include the description.
@@ -68,9 +71,10 @@ pub struct InitiativeSummary {
     /// The column of the initiative, one of `HORIZONS`. For a completed or deleted
     /// initiative, the column that it was in last.
     pub horizon: String,
-    /// The place in the column, from 0 at the top. For a completed or deleted initiative, the
-    /// place that it had last.
-    pub position: i64,
+    /// The key that gives the place in the column. Initiatives sort from the top in the order
+    /// of their ranks, compared as text. A completed or deleted initiative keeps the rank that
+    /// it had last.
+    pub rank: String,
     /// The time when the initiative was created, as an RFC 3339 timestamp in UTC.
     pub created_at: String,
     /// The time when the name, the description, or the role was last changed, as an RFC 3339
@@ -81,7 +85,7 @@ pub struct InitiativeSummary {
     pub completed_at: Option<String>,
     /// The time when the initiative was deleted, as an RFC 3339 timestamp in UTC, or `None`
     /// if it is not deleted.
-    pub archived_at: Option<String>,
+    pub deleted_at: Option<String>,
 }
 
 /// The result of a create.
@@ -139,10 +143,12 @@ pub enum Error {
     /// The destination of a move is not one of `HORIZONS` or `DONE`.
     InvalidDestination(String),
     /// The initiative is deleted, so the operation cannot change it.
-    Archived(i64),
+    Deleted(i64),
     /// The name is empty, the description is empty, and there is no role, so the user did not
     /// change the new initiative. Such an initiative is never saved.
     Unchanged,
+    /// A stored rank is not a valid rank key, so no rank can be made next to it.
+    Rank(rank::Error),
     /// The database reported an error.
     Database(rusqlite::Error),
 }
@@ -159,14 +165,21 @@ impl fmt::Display for Error {
                 f,
                 "invalid destination \"{destination}\": use now, next, later, or done"
             ),
-            Error::Archived(id) => write!(f, "initiative {id} is deleted"),
+            Error::Deleted(id) => write!(f, "initiative {id} is deleted"),
             Error::Unchanged => write!(f, "an initiative needs a name, a description, or a role"),
+            Error::Rank(error) => write!(f, "invalid rank: {error}"),
             Error::Database(error) => write!(f, "database error: {error}"),
         }
     }
 }
 
 impl std::error::Error for Error {}
+
+impl From<rank::Error> for Error {
+    fn from(error: rank::Error) -> Self {
+        Error::Rank(error)
+    }
+}
 
 impl From<rusqlite::Error> for Error {
     fn from(error: rusqlite::Error) -> Self {
@@ -175,34 +188,33 @@ impl From<rusqlite::Error> for Error {
 }
 
 /// The SQL condition for an initiative that is on the board.
-const ON_BOARD: &str = "completed_at IS NULL AND archived_at IS NULL";
+const ON_BOARD: &str = "completed_at IS NULL AND deleted_at IS NULL";
 
-/// Returns summaries of the initiatives. When `include_archived` is false, leaves out the
-/// deleted initiatives. The order is by column and position, but callers must not depend on
-/// it.
+/// Returns summaries of the initiatives. When `include_deleted` is false, leaves out the
+/// deleted initiatives. The order is by column and rank, but callers must not depend on it.
 pub fn list(
     connection: &Connection,
-    include_archived: bool,
+    include_deleted: bool,
 ) -> Result<Vec<InitiativeSummary>, Error> {
     let mut statement = connection.prepare(
-        "SELECT id, name, raci_role, horizon, position, created_at, updated_at, completed_at,
-                archived_at
+        "SELECT id, name, raci_role, horizon, rank, created_at, updated_at, completed_at,
+                deleted_at
          FROM initiatives
-         WHERE ?1 OR archived_at IS NULL
-         ORDER BY horizon, position, id",
+         WHERE ?1 OR deleted_at IS NULL
+         ORDER BY horizon, rank, id",
     )?;
     let summaries = statement
-        .query_map(params![include_archived], |row| {
+        .query_map(params![include_deleted], |row| {
             Ok(InitiativeSummary {
                 id: row.get(0)?,
                 name: row.get(1)?,
                 raci_role: row.get(2)?,
                 horizon: row.get(3)?,
-                position: row.get(4)?,
+                rank: row.get(4)?,
                 created_at: row.get(5)?,
                 updated_at: row.get(6)?,
                 completed_at: row.get(7)?,
-                archived_at: row.get(8)?,
+                deleted_at: row.get(8)?,
             })
         })?
         .collect::<Result<Vec<_>, _>>()?;
@@ -210,7 +222,8 @@ pub fn list(
 }
 
 /// Creates an initiative with the given name, description, and role, at the top of the column
-/// `later`. The other initiatives in `later` move down by one.
+/// `later`. It gets a rank before the ranks of all initiatives on the board in `later`. No other
+/// initiative changes.
 ///
 /// Removes the spaces at the start and the end of `name`. The role must be one of
 /// `RACI_ROLES`, or `None` for no role. If the name is empty, the description is empty, and
@@ -232,14 +245,15 @@ pub fn create(
     if name_is_taken(&transaction, None, name)? {
         return Ok(CreateOutcome::NameTaken);
     }
-    open_gap(&transaction, "later", 0)?;
+    let first = board_ranks(&transaction, "later", None)?.into_iter().next();
+    let rank = rank::between(None, first.as_deref())?;
     let id = transaction.query_row(
         &format!(
             "INSERT INTO initiatives
-                 (name, description, raci_role, horizon, position, created_at, updated_at)
-             VALUES (?1, ?2, ?3, 'later', 0, {NOW}, {NOW}) RETURNING id"
+                 (name, description, raci_role, horizon, rank, created_at, updated_at)
+             VALUES (?1, ?2, ?3, 'later', ?4, {NOW}, {NOW}) RETURNING id"
         ),
-        params![name, description, raci_role],
+        params![name, description, raci_role, rank],
         |row| row.get(0),
     )?;
     transaction.commit()?;
@@ -251,8 +265,8 @@ pub fn create(
 pub fn get(connection: &Connection, id: i64) -> Result<Option<Initiative>, Error> {
     let initiative = connection
         .query_row(
-            "SELECT id, name, description, raci_role, horizon, position, created_at, updated_at,
-                    completed_at, archived_at
+            "SELECT id, name, description, raci_role, horizon, rank, created_at, updated_at,
+                    completed_at, deleted_at
              FROM initiatives WHERE id = ?1",
             params![id],
             initiative_from_row,
@@ -283,7 +297,7 @@ pub fn rename(connection: &Connection, id: i64, name: &str) -> Result<RenameOutc
 
 /// Replaces the description and the role of an initiative, and sets the time it was last
 /// changed. The role must be one of `RACI_ROLES`, or `None` for no role. Does not change the
-/// name, the column, or the position. Returns the initiative as it is stored after the change.
+/// name, the column, or the rank. Returns the initiative as it is stored after the change.
 pub fn update(
     connection: &Connection,
     id: i64,
@@ -308,13 +322,15 @@ pub fn update(
 ///
 /// When `destination` is one of `HORIZONS`, the initiative goes to the place `index` in that
 /// column, counted without the initiative. An index below 0 puts it at the top, and an index
-/// larger than the column puts it at the end. A completed initiative is opened again.
+/// larger than the column puts it at the end. The initiative gets a rank between the ranks of
+/// the initiatives before and after that place. A completed initiative is opened again. If a
+/// neighbor has a rank that is not valid, returns `Error::Rank` and changes nothing.
 ///
-/// When `destination` is `DONE`, the initiative is completed. It keeps its column and
-/// position, and `index` is ignored. An initiative that is already completed keeps the time
-/// that was recorded first, and nothing else changes.
+/// When `destination` is `DONE`, the initiative is completed. It keeps its column and rank,
+/// and `index` is ignored. An initiative that is already completed keeps the time that was
+/// recorded first, and nothing else changes.
 ///
-/// Does not change `updated_at`. Refuses a deleted initiative.
+/// No other initiative changes. Does not change `updated_at`. Refuses a deleted initiative.
 pub fn move_to(
     connection: &Connection,
     id: i64,
@@ -325,15 +341,11 @@ pub fn move_to(
         return Err(Error::InvalidDestination(destination.to_owned()));
     }
     let initiative = get(connection, id)?.ok_or(Error::NotFound(id))?;
-    if initiative.archived_at.is_some() {
-        return Err(Error::Archived(id));
-    }
-    let transaction = connection.unchecked_transaction()?;
-    if initiative.completed_at.is_none() {
-        close_gap(&transaction, &initiative.horizon, initiative.position)?;
+    if initiative.deleted_at.is_some() {
+        return Err(Error::Deleted(id));
     }
     if destination == DONE {
-        transaction.execute(
+        connection.execute(
             &format!(
                 "UPDATE initiatives SET completed_at = coalesce(completed_at, {NOW})
                  WHERE id = ?1"
@@ -341,55 +353,62 @@ pub fn move_to(
             params![id],
         )?;
     } else {
+        let transaction = connection.unchecked_transaction()?;
         place(&transaction, id, destination, index)?;
+        transaction.commit()?;
     }
-    transaction.commit()?;
     Ok(())
 }
 
-/// Removes an initiative from the roadmap without deleting its data. Records the current time
-/// as the time the initiative was deleted. The initiatives after it in its column move up by
-/// one. Deleting an initiative that is already deleted keeps the time that was recorded first
-/// and changes nothing else. Does not change `updated_at` or the meetings that are assigned to
-/// the initiative.
-pub fn archive(connection: &Connection, id: i64) -> Result<(), Error> {
+/// Marks an initiative as deleted and removes it from the roadmap. The row stays in the
+/// database, with its column and rank. Records the current time as the time the initiative was
+/// deleted. No other initiative changes. Deleting an initiative that is already deleted keeps
+/// the time that was recorded first and changes nothing else. Does not change `updated_at` or
+/// the meetings that are assigned to the initiative.
+pub fn delete(connection: &Connection, id: i64) -> Result<(), Error> {
     let initiative = get(connection, id)?.ok_or(Error::NotFound(id))?;
-    if initiative.archived_at.is_some() {
+    if initiative.deleted_at.is_some() {
         return Ok(());
     }
-    let transaction = connection.unchecked_transaction()?;
-    if initiative.completed_at.is_none() {
-        close_gap(&transaction, &initiative.horizon, initiative.position)?;
-    }
-    transaction.execute(
-        &format!("UPDATE initiatives SET archived_at = {NOW} WHERE id = ?1"),
+    connection.execute(
+        &format!("UPDATE initiatives SET deleted_at = {NOW} WHERE id = ?1"),
         params![id],
     )?;
-    transaction.commit()?;
     Ok(())
 }
 
-/// Brings a deleted initiative back. An initiative that is not completed goes back to its old
-/// column at its old position, or at the end if the column is now shorter. A completed
-/// initiative goes back to the completed initiatives. If another initiative that is not
-/// deleted has the same name, returns `RestoreOutcome::NameTaken` and changes nothing.
-/// Restoring an initiative that is not deleted changes nothing.
-pub fn unarchive(connection: &Connection, id: i64) -> Result<RestoreOutcome, Error> {
+/// Brings a deleted initiative back. No other initiative changes.
+///
+/// An initiative that is not completed goes back to its old column with its old rank, among the
+/// initiatives that were around it. If an initiative on the board in that column has the same
+/// rank now, the restored initiative gets a rank between that rank and the next rank in the
+/// column, so it comes directly after that initiative. A completed initiative goes back to the
+/// completed initiatives.
+///
+/// If another initiative that is not deleted has the same name, returns
+/// `RestoreOutcome::NameTaken` and changes nothing. Restoring an initiative that is not deleted
+/// changes nothing.
+pub fn restore(connection: &Connection, id: i64) -> Result<RestoreOutcome, Error> {
     let initiative = get(connection, id)?.ok_or(Error::NotFound(id))?;
-    if initiative.archived_at.is_none() {
+    if initiative.deleted_at.is_none() {
         return Ok(RestoreOutcome::Restored);
     }
     if name_is_taken(connection, Some(id), &initiative.name)? {
         return Ok(RestoreOutcome::NameTaken);
     }
     let transaction = connection.unchecked_transaction()?;
-    transaction.execute(
-        "UPDATE initiatives SET archived_at = NULL WHERE id = ?1",
-        params![id],
-    )?;
+    let mut rank = initiative.rank;
     if initiative.completed_at.is_none() {
-        place(&transaction, id, &initiative.horizon, initiative.position)?;
+        let ranks = board_ranks(&transaction, &initiative.horizon, Some(id))?;
+        if ranks.contains(&rank) {
+            let next = ranks.iter().find(|other| **other > rank);
+            rank = rank::between(Some(&rank), next.map(String::as_str))?;
+        }
     }
+    transaction.execute(
+        "UPDATE initiatives SET deleted_at = NULL, rank = ?2 WHERE id = ?1",
+        params![id, rank],
+    )?;
     transaction.commit()?;
     Ok(RestoreOutcome::Restored)
 }
@@ -412,7 +431,7 @@ fn name_is_taken(connection: &Connection, except: Option<i64>, name: &str) -> Re
     let taken = connection.query_row(
         "SELECT EXISTS(
              SELECT 1 FROM initiatives
-             WHERE id IS NOT ?1 AND archived_at IS NULL AND name = ?2 COLLATE NOCASE
+             WHERE id IS NOT ?1 AND deleted_at IS NULL AND name = ?2 COLLATE NOCASE
          )",
         params![except, name],
         |row| row.get(0),
@@ -421,47 +440,37 @@ fn name_is_taken(connection: &Connection, except: Option<i64>, name: &str) -> Re
 }
 
 /// Puts the initiative `id` on the board in `horizon` at `index`, clamped to the range from 0
-/// to the length of the column without the initiative. The other initiatives on the board
-/// must have no gap for it when this function starts. Its own row can be at any place, because
-/// this function replaces its column and position.
+/// to the length of the column without the initiative. Gives it a rank between the ranks of
+/// its new neighbors, and opens it again if it is completed. Changes no other initiative.
 fn place(connection: &Connection, id: i64, horizon: &str, index: i64) -> Result<(), Error> {
-    let length: i64 = connection.query_row(
-        &format!("SELECT count(*) FROM initiatives WHERE horizon = ?1 AND id <> ?2 AND {ON_BOARD}"),
-        params![horizon, id],
-        |row| row.get(0),
-    )?;
-    let index = index.clamp(0, length);
-    open_gap(connection, horizon, index)?;
+    let ranks = board_ranks(connection, horizon, Some(id))?;
+    let index = usize::try_from(index).unwrap_or(0).min(ranks.len());
+    let before = index.checked_sub(1).map(|before| ranks[before].as_str());
+    let after = ranks.get(index).map(String::as_str);
+    let rank = rank::between(before, after)?;
     connection.execute(
-        "UPDATE initiatives SET horizon = ?2, position = ?3, completed_at = NULL WHERE id = ?1",
-        params![id, horizon, index],
+        "UPDATE initiatives SET horizon = ?2, rank = ?3, completed_at = NULL WHERE id = ?1",
+        params![id, horizon, rank],
     )?;
     Ok(())
 }
 
-/// Moves up by one the initiatives on the board in `horizon` that are after `position`.
-fn close_gap(connection: &Connection, horizon: &str, position: i64) -> Result<(), Error> {
-    connection.execute(
-        &format!(
-            "UPDATE initiatives SET position = position - 1
-             WHERE horizon = ?1 AND position > ?2 AND {ON_BOARD}"
-        ),
-        params![horizon, position],
-    )?;
-    Ok(())
-}
-
-/// Moves down by one the initiatives on the board in `horizon` that are at or after
-/// `position`.
-fn open_gap(connection: &Connection, horizon: &str, position: i64) -> Result<(), Error> {
-    connection.execute(
-        &format!(
-            "UPDATE initiatives SET position = position + 1
-             WHERE horizon = ?1 AND position >= ?2 AND {ON_BOARD}"
-        ),
-        params![horizon, position],
-    )?;
-    Ok(())
+/// Returns the ranks of the initiatives on the board in `horizon`, in their order. The
+/// initiative `except` does not count.
+fn board_ranks(
+    connection: &Connection,
+    horizon: &str,
+    except: Option<i64>,
+) -> Result<Vec<String>, Error> {
+    let ranks = connection
+        .prepare(&format!(
+            "SELECT rank FROM initiatives
+             WHERE horizon = ?1 AND id IS NOT ?2 AND {ON_BOARD}
+             ORDER BY rank"
+        ))?
+        .query_map(params![horizon, except], |row| row.get(0))?
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(ranks)
 }
 
 fn initiative_from_row(row: &Row<'_>) -> rusqlite::Result<Initiative> {
@@ -471,11 +480,11 @@ fn initiative_from_row(row: &Row<'_>) -> rusqlite::Result<Initiative> {
         description: row.get(2)?,
         raci_role: row.get(3)?,
         horizon: row.get(4)?,
-        position: row.get(5)?,
+        rank: row.get(5)?,
         created_at: row.get(6)?,
         updated_at: row.get(7)?,
         completed_at: row.get(8)?,
-        archived_at: row.get(9)?,
+        deleted_at: row.get(9)?,
     })
 }
 
@@ -486,14 +495,14 @@ mod tests {
 
     const OLD_TIME: &str = "2000-01-01T00:00:00.000Z";
 
-    /// Returns the names and positions of the initiatives on the board in a column, in the
-    /// order of their positions.
-    fn column(connection: &Connection, horizon: &str) -> Vec<(String, i64)> {
+    /// Returns the names and ranks of the initiatives on the board in a column, in the order
+    /// of their ranks.
+    fn column(connection: &Connection, horizon: &str) -> Vec<(String, String)> {
         let mut statement = connection
             .prepare(
-                "SELECT name, position FROM initiatives
-                 WHERE horizon = ?1 AND completed_at IS NULL AND archived_at IS NULL
-                 ORDER BY position, id",
+                "SELECT name, rank FROM initiatives
+                 WHERE horizon = ?1 AND completed_at IS NULL AND deleted_at IS NULL
+                 ORDER BY rank, id",
             )
             .unwrap();
         statement
@@ -503,7 +512,7 @@ mod tests {
             .unwrap()
     }
 
-    /// Returns the names in a column, in the order of their positions.
+    /// Returns the names in a column, in the order of their ranks.
     fn names(connection: &Connection, horizon: &str) -> Vec<String> {
         column(connection, horizon)
             .into_iter()
@@ -511,16 +520,38 @@ mod tests {
             .collect()
     }
 
-    /// Checks that every column has the positions 0 to n - 1.
-    fn assert_dense(connection: &Connection) {
-        for horizon in HORIZONS {
-            let positions: Vec<i64> = column(connection, horizon)
-                .into_iter()
-                .map(|(_, position)| position)
-                .collect();
-            let expected: Vec<i64> = (0..).take(positions.len()).collect();
-            assert_eq!(positions, expected, "positions in {horizon}");
-        }
+    /// The stored values of one initiative that decide its place: the identifier, the rank,
+    /// the column, the time it was completed, and the time it was deleted.
+    type Place = (i64, String, String, Option<String>, Option<String>);
+
+    /// Returns the place of every initiative, deleted ones included, in the order of their
+    /// identifiers.
+    fn places(connection: &Connection) -> Vec<Place> {
+        connection
+            .prepare(
+                "SELECT id, rank, horizon, completed_at, deleted_at FROM initiatives ORDER BY id",
+            )
+            .unwrap()
+            .query_map([], |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                ))
+            })
+            .unwrap()
+            .collect::<Result<Vec<_>, _>>()
+            .unwrap()
+    }
+
+    /// Sets the rank of an initiative with SQL, without the checks of this module.
+    fn set_rank(connection: &Connection, id: i64, rank: &str) -> rusqlite::Result<usize> {
+        connection.execute(
+            "UPDATE initiatives SET rank = ?2 WHERE id = ?1",
+            params![id, rank],
+        )
     }
 
     /// Creates an initiative with the given values and returns it. Fails the test if the
@@ -575,23 +606,19 @@ mod tests {
         let first = created(&connection, "first", "", None);
         let second = created(&connection, "  second ", "## Goals\n", Some("consulted"));
 
-        assert_eq!(
-            column(&connection, "later"),
-            vec![("second".to_owned(), 0), ("first".to_owned(), 1)]
-        );
-        assert_eq!(fetch(&connection, first.id).position, 1);
+        assert_eq!(names(&connection, "later"), ["second", "first"]);
+        assert_eq!(fetch(&connection, first.id).rank, first.rank);
+        assert!(second.rank < first.rank);
         assert_eq!(second.name, "second");
         assert_eq!(second.description, "## Goals\n");
         assert_eq!(second.raci_role.as_deref(), Some("consulted"));
         assert_eq!(second.horizon, "later");
-        assert_eq!(second.position, 0);
         assert_eq!(second.completed_at, None);
-        assert_eq!(second.archived_at, None);
+        assert_eq!(second.deleted_at, None);
         assert_eq!(second.created_at, second.updated_at);
         assert!(second.created_at.ends_with('Z'));
         assert_eq!(fetch(&connection, second.id), second);
         assert_eq!(names(&connection, "now"), ["N"]);
-        assert_dense(&connection);
     }
 
     #[test]
@@ -627,7 +654,6 @@ mod tests {
         assert_eq!(with_description.raci_role, None);
 
         assert_eq!(count(&connection), 2);
-        assert_dense(&connection);
     }
 
     #[test]
@@ -643,14 +669,13 @@ mod tests {
 
         assert_eq!(count(&connection), 1);
         assert_eq!(column(&connection, "later"), later_before);
-        assert_dense(&connection);
     }
 
     #[test]
     fn create_accepts_the_name_of_a_deleted_initiative() {
         let connection = open_in_memory();
         let old = add(&connection, "Launch", "now");
-        archive(&connection, old).unwrap();
+        delete(&connection, old).unwrap();
 
         assert_eq!(created(&connection, "launch", "", None).name, "launch");
     }
@@ -680,15 +705,13 @@ mod tests {
 
         move_to(&connection, a, "now", 2).unwrap();
         assert_eq!(names(&connection, "now"), ["B", "C", "A"]);
-        assert_dense(&connection);
 
         move_to(&connection, a, "now", 0).unwrap();
         assert_eq!(names(&connection, "now"), ["A", "B", "C"]);
-        assert_dense(&connection);
     }
 
     #[test]
-    fn move_to_another_column_closes_and_opens_gaps() {
+    fn move_to_another_column_puts_it_between_the_neighbors() {
         let connection = open_in_memory();
         add(&connection, "A", "now");
         let b = add(&connection, "B", "now");
@@ -700,7 +723,6 @@ mod tests {
 
         assert_eq!(names(&connection, "now"), ["A", "C"]);
         assert_eq!(names(&connection, "next"), ["X", "B", "Y"]);
-        assert_dense(&connection);
     }
 
     #[test]
@@ -712,11 +734,9 @@ mod tests {
 
         move_to(&connection, a, "next", 99).unwrap();
         assert_eq!(names(&connection, "next"), ["X", "A"]);
-        assert_dense(&connection);
 
         move_to(&connection, a, "next", -5).unwrap();
         assert_eq!(names(&connection, "next"), ["A", "X"]);
-        assert_dense(&connection);
     }
 
     #[test]
@@ -726,16 +746,16 @@ mod tests {
         let b = add(&connection, "B", "now");
         add(&connection, "C", "now");
         set_updated_at(&connection, b, OLD_TIME);
+        let rank = fetch(&connection, b).rank;
 
         move_to(&connection, b, "done", 0).unwrap();
 
         let completed = fetch(&connection, b);
         let completed_at = completed.completed_at.clone().unwrap();
         assert_eq!(completed.horizon, "now");
-        assert_eq!(completed.position, 1);
+        assert_eq!(completed.rank, rank);
         assert_eq!(completed.updated_at, OLD_TIME);
         assert_eq!(names(&connection, "now"), ["A", "C"]);
-        assert_dense(&connection);
 
         connection
             .execute(
@@ -748,9 +768,8 @@ mod tests {
         assert_eq!(again.completed_at.as_deref(), Some(OLD_TIME));
         assert_ne!(completed_at, OLD_TIME);
         assert_eq!(again.horizon, "now");
-        assert_eq!(again.position, 1);
+        assert_eq!(again.rank, rank);
         assert_eq!(names(&connection, "now"), ["A", "C"]);
-        assert_dense(&connection);
     }
 
     #[test]
@@ -767,7 +786,6 @@ mod tests {
         assert_eq!(reopened.completed_at, None);
         assert_eq!(names(&connection, "now"), Vec::<String>::new());
         assert_eq!(names(&connection, "next"), ["X", "A", "Y"]);
-        assert_dense(&connection);
     }
 
     #[test]
@@ -776,7 +794,7 @@ mod tests {
         let a = add(&connection, "A", "now");
         let b = add(&connection, "B", "now");
 
-        for destination in ["Now", "later ", "archived", ""] {
+        for destination in ["Now", "later ", "deleted", ""] {
             assert!(
                 matches!(
                     move_to(&connection, a, destination, 0),
@@ -786,69 +804,65 @@ mod tests {
             );
         }
 
-        archive(&connection, b).unwrap();
+        delete(&connection, b).unwrap();
         assert!(matches!(
             move_to(&connection, b, "next", 0),
-            Err(Error::Archived(id)) if id == b
+            Err(Error::Deleted(id)) if id == b
         ));
         assert!(matches!(
             move_to(&connection, b, "done", 0),
-            Err(Error::Archived(id)) if id == b
+            Err(Error::Deleted(id)) if id == b
         ));
         let stored = fetch(&connection, b);
         assert_eq!(stored.horizon, "now");
         assert_eq!(stored.completed_at, None);
         assert_eq!(names(&connection, "now"), ["A"]);
         assert_eq!(names(&connection, "next"), Vec::<String>::new());
-        assert_dense(&connection);
     }
 
     #[test]
-    fn archive_closes_the_gap_and_unarchive_puts_it_back() {
+    fn delete_takes_it_off_the_board_and_restore_puts_it_back() {
         let connection = open_in_memory();
         add(&connection, "A", "next");
         let b = add(&connection, "B", "next");
         add(&connection, "C", "next");
         set_updated_at(&connection, b, OLD_TIME);
 
-        archive(&connection, b).unwrap();
-        let archived = fetch(&connection, b);
-        assert!(archived.archived_at.is_some());
-        assert_eq!(archived.updated_at, OLD_TIME);
+        delete(&connection, b).unwrap();
+        let deleted = fetch(&connection, b);
+        assert!(deleted.deleted_at.is_some());
+        assert_eq!(deleted.updated_at, OLD_TIME);
         assert_eq!(names(&connection, "next"), ["A", "C"]);
-        assert_dense(&connection);
 
         assert!(matches!(
-            unarchive(&connection, b).unwrap(),
+            restore(&connection, b).unwrap(),
             RestoreOutcome::Restored
         ));
         let restored = fetch(&connection, b);
-        assert_eq!(restored.archived_at, None);
+        assert_eq!(restored.deleted_at, None);
         assert_eq!(restored.updated_at, OLD_TIME);
         assert_eq!(names(&connection, "next"), ["A", "B", "C"]);
-        assert_dense(&connection);
     }
 
     #[test]
-    fn unarchive_into_a_shorter_column_puts_it_last() {
+    fn restore_into_a_shorter_column_puts_it_last() {
         let connection = open_in_memory();
         let a = add(&connection, "A", "now");
         let b = add(&connection, "B", "now");
         let c = add(&connection, "C", "now");
 
-        archive(&connection, c).unwrap();
+        delete(&connection, c).unwrap();
         move_to(&connection, a, "next", 0).unwrap();
         move_to(&connection, b, "done", 0).unwrap();
         add(&connection, "D", "now");
 
-        unarchive(&connection, c).unwrap();
+        restore(&connection, c).unwrap();
 
         assert_eq!(names(&connection, "now"), ["D", "C"]);
-        assert_dense(&connection);
     }
 
     #[test]
-    fn archive_of_a_completed_initiative_changes_no_column() {
+    fn delete_of_a_completed_initiative_changes_no_column() {
         let connection = open_in_memory();
         add(&connection, "A", "now");
         let b = add(&connection, "B", "now");
@@ -856,19 +870,157 @@ mod tests {
         move_to(&connection, b, "done", 0).unwrap();
         let before = fetch(&connection, b);
 
-        archive(&connection, b).unwrap();
+        delete(&connection, b).unwrap();
         assert_eq!(names(&connection, "now"), ["A", "C"]);
-        assert_dense(&connection);
 
         assert!(matches!(
-            unarchive(&connection, b).unwrap(),
+            restore(&connection, b).unwrap(),
             RestoreOutcome::Restored
         ));
         let restored = fetch(&connection, b);
         assert_eq!(restored.completed_at, before.completed_at);
-        assert_eq!(restored.archived_at, None);
+        assert_eq!(restored.deleted_at, None);
         assert_eq!(names(&connection, "now"), ["A", "C"]);
-        assert_dense(&connection);
+    }
+
+    #[test]
+    fn a_move_changes_only_the_moved_initiative() {
+        let connection = open_in_memory();
+        add(&connection, "A", "now");
+        let b = add(&connection, "B", "now");
+        add(&connection, "C", "now");
+        add(&connection, "X", "next");
+        let done = add(&connection, "Done", "next");
+        move_to(&connection, done, "done", 0).unwrap();
+        let deleted = add(&connection, "Deleted", "next");
+        delete(&connection, deleted).unwrap();
+        let before = places(&connection);
+
+        move_to(&connection, b, "next", 0).unwrap();
+
+        let after = places(&connection);
+        let changed: Vec<i64> = before
+            .iter()
+            .zip(&after)
+            .filter(|(old, new)| old != new)
+            .map(|(old, _)| old.0)
+            .collect();
+        assert_eq!(changed, [b]);
+        assert_eq!(names(&connection, "next"), ["B", "X"]);
+    }
+
+    #[test]
+    fn complete_and_delete_keep_the_rank() {
+        let connection = open_in_memory();
+        add(&connection, "A", "now");
+        let b = add(&connection, "B", "now");
+        let c = add(&connection, "C", "now");
+
+        let rank = fetch(&connection, b).rank;
+        move_to(&connection, b, DONE, 0).unwrap();
+        assert_eq!(fetch(&connection, b).rank, rank);
+
+        let rank = fetch(&connection, c).rank;
+        delete(&connection, c).unwrap();
+        assert_eq!(fetch(&connection, c).rank, rank);
+    }
+
+    #[test]
+    fn the_database_refuses_two_initiatives_with_one_rank_on_the_board() {
+        let connection = open_in_memory();
+        let a = add(&connection, "A", "now");
+        let b = add(&connection, "B", "now");
+        let done = add(&connection, "Done", "now");
+        move_to(&connection, done, DONE, 0).unwrap();
+        let rank = fetch(&connection, a).rank;
+
+        assert!(set_rank(&connection, b, &rank).is_err());
+        assert_eq!(set_rank(&connection, done, &rank).unwrap(), 1);
+    }
+
+    #[test]
+    fn restore_keeps_a_free_rank() {
+        let connection = open_in_memory();
+        add(&connection, "A", "now");
+        let b = add(&connection, "B", "now");
+        add(&connection, "C", "now");
+        let rank = fetch(&connection, b).rank;
+
+        delete(&connection, b).unwrap();
+        restore(&connection, b).unwrap();
+
+        assert_eq!(names(&connection, "now"), ["A", "B", "C"]);
+        assert_eq!(fetch(&connection, b).rank, rank);
+    }
+
+    #[test]
+    fn restore_into_a_taken_rank_goes_directly_after_the_holder() {
+        let connection = open_in_memory();
+        add(&connection, "A", "now");
+        let b = add(&connection, "B", "now");
+        let c = add(&connection, "C", "now");
+
+        delete(&connection, b).unwrap();
+        set_rank(&connection, c, &fetch(&connection, b).rank).unwrap();
+        restore(&connection, b).unwrap();
+
+        assert_eq!(names(&connection, "now"), ["A", "C", "B"]);
+    }
+
+    #[test]
+    fn restore_into_a_taken_rank_goes_before_the_next_card() {
+        let connection = open_in_memory();
+        add(&connection, "A", "now");
+        let b = add(&connection, "B", "now");
+        let c = add(&connection, "C", "now");
+        add(&connection, "D", "now");
+
+        delete(&connection, b).unwrap();
+        set_rank(&connection, c, &fetch(&connection, b).rank).unwrap();
+        restore(&connection, b).unwrap();
+
+        assert_eq!(names(&connection, "now"), ["A", "C", "B", "D"]);
+    }
+
+    #[test]
+    fn restore_into_a_taken_rank_of_the_last_card() {
+        let connection = open_in_memory();
+        let a = add(&connection, "A", "now");
+        let b = add(&connection, "B", "now");
+
+        delete(&connection, b).unwrap();
+        set_rank(&connection, a, &fetch(&connection, b).rank).unwrap();
+        restore(&connection, b).unwrap();
+
+        assert_eq!(names(&connection, "now"), ["A", "B"]);
+    }
+
+    #[test]
+    fn reopen_goes_to_the_drop_index() {
+        let connection = open_in_memory();
+        add(&connection, "A", "later");
+        let b = add(&connection, "B", "later");
+        add(&connection, "C", "later");
+
+        move_to(&connection, b, DONE, 0).unwrap();
+        move_to(&connection, b, "later", 0).unwrap();
+
+        assert_eq!(names(&connection, "later"), ["B", "A", "C"]);
+    }
+
+    #[test]
+    fn a_move_next_to_an_invalid_rank_fails_with_a_message() {
+        let connection = open_in_memory();
+        let a = add(&connection, "A", "now");
+        let b = add(&connection, "B", "next");
+        set_rank(&connection, a, "zz").unwrap();
+
+        let result = move_to(&connection, b, "now", 0);
+
+        let Err(error @ Error::Rank(_)) = result else {
+            panic!("the move should fail with a rank error");
+        };
+        assert!(error.to_string().starts_with("invalid rank"));
     }
 
     #[test]
@@ -920,7 +1072,7 @@ mod tests {
     fn names_of_deleted_initiatives_can_be_used_again() {
         let connection = open_in_memory();
         let old = add(&connection, "Launch", "now");
-        archive(&connection, old).unwrap();
+        delete(&connection, old).unwrap();
         let new = add(&connection, "Other", "now");
 
         assert!(matches!(
@@ -958,23 +1110,22 @@ mod tests {
     }
 
     #[test]
-    fn unarchive_returns_name_taken_when_the_name_is_used() {
+    fn restore_returns_name_taken_when_the_name_is_used() {
         let connection = open_in_memory();
         add(&connection, "A", "now");
         let old = add(&connection, "Launch", "now");
-        archive(&connection, old).unwrap();
+        delete(&connection, old).unwrap();
         add(&connection, "LAUNCH", "now");
         let before = fetch(&connection, old);
         let now_before = column(&connection, "now");
 
         assert!(matches!(
-            unarchive(&connection, old).unwrap(),
+            restore(&connection, old).unwrap(),
             RestoreOutcome::NameTaken
         ));
 
         assert_eq!(fetch(&connection, old), before);
         assert_eq!(column(&connection, "now"), now_before);
-        assert_dense(&connection);
     }
 
     #[test]
@@ -983,7 +1134,7 @@ mod tests {
         add(&connection, "Launch", "now");
         let other = add(&connection, "Other", "now");
         let deleted = add(&connection, "Deleted", "now");
-        archive(&connection, deleted).unwrap();
+        delete(&connection, deleted).unwrap();
 
         let result = connection.execute(
             "UPDATE initiatives SET name = 'launch' WHERE id = ?1",
@@ -998,7 +1149,7 @@ mod tests {
             )
             .unwrap();
         let result = connection.execute(
-            "UPDATE initiatives SET archived_at = NULL WHERE id = ?1",
+            "UPDATE initiatives SET deleted_at = NULL WHERE id = ?1",
             params![deleted],
         );
         assert!(result.is_err());
@@ -1018,7 +1169,7 @@ mod tests {
         assert_eq!(updated.raci_role.as_deref(), Some("accountable"));
         assert_eq!(updated.name, "Launch");
         assert_eq!(updated.horizon, "next");
-        assert_eq!(updated.position, 1);
+        assert_eq!(updated.rank, before.rank);
         assert_eq!(updated.created_at, before.created_at);
         assert_ne!(updated.updated_at, OLD_TIME);
         assert_eq!(fetch(&connection, id), updated);
@@ -1053,8 +1204,8 @@ mod tests {
             ("informed", "done"),
         ] {
             let result = connection.execute(
-                "INSERT INTO initiatives (raci_role, horizon, position, created_at, updated_at)
-                 VALUES (?1, ?2, 0, 't', 't')",
+                "INSERT INTO initiatives (raci_role, horizon, rank, created_at, updated_at)
+                 VALUES (?1, ?2, '8', 't', 't')",
                 params![role, horizon],
             );
             assert!(result.is_err(), "{role} in {horizon} should be refused");
@@ -1068,7 +1219,7 @@ mod tests {
         let done = add(&connection, "Done", "now");
         move_to(&connection, done, "done", 0).unwrap();
         let deleted = add(&connection, "Deleted", "next");
-        archive(&connection, deleted).unwrap();
+        delete(&connection, deleted).unwrap();
 
         let mut visible: Vec<i64> = list(&connection, false)
             .unwrap()
@@ -1084,8 +1235,8 @@ mod tests {
         let stored = fetch(&connection, deleted);
         assert_eq!(summary.name, stored.name);
         assert_eq!(summary.horizon, stored.horizon);
-        assert_eq!(summary.position, stored.position);
-        assert_eq!(summary.archived_at, stored.archived_at);
+        assert_eq!(summary.rank, stored.rank);
+        assert_eq!(summary.deleted_at, stored.deleted_at);
         assert_eq!(summary.completed_at, None);
     }
 
@@ -1106,11 +1257,11 @@ mod tests {
             Err(Error::NotFound(999))
         ));
         assert!(matches!(
-            archive(&connection, 999),
+            delete(&connection, 999),
             Err(Error::NotFound(999))
         ));
         assert!(matches!(
-            unarchive(&connection, 999),
+            restore(&connection, 999),
             Err(Error::NotFound(999))
         ));
     }
@@ -1126,6 +1277,6 @@ mod tests {
             Error::InvalidDestination("up".to_owned()).to_string(),
             "invalid destination \"up\": use now, next, later, or done"
         );
-        assert_eq!(Error::Archived(7).to_string(), "initiative 7 is deleted");
+        assert_eq!(Error::Deleted(7).to_string(), "initiative 7 is deleted");
     }
 }

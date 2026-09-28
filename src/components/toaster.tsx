@@ -18,7 +18,7 @@ function ToastList() {
     const { toasts } = useToastManager();
 
     return toasts.map((item) => (
-        // The archive toast and a failure toast can be open together. The stack always
+        // The delete toast and a failure toast can be open together. The stack always
         // shows every toast in full, one above the other, so the user can read each
         // message and reach each button without a hover or focus. Base UI's default
         // shows only the frontmost toast until the pointer or the focus expands the stack.

@@ -14,7 +14,7 @@ export function MeetingDetailsSidebar({
 }: {
     /** The labeled rows of the properties of the meeting, such as its date. */
     properties: ReactNode;
-    /** The buttons for actions on the whole meeting, such as Archive. */
+    /** The buttons for actions on the whole meeting, such as Delete. */
     actions: ReactNode;
     /** The lists that belong to the meeting, such as its action items. */
     lists: ReactNode;

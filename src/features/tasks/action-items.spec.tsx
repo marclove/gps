@@ -9,7 +9,8 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "@/App";
 
-// Feature spec for docs/specs/0005-meeting-action-items.md.
+// Feature spec for docs/specs/0005-meeting-action-items.md, with the words of
+// docs/specs/0007-deleted-rows-and-ranked-order.md.
 // The Tauri backend is replaced by an in-memory fake of the meeting and task commands.
 
 const invoke = vi.hoisted(() => vi.fn());
@@ -301,7 +302,7 @@ function isBefore(first: Element, second: Element) {
 }
 
 describe("Meeting details sidebar", () => {
-    it("shows the date and the Archive button above the action items", async () => {
+    it("shows the date and the Delete button above the action items", async () => {
         backend.seedMeeting("Weekly sync");
         await openMeeting("Weekly sync");
 
@@ -309,16 +310,18 @@ describe("Meeting details sidebar", () => {
             name: "Meeting details",
         });
         const date = within(aside).getByLabelText("Meeting date");
-        const archive = within(aside).getByRole("button", { name: "Archive" });
+        const deleteButton = within(aside).getByRole("button", {
+            name: "Delete",
+        });
         const actionItems = within(aside).getByRole("region", {
             name: "Action items",
         });
         expect(date).toHaveValue("2026-09-24");
         expect(within(aside).getByText("Date")).toBeInTheDocument();
-        expect(isBefore(date, archive)).toBe(true);
-        expect(isBefore(archive, actionItems)).toBe(true);
-        // The page has one Archive button, so the page header no longer has one.
-        expect(screen.getAllByRole("button", { name: "Archive" })).toHaveLength(
+        expect(isBefore(date, deleteButton)).toBe(true);
+        expect(isBefore(deleteButton, actionItems)).toBe(true);
+        // The page has one Delete button, so the page header no longer has one.
+        expect(screen.getAllByRole("button", { name: "Delete" })).toHaveLength(
             1,
         );
         // The meeting name stays in the main area, outside the sidebar.
