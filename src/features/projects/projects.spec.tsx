@@ -49,10 +49,16 @@ async function openProjectsPage(): Promise<User> {
 /** The names that the list of projects shows, from the top. */
 function listedNames(): string[] {
     const main = screen.getByRole("main");
-    return within(main)
-        .queryAllByRole("link")
-        .filter((link) => link.closest("li") !== null)
-        .map((link) => link.textContent ?? "");
+    return (
+        within(main)
+            .queryAllByRole("link")
+            // The breadcrumb is a list too, so its items are left out.
+            .filter(
+                (link) =>
+                    link.closest("li") !== null && link.closest("nav") === null,
+            )
+            .map((link) => link.textContent ?? "")
+    );
 }
 
 async function openDraft(user: User) {
@@ -284,7 +290,8 @@ describe("Unique project names", () => {
         ).toBeInTheDocument();
         expect(screen.queryByText("Couldn't save")).not.toBeInTheDocument();
 
-        await user.type(name, "2");
+        await user.clear(name);
+        await user.type(name, "checkout2");
 
         await waitFor(
             () => expect(billing.name).toBe("checkout2"),
