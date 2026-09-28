@@ -124,7 +124,7 @@ describe("DeleteProvider", () => {
 
         expect(invoke).toHaveBeenCalledWith("delete_meeting", { id: 1 });
         expect(
-            within(notifications()).getByText('Archived "Standup".'),
+            within(notifications()).getByText('Deleted "Standup".'),
         ).toBeInTheDocument();
         expect(undoButton()).toBeInTheDocument();
     });
@@ -144,7 +144,7 @@ describe("DeleteProvider", () => {
         ).rejects.toThrow("boom");
 
         expect(
-            screen.queryByText('Archived "Standup".'),
+            screen.queryByText('Deleted "Standup".'),
         ).not.toBeInTheDocument();
         expect(
             screen.queryByRole("button", { name: "Undo" }),
@@ -163,10 +163,10 @@ describe("DeleteProvider", () => {
 
         const toasts = notifications();
         expect(
-            within(toasts).getByText('Archived "Kickoff".'),
+            within(toasts).getByText('Deleted "Kickoff".'),
         ).toBeInTheDocument();
         expect(
-            within(toasts).queryByText('Archived "Standup".'),
+            within(toasts).queryByText('Deleted "Standup".'),
         ).not.toBeInTheDocument();
         expect(
             within(toasts).getAllByRole("button", { name: "Undo" }),
@@ -201,7 +201,7 @@ describe("DeleteProvider", () => {
         });
         await waitFor(() =>
             expect(
-                screen.queryByText('Archived "Standup".'),
+                screen.queryByText('Deleted "Standup".'),
             ).not.toBeInTheDocument(),
         );
     });
@@ -226,7 +226,7 @@ describe("DeleteProvider", () => {
             ),
         ).toBeInTheDocument();
         expect(
-            within(toasts).queryByText('Archived "Standup".'),
+            within(toasts).queryByText('Deleted "Standup".'),
         ).not.toBeInTheDocument();
         expect(
             within(toasts).getByRole("button", { name: "Undo" }),
@@ -265,7 +265,7 @@ describe("DeleteProvider", () => {
 
         const toasts = notifications();
         expect(
-            within(toasts).getByText('Archived "Kickoff".'),
+            within(toasts).getByText('Deleted "Kickoff".'),
         ).toBeInTheDocument();
         expect(harness.version()).toBe(2);
 
@@ -275,7 +275,7 @@ describe("DeleteProvider", () => {
         });
 
         expect(
-            within(toasts).getByText('Archived "Kickoff".'),
+            within(toasts).getByText('Deleted "Kickoff".'),
         ).toBeInTheDocument();
         expect(
             within(toasts).queryByText(
@@ -364,7 +364,7 @@ describe("DeleteProvider", () => {
             within(toasts).getByText('Deleted "Launch".'),
         ).toBeInTheDocument();
         expect(
-            within(toasts).queryByText('Archived "Standup".'),
+            within(toasts).queryByText('Deleted "Standup".'),
         ).not.toBeInTheDocument();
         expect(
             within(toasts).getAllByRole("button", { name: "Undo" }),
@@ -383,7 +383,7 @@ describe("DeleteProvider", () => {
 
         const toasts = notifications();
         expect(
-            within(toasts).getByText('Archived "Standup".'),
+            within(toasts).getByText('Deleted "Standup".'),
         ).toBeInTheDocument();
         expect(
             within(toasts).queryByText('Deleted "Launch".'),

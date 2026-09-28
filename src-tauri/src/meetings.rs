@@ -398,7 +398,7 @@ mod tests {
     }
 
     #[test]
-    fn update_changes_an_deleted_meeting() {
+    fn update_changes_a_deleted_meeting() {
         let connection = open_in_memory();
         let created = create(&connection, "2026-09-24").unwrap();
 

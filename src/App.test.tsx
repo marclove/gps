@@ -85,10 +85,8 @@ describe("App", () => {
         render(<App />);
 
         await user.click(await screen.findByRole("link", { name: /Standup/ }));
-        await user.click(
-            await screen.findByRole("button", { name: "Archive" }),
-        );
-        const failure = "Couldn't archive the meeting. Try again.";
+        await user.click(await screen.findByRole("button", { name: "Delete" }));
+        const failure = "Couldn't delete the meeting. Try again.";
         await within(notifications()).findByText(failure);
 
         failDelete = false;
@@ -100,12 +98,12 @@ describe("App", () => {
         );
         await user.click(
             await screen.findByRole("button", {
-                name: 'Archive "Weekly sync"',
+                name: 'Delete "Weekly sync"',
             }),
         );
 
         expect(
-            await within(notifications()).findByText('Archived "Weekly sync".'),
+            await within(notifications()).findByText('Deleted "Weekly sync".'),
         ).toBeInTheDocument();
         await waitFor(() =>
             expect(

@@ -1,4 +1,4 @@
-import { ArchiveIcon, PlusIcon } from "lucide-react";
+import { PlusIcon, Trash2Icon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import { PageHeader } from "@/components/page-header";
@@ -192,7 +192,7 @@ export function MeetingsPage() {
                 };
             });
         } catch {
-            failureToast.show("Couldn't archive the meeting. Try again.");
+            failureToast.show("Couldn't delete the meeting. Try again.");
         } finally {
             pendingDeleteIds.current.delete(meeting.id);
         }
@@ -285,11 +285,11 @@ export function MeetingsPage() {
                                     }}
                                     variant="ghost"
                                     size="icon-sm"
-                                    aria-label={`Archive "${displayName(meeting.name)}"`}
+                                    aria-label={`Delete "${displayName(meeting.name)}"`}
                                     className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
                                     onClick={() => handleDelete(meeting)}
                                 >
-                                    <ArchiveIcon />
+                                    <Trash2Icon />
                                 </Button>
                             </li>
                         ))}

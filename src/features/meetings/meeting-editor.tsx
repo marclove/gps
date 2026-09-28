@@ -1,4 +1,4 @@
-import { ArchiveIcon } from "lucide-react";
+import { Trash2Icon } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { MarkdownEditor } from "@/components/markdown-editor/markdown-editor";
@@ -27,7 +27,7 @@ const COMPLETE_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 /**
  * The editor for one meeting: its name and its notes at the left, and a sidebar with
- * its date, its initiative, the Archive button, and its action items at the right.
+ * its date, its initiative, the Delete button, and its action items at the right.
  * Changes are saved automatically. If `isNew` is true, the name field gets the focus
  * and its text is selected.
  */
@@ -79,7 +79,7 @@ export function MeetingEditor({
             const state: MeetingsPageState = { focusNewNote: true };
             navigate("/meetings", { state });
         } catch {
-            failureToast.show("Couldn't archive the meeting. Try again.");
+            failureToast.show("Couldn't delete the meeting. Try again.");
             setDeleting(false);
         }
     }
@@ -165,8 +165,8 @@ export function MeetingEditor({
                         disabled={deleting}
                         onClick={handleDelete}
                     >
-                        <ArchiveIcon />
-                        Archive
+                        <Trash2Icon />
+                        Delete
                     </Button>
                 }
                 lists={<ActionItemsPanel meetingId={meeting.id} />}

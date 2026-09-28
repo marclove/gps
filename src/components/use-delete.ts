@@ -21,8 +21,8 @@ export type RestoredItem = { kind: DeleteKind; id: number };
 /** The delete action and its state, shared by every page. */
 export type DeleteApi = {
     /**
-     * Deletes the item and shows the delete toast. The toast says "Archived" for a
-     * meeting and "Deleted" for an initiative.
+     * Deletes the item and shows the delete toast. The toast says "Deleted" and
+     * the name of the item.
      *
      * Rejects if the item cannot be deleted. It does not show the toast in that
      * case, so the caller can show its own failure message.

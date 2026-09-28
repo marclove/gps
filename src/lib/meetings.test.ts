@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
-    deleteMeeting,
     createMeeting,
+    deleteMeeting,
     displayName,
     getMeeting,
     listMeetings,
-    setMeetingInitiative,
     restoreMeeting,
+    setMeetingInitiative,
     updateMeeting,
 } from "./meetings";
 

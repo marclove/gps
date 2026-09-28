@@ -229,7 +229,7 @@ describe("MeetingEditorPage", () => {
         expect(await screen.findByText("Saved")).toBeInTheDocument();
     });
 
-    it("deletes once when Archive is clicked twice quickly", async () => {
+    it("deletes once when Delete is clicked twice quickly", async () => {
         let resolveDelete: (() => void) | undefined;
         serveMeeting({
             delete_meeting: () =>
@@ -240,7 +240,7 @@ describe("MeetingEditorPage", () => {
         const user = userEvent.setup();
         renderPage("/meetings/42");
         const deleteButton = await screen.findByRole("button", {
-            name: "Archive",
+            name: "Delete",
         });
 
         await user.click(deleteButton);
@@ -267,15 +267,15 @@ describe("MeetingEditorPage", () => {
             await screen.findByRole("textbox", { name: "Meeting name" }),
             { target: { value: "Retro" } },
         );
-        await user.click(screen.getByRole("button", { name: "Archive" }));
+        await user.click(screen.getByRole("button", { name: "Delete" }));
 
         expect(await screen.findByText("Meetings list")).toBeInTheDocument();
         expect(
-            within(notifications()).getByText('Archived "Retro".'),
+            within(notifications()).getByText('Deleted "Retro".'),
         ).toBeInTheDocument();
     });
 
-    it("moves focus from the date to the initiative to Archive to the action items with Tab", async () => {
+    it("moves focus from the date to the initiative to Delete to the action items with Tab", async () => {
         serveMeeting();
         const user = userEvent.setup();
         renderPage("/meetings/42");
@@ -290,7 +290,7 @@ describe("MeetingEditorPage", () => {
         expect(initiative).toHaveFocus();
 
         await user.tab();
-        expect(screen.getByRole("button", { name: "Archive" })).toHaveFocus();
+        expect(screen.getByRole("button", { name: "Delete" })).toHaveFocus();
 
         await user.tab();
         expect(

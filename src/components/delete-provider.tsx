@@ -51,7 +51,7 @@ const KINDS: Record<DeleteKind, KindActions> = {
         restore: (id) =>
             restoreMeeting(id).then(() => ({ status: "restored" })),
         displayName,
-        deletedText: (shownName) => `Archived "${shownName}".`,
+        deletedText: (shownName) => `Deleted "${shownName}".`,
         restoreFailedText: "Couldn't restore the meeting. Try again.",
         nameTakenText: () => "Couldn't restore the meeting. Try again.",
     },

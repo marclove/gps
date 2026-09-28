@@ -348,10 +348,10 @@ pub fn move_to(
 }
 
 /// Marks an initiative as deleted and removes it from the roadmap. The row stays in the
-/// database. Records the current time as the time the initiative was deleted. The initiatives after it in its column move up by
-/// one. Deleting an initiative that is already deleted keeps the time that was recorded first
-/// and changes nothing else. Does not change `updated_at` or the meetings that are assigned to
-/// the initiative.
+/// database. Records the current time as the time the initiative was deleted. The initiatives
+/// after it in its column move up by one. Deleting an initiative that is already deleted keeps
+/// the time that was recorded first and changes nothing else. Does not change `updated_at` or
+/// the meetings that are assigned to the initiative.
 pub fn delete(connection: &Connection, id: i64) -> Result<(), Error> {
     let initiative = get(connection, id)?.ok_or(Error::NotFound(id))?;
     if initiative.deleted_at.is_some() {

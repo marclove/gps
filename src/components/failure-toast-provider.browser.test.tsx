@@ -57,8 +57,8 @@ function isOnTop(element: Element): boolean {
 /** How long to wait for the toasts to finish moving, in milliseconds. */
 const SETTLE_TIMEOUT = { timeout: 4000 };
 
-const DELETED = 'Archived "Standup".';
-const FAILURE = "Couldn't archive the meeting. Try again.";
+const DELETED = 'Deleted "Standup".';
+const FAILURE = "Couldn't delete the meeting. Try again.";
 
 beforeEach(async () => {
     await page.viewport(1200, 800);

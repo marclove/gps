@@ -115,16 +115,16 @@ describe("FailureToastProvider", () => {
         const api = renderHarness();
 
         act(() => {
-            api().manager.add({ title: 'Archived "Standup".' });
+            api().manager.add({ title: 'Deleted "Standup".' });
         });
-        await within(notifications()).findByText('Archived "Standup".');
+        await within(notifications()).findByText('Deleted "Standup".');
         act(() => api().failure.show("A failure."));
 
         expect(
             await within(notifications()).findByText("A failure."),
         ).toBeInTheDocument();
         expect(
-            within(notifications()).getByText('Archived "Standup".'),
+            within(notifications()).getByText('Deleted "Standup".'),
         ).toBeInTheDocument();
     });
 });

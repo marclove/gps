@@ -171,14 +171,14 @@ describe("MeetingsPage", () => {
         const user = userEvent.setup();
         renderPage();
         const deleteButton = await screen.findByRole("button", {
-            name: 'Archive "Weekly sync"',
+            name: 'Delete "Weekly sync"',
         });
 
         await user.click(deleteButton);
 
         expect(
             await within(notifications()).findByText(
-                "Couldn't archive the meeting. Try again.",
+                "Couldn't delete the meeting. Try again.",
             ),
         ).toBeInTheDocument();
 
@@ -196,20 +196,20 @@ describe("MeetingsPage", () => {
         });
 
         await user.click(
-            screen.getByRole("button", { name: 'Archive "Weekly sync"' }),
+            screen.getByRole("button", { name: 'Delete "Weekly sync"' }),
         );
 
         expect(
-            await within(notifications()).findByText('Archived "Weekly sync".'),
+            await within(notifications()).findByText('Deleted "Weekly sync".'),
         ).toBeInTheDocument();
         await waitFor(() =>
             expect(
-                screen.queryByText("Couldn't archive the meeting. Try again."),
+                screen.queryByText("Couldn't delete the meeting. Try again."),
             ).toBeNull(),
         );
     });
 
-    it("deletes once when a row's Archive button is clicked twice quickly", async () => {
+    it("deletes once when a row's Delete button is clicked twice quickly", async () => {
         let resolveDelete: (() => void) | undefined;
         let deleted = false;
         invoke.mockImplementation((command: string) => {
@@ -231,7 +231,7 @@ describe("MeetingsPage", () => {
         const user = userEvent.setup();
         renderPage();
         const deleteButton = await screen.findByRole("button", {
-            name: 'Archive "Kickoff"',
+            name: 'Delete "Kickoff"',
         });
 
         await user.click(deleteButton);
@@ -288,9 +288,9 @@ describe("MeetingsPage", () => {
         renderPage();
 
         await user.click(
-            await screen.findByRole("button", { name: 'Archive "A"' }),
+            await screen.findByRole("button", { name: 'Delete "A"' }),
         );
-        await user.click(screen.getByRole("button", { name: 'Archive "B"' }));
+        await user.click(screen.getByRole("button", { name: 'Delete "B"' }));
 
         await act(async () => {
             resolveDeleteB?.();
@@ -298,7 +298,7 @@ describe("MeetingsPage", () => {
         });
         await waitFor(() =>
             expect(
-                screen.queryByRole("button", { name: 'Archive "B"' }),
+                screen.queryByRole("button", { name: 'Delete "B"' }),
             ).toBeNull(),
         );
         // Moves focus away from where B's own delete left it, so the final check
@@ -313,7 +313,7 @@ describe("MeetingsPage", () => {
 
         await waitFor(() =>
             expect(
-                screen.getByRole("button", { name: 'Archive "C"' }),
+                screen.getByRole("button", { name: 'Delete "C"' }),
             ).toHaveFocus(),
         );
     });
@@ -335,13 +335,13 @@ describe("MeetingsPage", () => {
 
         await user.click(
             await screen.findByRole("button", {
-                name: 'Archive "Standup"',
+                name: 'Delete "Standup"',
             }),
         );
 
         await waitFor(() =>
             expect(
-                screen.getByRole("button", { name: 'Archive "Kickoff"' }),
+                screen.getByRole("button", { name: 'Delete "Kickoff"' }),
             ).toHaveFocus(),
         );
     });
@@ -363,13 +363,13 @@ describe("MeetingsPage", () => {
 
         await user.click(
             await screen.findByRole("button", {
-                name: 'Archive "Kickoff"',
+                name: 'Delete "Kickoff"',
             }),
         );
 
         await waitFor(() =>
             expect(
-                screen.getByRole("button", { name: 'Archive "Standup"' }),
+                screen.getByRole("button", { name: 'Delete "Standup"' }),
             ).toHaveFocus(),
         );
     });
@@ -389,7 +389,7 @@ describe("MeetingsPage", () => {
 
         await user.click(
             await screen.findByRole("button", {
-                name: 'Archive "Weekly sync"',
+                name: 'Delete "Weekly sync"',
             }),
         );
 
@@ -413,7 +413,7 @@ describe("MeetingsPage", () => {
         renderPage();
 
         await user.click(
-            await screen.findByRole("button", { name: 'Archive "Kickoff"' }),
+            await screen.findByRole("button", { name: 'Delete "Kickoff"' }),
         );
         await user.click(
             within(notifications()).getByRole("button", { name: "Undo" }),
