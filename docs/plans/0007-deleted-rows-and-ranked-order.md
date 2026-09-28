@@ -4,9 +4,9 @@
 
 **Goal:** Rename `archived_at` to `deleted_at` in `meetings` and `initiatives` through every layer, say "Delete" for meetings in the user interface, and replace the dense `position` of initiatives with a text `rank` that a move writes for one row only.
 
-**Architecture:** The work goes in two vertical slices. The first slice renames the column, the Rust functions, the backend commands, the frontend functions, and the shared toast provider, and then changes the words for meetings. The second slice adds a module `rank.rs` that wraps the crate `fractional_index`, changes how `db.rs` applies migrations so that a migration can rebuild a table that other tables refer to, and then replaces `position` with `rank` in the database, the backend, the interface between frontend and backend, and the frontend.
+**Architecture:** The work goes in two vertical slices. The first slice renames the column, the Rust functions, the backend commands, the frontend functions, and the shared toast provider, and then changes the words for meetings. The second slice adds a module `rank.rs` with its own generator of rank keys, changes how `db.rs` applies migrations so that a migration can rebuild a table that other tables refer to, and then replaces `position` with `rank` in the database, the backend, the interface between frontend and backend, and the frontend.
 
-**Tech Stack:** Rust with `rusqlite` 0.40, `rusqlite_migration` 2.6, and `fractional_index` 2; React 19 with TypeScript; Vitest with React Testing Library in jsdom, and Vitest browser mode in WebKit.
+**Tech Stack:** Rust with `rusqlite` 0.40, and `rusqlite_migration` 2.6, with a generator of rank keys of our own in `rank.rs`; React 19 with TypeScript; Vitest with React Testing Library in jsdom, and Vitest browser mode in WebKit.
 
 **Spec:** `docs/specs/0007-deleted-rows-and-ranked-order.md`, argued in `docs/adrs/0017-mark-deleted-rows-and-order-cards-by-rank.md`. Read both before you start a task.
 
@@ -123,20 +123,24 @@ ALTER TABLE initiatives RENAME COLUMN archived_at TO deleted_at;
 
 ### Task 3: Make rank keys in one module
 
+Note: an earlier version of this task used the crate `fractional_index`. It was replaced during implementation because it computes wrong keys; see ADR 0017, Alternatives considered.
+
 **Files:**
-- Modify: `src-tauri/Cargo.toml` (add `fractional_index = { version = "2", default-features = false }`)
 - Create: `src-tauri/src/rank.rs`, with its tests
 - Modify: `src-tauri/src/lib.rs` (add `mod rank;`)
 
 **Interfaces:**
-- Produces: `rank::between(before: Option<&str>, after: Option<&str>) -> Result<String, rank::Error>`, which returns a key that sorts after `before` and before `after`, as text compared byte by byte. `None` means no bound. `rank::Error` has two variants, `Invalid(String)`, for a key that `FractionalIndex::from_string` refuses, and `OutOfOrder { before: String, after: String }`, for bounds that are equal or reversed. It implements `Display` and `std::error::Error`. Use `FractionalIndex::new(lower, upper)` and `to_string()`. `between(None, None)` returns `FractionalIndex::default().to_string()`.
+- Produces: `rank::between(before: Option<&str>, after: Option<&str>) -> Result<String, rank::Error>`, which returns a key that sorts after `before` and before `after`, as text compared byte by byte. `None` means no bound. A key is text made only of the lowercase hexadecimal digits `0` to `9` and `a` to `f`. It is never empty, and its last digit is never `0`. `rank::Error` has two variants, `Invalid(String)`, for text that is not a valid key, and `OutOfOrder { before: Option<String>, after: Option<String> }`, for bounds that are equal or reversed. It implements `Display` and `std::error::Error`. The module computes the key itself: it reads each key as the digits of a fraction after the point and takes a value between the two bounds, and it checks each new key against its bounds before it returns it. `between(None, None)` returns `"8"`.
 
 - [ ] **Step 1: Write the failing tests** in `rank.rs`:
-  - `between_without_bounds_gives_a_key`: the result is not empty and contains only `0-9a-f`.
+  - `between_without_bounds_gives_a_key`: the result is `"8"` and contains only `0-9a-f`.
   - `between_respects_each_bound`: for `k = between(None, None)`, check `between(Some(&k), None) > k`, `between(None, Some(&k)) < k`, and for `a < b` two such keys, `a < between(Some(&a), Some(&b)) < b`, all compared as `String`.
   - `appending_200_keys_keeps_them_in_order`: each key comes from `between(Some(&last), None)`, and the keys are strictly increasing.
   - `dropping_200_times_into_one_gap_keeps_order_and_no_repeats`: start with `a` and `b`. Take `c = between(Some(&a), Some(&b))`, then set `b = c`, 200 times. Each `c` is strictly between the bounds at that time.
-  - `invalid_keys_and_bounds_out_of_order_are_errors`: `between(Some("xyz"), None)` is `Err(Error::Invalid(_))`. `between(Some(&k), Some(&k))` and reversed bounds are `Err(Error::OutOfOrder { .. })`. The `Display` text names the key.
+  - `invalid_keys_and_bounds_out_of_order_are_errors`: `between(Some("xyz"), None)` is `Err(Error::Invalid(_))`, and so are the empty text, a key that ends in `0`, and a key with uppercase or other characters. `between(Some(&k), Some(&k))` and reversed bounds are `Err(Error::OutOfOrder { .. })`. The `Display` text names the key.
+  - `prepending_200_keys_then_dropping_between_each_adjacent_pair`: each new first key comes from `between(None, Some(&first))`, and a key between each two neighbors is strictly between them.
+  - `many_random_inserts_stay_sorted_and_unique`: 3000 inserts at random places keep the keys strictly increasing and valid.
+  - `a_bound_that_is_a_prefix_of_the_other`: `between(Some("8"), Some("81"))` is strictly between both, and `between(None, Some("1"))` is `"08"`.
 
 - [ ] **Step 2:** Run `cargo test --manifest-path src-tauri/Cargo.toml rank::`. Expected: FAIL to compile, because `between` does not exist.
 
@@ -144,7 +148,7 @@ ALTER TABLE initiatives RENAME COLUMN archived_at TO deleted_at;
 
 - [ ] **Step 4: Verify.** Run `cargo test --manifest-path src-tauri/Cargo.toml rank:: && bun run lint:rust`. Expected: PASS.
 
-- [ ] **Step 5: Commit and push.** Message: "Add rank keys from fractional_index".
+- [ ] **Step 5: Commit and push.** Message: "Add rank keys".
 
 ### Task 4: Apply migrations with foreign keys off
 
@@ -152,7 +156,7 @@ ALTER TABLE initiatives RENAME COLUMN archived_at TO deleted_at;
 - Modify: `src-tauri/src/db.rs`
 
 **Interfaces:**
-- Produces: `fn migrations() -> Migrations<'static>` replaces the constant `MIGRATIONS`, because `M::up_with_hook` is not a `const fn`. The entries and their order stay as they are. `prepare(connection)` runs `PRAGMA foreign_keys = OFF`, then the migrations, then `PRAGMA foreign_keys = ON`. A private function `apply(connection: &mut Connection, migrations: &Migrations) -> Result<(), rusqlite_migration::Error>` holds these three steps, so that tests can pass their own migrations. Task 5 adds its migrations to `migrations()` and ends a rebuild with `.foreign_key_check()`.
+- Produces: `fn migrations() -> Migrations<'static>` replaces the constant `MIGRATIONS`, because `M::up_with_hook` is not a `const fn`. The entries and their order stay as they are. `prepare(connection)` runs `PRAGMA foreign_keys = OFF`, then the migrations, then `PRAGMA foreign_keys = ON`. A private function `apply(connection: &mut Connection, migrations: &Migrations) -> Result<(), rusqlite_migration::Error>` holds these three steps, so that tests can pass their own migrations. Task 5 adds its migrations to `migrations()` and ends each of them with `.foreign_key_check()`, because foreign keys are not enforced while migrations run. The docstring of `migrations()` states this rule for every new migration that changes a table or its data.
 
 - [ ] **Step 1: Write the failing tests** in `db.rs`:
   - `foreign_keys_are_on_after_open`: `PRAGMA foreign_keys` reads 1 on `open_in_memory()`.
@@ -197,6 +201,7 @@ ALTER TABLE initiatives RENAME COLUMN archived_at TO deleted_at;
   - `the_database_refuses_two_initiatives_with_one_rank_on_the_board`: an `UPDATE` that copies a rank within a horizon on the board fails. The same rank on a completed initiative is accepted.
   - `restore_keeps_a_free_rank`: delete B from `[A, B, C]` and restore it. The result is `[A, B, C]` and the same rank.
   - `restore_into_a_taken_rank_goes_directly_after_the_holder`: delete B from `[A, B, C]`, set the rank of C to the rank of B with SQL, and restore B. The result is `[A, C, B]`.
+  - `restore_into_a_taken_rank_goes_before_the_next_card`: the same with `[A, B, C, D]`. The result is `[A, C, B, D]`.
   - `restore_into_a_taken_rank_of_the_last_card`: the same with `[A, B]`, where A takes the rank of B. The result is `[A, B]`.
   - `reopen_goes_to_the_drop_index`: complete B from `[A, B, C]`, then `move_to(B, "later", 0)`. The result is `[B, A, C]`.
   - `a_move_next_to_an_invalid_rank_fails_with_a_message`: set a rank to `'zz'` with SQL. A move next to it returns `Err(Error::Rank(_))`, whose text starts with `invalid rank`.
@@ -204,7 +209,7 @@ ALTER TABLE initiatives RENAME COLUMN archived_at TO deleted_at;
 - [ ] **Step 3:** Run `cargo test --manifest-path src-tauri/Cargo.toml`. Expected: FAIL to compile, or FAIL on the new tests.
 
 - [ ] **Step 4: Add the two migrations** after the one from Task 1:
-  - First: `M::up_with_hook("ALTER TABLE initiatives ADD COLUMN rank TEXT;", fill_ranks)`. The function `fill_ranks(transaction: &Transaction) -> HookResult` walks each horizon in `ORDER BY position, id` over all rows and gives each row `rank::between(previous, None)`. It maps `rank::Error` to `HookError::Hook(error.to_string())`.
+  - First: `M::up_with_hook("ALTER TABLE initiatives ADD COLUMN rank TEXT;", fill_ranks).foreign_key_check()`. The function `fill_ranks(transaction: &Transaction) -> HookResult` walks each horizon in `ORDER BY position, id` over all rows and gives each row `rank::between(previous, None)`. It maps `rank::Error` to `HookError::Hook(error.to_string())`.
   - Second: `M::up(REBUILD_INITIATIVES).foreign_key_check()`.
     - `REBUILD_INITIATIVES` creates `initiatives_new` with the columns and `CHECK` constraints of today, `rank TEXT NOT NULL` in place of `position`, and `deleted_at`.
     - It copies every row, drops `initiatives`, and renames `initiatives_new` to `initiatives`.

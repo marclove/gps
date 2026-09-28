@@ -9,6 +9,10 @@ use crate::rank;
 
 /// Returns the changes to the database structure, in the order they are applied.
 /// Add new migrations to the end. Never change or remove a migration after it is released.
+///
+/// The migrations run while foreign keys are not enforced. Thus every new migration that
+/// changes a table or its data must end with `.foreign_key_check()`. This check stops the
+/// migration and rolls it back when a reference points to a row that does not exist.
 fn migrations() -> Migrations<'static> {
     Migrations::new(vec![
         M::up(
@@ -56,7 +60,8 @@ fn migrations() -> Migrations<'static> {
         "ALTER TABLE meetings RENAME COLUMN archived_at TO deleted_at;
     ALTER TABLE initiatives RENAME COLUMN archived_at TO deleted_at;",
         ),
-        M::up_with_hook("ALTER TABLE initiatives ADD COLUMN rank TEXT;", fill_ranks),
+        M::up_with_hook("ALTER TABLE initiatives ADD COLUMN rank TEXT;", fill_ranks)
+            .foreign_key_check(),
         M::up(REBUILD_INITIATIVES).foreign_key_check(),
     ])
 }

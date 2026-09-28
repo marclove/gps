@@ -968,6 +968,21 @@ mod tests {
     }
 
     #[test]
+    fn restore_into_a_taken_rank_goes_before_the_next_card() {
+        let connection = open_in_memory();
+        add(&connection, "A", "now");
+        let b = add(&connection, "B", "now");
+        let c = add(&connection, "C", "now");
+        add(&connection, "D", "now");
+
+        delete(&connection, b).unwrap();
+        set_rank(&connection, c, &fetch(&connection, b).rank).unwrap();
+        restore(&connection, b).unwrap();
+
+        assert_eq!(names(&connection, "now"), ["A", "C", "B", "D"]);
+    }
+
+    #[test]
     fn restore_into_a_taken_rank_of_the_last_card() {
         let connection = open_in_memory();
         let a = add(&connection, "A", "now");

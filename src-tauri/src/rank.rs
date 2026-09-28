@@ -25,10 +25,10 @@ pub enum Error {
     Invalid(String),
     /// The bounds are equal, or `before` sorts after `after`.
     OutOfOrder {
-        /// The key that must sort before the new key.
-        before: String,
-        /// The key that must sort after the new key.
-        after: String,
+        /// The key that must sort before the new key. `None` means no bound.
+        before: Option<String>,
+        /// The key that must sort after the new key. `None` means no bound.
+        after: Option<String>,
     },
 }
 
@@ -37,8 +37,26 @@ impl fmt::Display for Error {
         match self {
             Self::Invalid(key) => write!(f, "{key:?} is not a valid rank key"),
             Self::OutOfOrder { before, after } => {
-                write!(f, "no rank key sorts after {before:?} and before {after:?}")
+                write!(
+                    f,
+                    "no rank key sorts after {} and before {}",
+                    Bound(before.as_deref()),
+                    Bound(after.as_deref())
+                )
             }
+        }
+    }
+}
+
+/// Shows a bound in the text of an [`Error`]: the quoted key, or `(none)`
+/// when there is no bound.
+struct Bound<'a>(Option<&'a str>);
+
+impl fmt::Display for Bound<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.0 {
+            Some(key) => write!(f, "{key:?}"),
+            None => f.write_str("(none)"),
         }
     }
 }
@@ -56,8 +74,8 @@ pub fn between(before: Option<&str>, after: Option<&str>) -> Result<String, Erro
     let lower = before.map(validate).transpose()?;
     let upper = after.map(validate).transpose()?;
     let out_of_order = || Error::OutOfOrder {
-        before: before.unwrap_or_default().to_owned(),
-        after: after.unwrap_or_default().to_owned(),
+        before: before.map(str::to_owned),
+        after: after.map(str::to_owned),
     };
     let key = match (lower, upper) {
         (None, None) => FIRST.to_owned(),
@@ -205,6 +223,28 @@ mod tests {
         assert!(matches!(reversed, Error::OutOfOrder { .. }), "{reversed:?}");
         assert!(reversed.to_string().contains(&later), "{reversed}");
         assert!(reversed.to_string().contains(&k), "{reversed}");
+    }
+
+    #[test]
+    fn a_bound_that_is_a_prefix_of_the_other() {
+        let middle = key(Some("8"), Some("81"));
+        assert!(
+            "8" < middle.as_str() && middle.as_str() < "81",
+            "8 < {middle} < 81"
+        );
+        assert_eq!(key(None, Some("1")), "08");
+    }
+
+    #[test]
+    fn out_of_order_text_names_a_missing_bound() {
+        let error = Error::OutOfOrder {
+            before: None,
+            after: Some("8".to_owned()),
+        };
+        assert_eq!(
+            error.to_string(),
+            r#"no rank key sorts after (none) and before "8""#
+        );
     }
 
     #[test]
