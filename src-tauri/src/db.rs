@@ -252,7 +252,7 @@ mod tests {
         assert_eq!(meeting.initiative_id, None);
         let tasks = crate::tasks::list_for_meeting(&connection, 1).unwrap();
         assert_eq!(tasks.len(), 1);
-        assert_eq!(tasks[0].description, "Send the deck");
+        assert_eq!(tasks[0].title, "Send the deck");
     }
 
     #[test]

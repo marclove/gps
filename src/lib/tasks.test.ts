@@ -5,7 +5,7 @@ import {
     deleteTask,
     listMeetingTasks,
     setTaskCompleted,
-    updateTaskDescription,
+    updateTaskTitle,
 } from "./tasks";
 
 const invoke = vi.hoisted(() => vi.fn());
@@ -21,14 +21,14 @@ describe("task commands", () => {
     it("calls the backend commands with their arguments", async () => {
         await listMeetingTasks(1);
         await createTask(1, "Send the deck");
-        await updateTaskDescription(3, "Call Sam");
+        await updateTaskTitle(3, "Call Sam");
         await setTaskCompleted(3, true);
         await deleteTask(3);
 
         expect(invoke.mock.calls).toEqual([
             ["list_meeting_tasks", { meetingId: 1 }],
-            ["create_task", { meetingId: 1, description: "Send the deck" }],
-            ["update_task_description", { id: 3, description: "Call Sam" }],
+            ["create_task", { meetingId: 1, title: "Send the deck" }],
+            ["update_task_title", { id: 3, title: "Call Sam" }],
             ["set_task_completed", { id: 3, completed: true }],
             ["delete_task", { id: 3 }],
         ]);

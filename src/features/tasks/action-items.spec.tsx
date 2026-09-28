@@ -30,7 +30,7 @@ type Meeting = {
 type Task = {
     id: number;
     meetingId: number | null;
-    description: string;
+    title: string;
     createdAt: string;
     updatedAt: string;
     completedAt: string | null;
@@ -39,7 +39,7 @@ type Task = {
 type Command =
     | "list_meeting_tasks"
     | "create_task"
-    | "update_task_description"
+    | "update_task_title"
     | "set_task_completed"
     | "delete_task";
 
@@ -73,12 +73,12 @@ class FakeBackend {
         return meeting;
     }
 
-    seedTask(meetingId: number, description: string, completed = false): Task {
+    seedTask(meetingId: number, title: string, completed = false): Task {
         const now = this.now();
         const task: Task = {
             id: this.nextTaskId++,
             meetingId,
-            description,
+            title,
             createdAt: now,
             updatedAt: now,
             completedAt: completed ? now : null,
@@ -146,14 +146,14 @@ class FakeBackend {
                 return {
                     ...this.seedTask(
                         args.meetingId as number,
-                        args.description as string,
+                        args.title as string,
                     ),
                 };
             }
-            case "update_task_description": {
+            case "update_task_title": {
                 this.failIfAsked(command);
                 const task = this.storedTask(args.id);
-                task.description = args.description as string;
+                task.title = args.title as string;
                 task.updatedAt = this.now();
                 return { ...task };
             }
@@ -437,7 +437,7 @@ describe("Meeting action items", () => {
 
             await expectItems(["Call Sam about the deck"]);
             expect(backend.callsOf("create_task")).toEqual([
-                { meetingId: sync.id, description: "Call Sam about the deck" },
+                { meetingId: sync.id, title: "Call Sam about the deck" },
             ]);
             expect(addField()).toHaveValue("");
         });
@@ -453,7 +453,7 @@ describe("Meeting action items", () => {
 
             await expectItems(["Send the deck", "Call Sam"]);
             expect(backend.callsOf("create_task")).toEqual([
-                { meetingId: sync.id, description: "Call Sam" },
+                { meetingId: sync.id, title: "Call Sam" },
             ]);
             expect(checkbox("Call Sam")).not.toBeChecked();
             expect(addField()).toHaveValue("");
@@ -579,7 +579,7 @@ describe("Meeting action items", () => {
             expect(listedItems()).toEqual(["Send the deck today"]);
             await waitFor(
                 () =>
-                    expect(backend.findTask(deck.id)?.description).toBe(
+                    expect(backend.findTask(deck.id)?.title).toBe(
                         "Send the deck today",
                     ),
                 SAVE_TIMEOUT,
@@ -609,14 +609,14 @@ describe("Meeting action items", () => {
 
             await waitFor(
                 () =>
-                    expect(backend.findTask(deck.id)?.description).toBe(
+                    expect(backend.findTask(deck.id)?.title).toBe(
                         "Send the deck to Alex",
                     ),
                 SAVE_TIMEOUT,
             );
-            expect(backend.callsOf("update_task_description")).toContainEqual({
+            expect(backend.callsOf("update_task_title")).toContainEqual({
                 id: deck.id,
-                description: "Send the deck to Alex",
+                title: "Send the deck to Alex",
             });
             expect(checkbox("Send the deck to Alex")).toBeInTheDocument();
             expect(removeButton("Send the deck to Alex")).toBeInTheDocument();
@@ -633,7 +633,7 @@ describe("Meeting action items", () => {
 
             await waitFor(
                 () =>
-                    expect(backend.findTask(room.id)?.description).toBe(
+                    expect(backend.findTask(room.id)?.title).toBe(
                         "Book a room for Friday",
                     ),
                 SAVE_TIMEOUT,
@@ -656,7 +656,7 @@ describe("Meeting action items", () => {
             );
 
             await waitFor(() =>
-                expect(backend.findTask(deck.id)?.description).toBe(
+                expect(backend.findTask(deck.id)?.title).toBe(
                     "Send the deck now",
                 ),
             );
@@ -665,7 +665,7 @@ describe("Meeting action items", () => {
         it("keeps the text and reports the problem when saving fails", async () => {
             const sync = backend.seedMeeting("Weekly sync");
             const deck = backend.seedTask(sync.id, "Send the deck");
-            backend.failing.add("update_task_description");
+            backend.failing.add("update_task_title");
             const user = await openMeeting("Weekly sync");
             await expectItems(["Send the deck"]);
 
@@ -675,12 +675,12 @@ describe("Meeting action items", () => {
             await findFailureToast("Couldn't save the action item. Try again.");
             expect(listedItems()).toEqual(["Send the deck to Alex"]);
 
-            backend.failing.delete("update_task_description");
+            backend.failing.delete("update_task_title");
             await user.keyboard("!");
 
             await waitFor(
                 () =>
-                    expect(backend.findTask(deck.id)?.description).toBe(
+                    expect(backend.findTask(deck.id)?.title).toBe(
                         "Send the deck to Alex!",
                     ),
                 SAVE_TIMEOUT,

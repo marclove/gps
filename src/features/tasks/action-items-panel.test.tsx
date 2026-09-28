@@ -18,11 +18,11 @@ const invoke = vi.hoisted(() => vi.fn());
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke }));
 
-function task(id: number, description: string): Task {
+function task(id: number, title: string): Task {
     return {
         id,
         meetingId: 1,
-        description,
+        title,
         createdAt: "2026-09-24T10:00:00.000Z",
         updatedAt: "2026-09-24T10:00:00.000Z",
         completedAt: null,
@@ -31,22 +31,21 @@ function task(id: number, description: string): Task {
 
 /**
  * Answers the task commands. `create` answers `create_task`, `complete` answers
- * `set_task_completed`, `update` answers `update_task_description`, and `remove`
+ * `set_task_completed`, `update` answers `update_task_title`, and `remove`
  * answers `delete_task`.
  */
 function answer({
     tasks = [],
-    create = (description: string) => Promise.resolve(task(99, description)),
+    create = (title: string) => Promise.resolve(task(99, title)),
     complete = (id: number) =>
         Promise.resolve(tasks.find((stored) => stored.id === id) as Task),
-    update = (id: number, description: string) =>
-        Promise.resolve(task(id, description)),
+    update = (id: number, title: string) => Promise.resolve(task(id, title)),
     remove = () => Promise.resolve(),
 }: {
     tasks?: Task[];
-    create?: (description: string) => Promise<Task>;
+    create?: (title: string) => Promise<Task>;
     complete?: (id: number, completed: boolean) => Promise<Task>;
-    update?: (id: number, description: string) => Promise<Task>;
+    update?: (id: number, title: string) => Promise<Task>;
     remove?: (id: number) => Promise<void>;
 } = {}) {
     invoke.mockImplementation(
@@ -55,17 +54,14 @@ function answer({
                 case "list_meeting_tasks":
                     return tasks;
                 case "create_task":
-                    return create(args.description as string);
+                    return create(args.title as string);
                 case "set_task_completed":
                     return complete(
                         args.id as number,
                         args.completed as boolean,
                     );
-                case "update_task_description":
-                    return update(
-                        args.id as number,
-                        args.description as string,
-                    );
+                case "update_task_title":
+                    return update(args.id as number, args.title as string);
                 case "delete_task":
                     return remove(args.id as number);
                 default:
@@ -116,7 +112,7 @@ function completeCalls() {
 
 function updateCalls() {
     return invoke.mock.calls.filter(
-        ([command]) => command === "update_task_description",
+        ([command]) => command === "update_task_title",
     );
 }
 
@@ -178,8 +174,8 @@ describe("ActionItemsPanel", () => {
         await user.click(addField());
         await user.keyboard("First{Enter}Second{Enter}");
         expect(createCalls()).toEqual([
-            ["create_task", { meetingId: 1, description: "First" }],
-            ["create_task", { meetingId: 1, description: "Second" }],
+            ["create_task", { meetingId: 1, title: "First" }],
+            ["create_task", { meetingId: 1, title: "Second" }],
         ]);
 
         pending[0](task(1, "First"));
@@ -363,7 +359,7 @@ describe("ActionItemsPanel", () => {
     });
 
     it("keeps the typed text when the item is checked before the text is saved", async () => {
-        // The answer to the check has the description that was stored before the change.
+        // The answer to the check has the title that was stored before the change.
         answer({ tasks: [task(1, "Send the deck")] });
         const user = userEvent.setup();
         renderPanel();
@@ -381,8 +377,8 @@ describe("ActionItemsPanel", () => {
         await waitFor(() =>
             expect(updateCalls()).toEqual([
                 [
-                    "update_task_description",
-                    { id: 1, description: "Send the deck to Alex" },
+                    "update_task_title",
+                    { id: 1, title: "Send the deck to Alex" },
                 ],
             ]),
         );
@@ -415,8 +411,8 @@ describe("ActionItemsPanel", () => {
             () =>
                 expect(updateCalls()).toEqual([
                     [
-                        "update_task_description",
-                        { id: 2, description: "Book a room for Friday" },
+                        "update_task_title",
+                        { id: 2, title: "Book a room for Friday" },
                     ],
                 ]),
             { timeout: 2000 },

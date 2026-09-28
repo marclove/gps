@@ -5,7 +5,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { useAutosave } from "@/hooks/use-autosave";
 import { cn } from "@/lib/utils";
-import { actionItemName, updateTaskDescription, type Task } from "@/lib/tasks";
+import { actionItemName, updateTaskTitle, type Task } from "@/lib/tasks";
 
 /**
  * One action item in the list of the action items panel. The user can change the
@@ -34,7 +34,7 @@ export function ActionItemRow({
     inputRef: (element: HTMLTextAreaElement | null) => void;
 }) {
     // The row owns the text after the first render, so that an answer from the backend never replaces what the user typed.
-    const [text, setText] = useState(task.description);
+    const [text, setText] = useState(task.title);
     // The delete that the user started last, until a save finds that it failed.
     const removal = useRef<Promise<boolean> | null>(null);
     // Whether a delete is in progress or has succeeded.
@@ -45,7 +45,7 @@ export function ActionItemRow({
         onSaveResultRef.current = onSaveResult;
     }, [onSaveResult]);
 
-    const save = async (description: string) => {
+    const save = async (title: string) => {
         // A change that waits while the item is removed is discarded only when the delete succeeds.
         while (removal.current !== null) {
             const current = removal.current;
@@ -53,7 +53,7 @@ export function ActionItemRow({
             if (removal.current === current) removal.current = null;
         }
         try {
-            await updateTaskDescription(task.id, description);
+            await updateTaskTitle(task.id, title);
         } catch (error) {
             onSaveResultRef.current(false);
             throw error;

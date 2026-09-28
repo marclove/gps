@@ -15,7 +15,7 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke }));
 type Task = {
     id: number;
     meetingId: number;
-    description: string;
+    title: string;
     createdAt: string;
     updatedAt: string;
     completedAt: string | null;
@@ -33,14 +33,14 @@ const MEETING = {
 
 let tasks: Task[];
 
-function seedTask(description: string, completed = false) {
+function seedTask(title: string, completed = false) {
     const time = new Date(
         Date.UTC(2026, 8, 24, 10, 0, tasks.length + 1),
     ).toISOString();
     tasks.push({
         id: tasks.length + 1,
         meetingId: MEETING.id,
-        description,
+        title,
         createdAt: time,
         updatedAt: time,
         completedAt: completed ? time : null,
@@ -60,7 +60,7 @@ async function handle(command: string, args: Record<string, unknown> = {}) {
         case "list_initiatives":
             return [];
         case "create_task": {
-            seedTask(args.description as string);
+            seedTask(args.title as string);
             return { ...tasks[tasks.length - 1] };
         }
         case "set_task_completed": {
