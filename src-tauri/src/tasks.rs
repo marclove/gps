@@ -60,7 +60,7 @@ impl From<rusqlite::Error> for Error {
 /// Returns the tasks of a meeting. The task that was created first is first.
 pub fn list_for_meeting(connection: &Connection, meeting_id: i64) -> Result<Vec<Task>, Error> {
     let mut statement = connection.prepare(
-        "SELECT id, meeting_id, description, created_at, updated_at, completed_at FROM tasks
+        "SELECT id, meeting_id, title, created_at, updated_at, completed_at FROM tasks
          WHERE meeting_id = ?1
          ORDER BY created_at, id",
     )?;
@@ -83,7 +83,7 @@ pub fn create(connection: &Connection, meeting_id: i64, description: &str) -> Re
     }
     let id = connection.query_row(
         &format!(
-            "INSERT INTO tasks (meeting_id, description, created_at, updated_at)
+            "INSERT INTO tasks (meeting_id, title, created_at, updated_at)
              VALUES (?1, ?2, {NOW}, {NOW}) RETURNING id"
         ),
         params![meeting_id, description],
@@ -100,7 +100,7 @@ pub fn update_description(
     description: &str,
 ) -> Result<Task, Error> {
     let changed = connection.execute(
-        &format!("UPDATE tasks SET description = ?2, updated_at = {NOW} WHERE id = ?1"),
+        &format!("UPDATE tasks SET title = ?2, updated_at = {NOW} WHERE id = ?1"),
         params![id, description],
     )?;
     if changed == 0 {
@@ -143,7 +143,7 @@ pub fn delete(connection: &Connection, id: i64) -> Result<(), Error> {
 fn get(connection: &Connection, id: i64) -> Result<Option<Task>, Error> {
     let task = connection
         .query_row(
-            "SELECT id, meeting_id, description, created_at, updated_at, completed_at FROM tasks
+            "SELECT id, meeting_id, title, created_at, updated_at, completed_at FROM tasks
              WHERE id = ?1",
             params![id],
             task_from_row,
