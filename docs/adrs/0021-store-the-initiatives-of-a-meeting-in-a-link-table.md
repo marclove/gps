@@ -82,7 +82,11 @@ We chose one command for each change, rather than one command that replaces the 
   - Refuses an initiative that is deleted or does not exist, and refuses a meeting that does not exist. The user interface does not offer deleted initiatives.
   - Does nothing if the meeting already covers the initiative. Nothing changes, not even `updated_at`.
   - If the initiative belongs to the project of the meeting, inserts the row with the current time as `created_at`, and changes `updated_at` of the meeting.
-  - If the initiative belongs to another project, or the meeting has no project, sets the project of the meeting to the project of the initiative, removes all other rows of the meeting, inserts the row, and changes `updated_at`. The user interface offers only initiatives of the meeting's project, so this happens only when the frontend is out of date. It keeps the rule for every caller, as `set_meeting_initiative` did.
+  - If the initiative belongs to another project, or the meeting has no project, the answer depends on the other initiatives of the meeting:
+    - If the meeting covers no initiative, the command sets the project of the meeting to the project of the initiative, inserts the row, and changes `updated_at`. This keeps the rule of ADR 0019 that choosing an initiative gives the meeting the project of that initiative.
+    - If the meeting covers any initiative, also a deleted one, the command refuses the change and changes nothing. The frontend shows the failure as for any other refused change.
+
+    This is the same rule as for a move of an initiative, below: a meeting follows an initiative to its project only when it covers no other initiative. The user interface offers only initiatives of the meeting's project, and disables the choice for a meeting without a project, so these cases happen only when the frontend is out of date, or for another caller of the command.
 - `remove_meeting_initiative`:
   - Deletes the row and changes `updated_at` of the meeting.
   - Does nothing if the meeting does not cover the initiative.
@@ -120,6 +124,8 @@ This keeps the rule that every initiative of a meeting belongs to the project of
 
 - **One command that replaces the whole list**, `set_meeting_initiatives(id, initiativeIds)`. It is simpler for the backend, but two quick changes can arrive in the wrong order, and a change that is based on an out of date list removes initiatives that another change added.
 - **A `deleted_at` column on `meeting_initiatives`**, so that a removal could be undone like a delete. A link has no content to lose, adding it again is one click, and the ticket asks for the row to be removed.
+- **Adding an initiative of another project always moves the meeting** to that project and removes the other initiatives of the meeting, as `set_meeting_initiative` replaced the single initiative. The meeting would always be consistent, but it would lose links that the user did not touch, without a message and without "Undo", in a case that happens only by accident.
+- **Always refuse an initiative of another project.** This is the simplest rule, but it drops the rule of the ticket that choosing an initiative gives the meeting the project of that initiative.
 - **A move of an initiative always moves its meetings**, as in ADR 0019. The other initiatives of a meeting would then belong to another project than the meeting. The ticket rejects this.
 - **A move of an initiative never moves its meetings.** Every meeting of the initiative would lose the link, also the ones that are only about it. ADR 0019 chose to move them, and the ticket keeps that when the meeting covers nothing else.
 - **Count only initiatives that are not deleted as "other initiatives"** when an initiative moves. A meeting that covers the moved initiative and a deleted one would move to the new project, and the link to the deleted initiative would then point to another project than the meeting's. If the user restored that initiative, the rule would be broken.

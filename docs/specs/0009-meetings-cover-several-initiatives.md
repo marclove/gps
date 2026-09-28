@@ -71,7 +71,7 @@ Merged specs are not changed. This spec changes them as follows:
 ## Not checked by the executable specs
 
 - The migration: that each meeting that was assigned to an initiative covers that initiative and keeps its project, that meetings without an initiative cover none, and that `meetings` no longer has the column `initiative_id`. The unit tests of the migration in `src-tauri/src/db.rs` check this.
-- That the real backend keeps the initiatives of a meeting in its project: that adding an initiative of another project changes the project of the meeting and removes its other initiatives, that changing the project removes all initiatives, that adding a deleted initiative is refused, and that a move of an initiative follows the rules above. The unit tests in `src-tauri/src/meetings.rs` and `src-tauri/src/initiatives.rs` check this. The fake backend of the executable specs does the same, and the specs check what the user sees.
+- That the real backend keeps the initiatives of a meeting in its project: that adding an initiative of another project changes the project of a meeting without initiatives and is refused for a meeting with initiatives, that changing the project removes all initiatives, that adding a deleted initiative is refused, and that a move of an initiative follows the rules above. The unit tests in `src-tauri/src/meetings.rs` and `src-tauri/src/initiatives.rs` check this. The fake backend of the executable specs does the same, and the specs check what the user sees.
 - That `docs/data-model.md` shows the table `meeting_initiatives` and no longer shows `meetings.initiative_id`. A reviewer checks this.
 
 ## Backend contract
@@ -83,7 +83,7 @@ The executable specs replace the Tauri backend with an in-memory fake. They rely
 | `add_meeting_initiative`    | `id`, `initiativeId` | the meeting |
 | `remove_meeting_initiative` | `id`, `initiativeId` | the meeting |
 
-- `add_meeting_initiative` refuses an initiative that is deleted or does not exist. It changes nothing when the meeting already covers the initiative. When the initiative belongs to another project than the meeting, it sets the project of the meeting to the project of the initiative and removes the other initiatives of the meeting.
+- `add_meeting_initiative` refuses an initiative that is deleted or does not exist. It changes nothing when the meeting already covers the initiative. When the initiative belongs to another project than the meeting, or the meeting has no project, it sets the project of the meeting to the project of the initiative if the meeting covers no initiative, and otherwise refuses the change and changes nothing. A deleted initiative that the meeting covers counts.
 - `remove_meeting_initiative` changes nothing when the meeting does not cover the initiative. It does not change the project of the meeting.
 
 The existing commands change as follows:

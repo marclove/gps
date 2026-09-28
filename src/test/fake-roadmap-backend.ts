@@ -481,9 +481,13 @@ export class FakeRoadmapBackend {
                     throw `initiative ${String(initiative.id)} is deleted`;
                 }
                 if (!meeting.initiativeIds.includes(initiative.id)) {
+                    // A meeting follows an initiative to its project only when it covers
+                    // no other initiative.
                     if (meeting.projectId !== initiative.projectId) {
+                        if (meeting.initiativeIds.length > 0) {
+                            throw `meeting ${String(meeting.id)} covers initiatives of another project`;
+                        }
                         meeting.projectId = initiative.projectId;
-                        meeting.initiativeIds = [];
                     }
                     meeting.initiativeIds = [
                         ...meeting.initiativeIds,
