@@ -78,12 +78,13 @@ Keys get longer only when the user drops cards into the same gap again and again
 
 ### Migration
 
-Two new migrations, at the end of `MIGRATIONS` in `src-tauri/src/db.rs`, make the change. They are released together.
+Three new migrations, at the end of the migrations in `src-tauri/src/db.rs`, make the change. They are released together.
 
-1. The first migration has an SQL part and a Rust part (`M::up_with_hook` of `rusqlite_migration`, which runs the Rust code after the SQL, in the same transaction):
-   - The SQL renames `meetings.archived_at` to `deleted_at` with `ALTER TABLE ... RENAME COLUMN`, and adds a column `rank TEXT` to `initiatives`, which is `NULL` at first.
+1. The first migration renames `archived_at` to `deleted_at` in `meetings` and in `initiatives`, with `ALTER TABLE ... RENAME COLUMN`. SQLite changes the condition of the unique index on the name of an initiative to match.
+2. The second migration has an SQL part and a Rust part (`M::up_with_hook` of `rusqlite_migration`, which runs the Rust code after the SQL, in the same transaction):
+   - The SQL adds a column `rank TEXT` to `initiatives`, which is `NULL` at first.
    - The Rust code computes the ranks with the same `rank.rs` module that the backend uses later. In each horizon, the rows are taken in the order of `(position, id)`, and each row gets the key after the key of the row before it. This keeps the order of every column. Completed and deleted rows get keys in the same sequence, so they keep the place they had last, as ADR 0013 intended for a restore.
-2. The second migration rebuilds the `initiatives` table. A new table with `rank TEXT NOT NULL` and `deleted_at`, and without `position`, receives the rows of the old table. The old table is dropped, and the new one takes its name. The indexes are created again: the unique index on the name, now with `WHERE deleted_at IS NULL AND name <> ''`, and the new unique index on the horizon and the rank.
+3. The third migration rebuilds the `initiatives` table. A new table with `rank TEXT NOT NULL` and `deleted_at`, and without `position`, receives the rows of the old table. The old table is dropped, and the new one takes its name. The indexes are created again: the unique index on the name, now with `WHERE deleted_at IS NULL AND name <> ''`, and the new unique index on the horizon and the rank.
 
 SQLite cannot add a column that is `NOT NULL` and has no default value to a table that already has rows, and it cannot drop a column that an index uses. A rebuild is the way that the SQLite documentation gives for such changes. A rebuild drops a table that `meetings.initiative_id` refers to, which fails while foreign keys are enforced. We tested this: deferring the check with `PRAGMA defer_foreign_keys` is not enough, because the drop counts as a delete of the rows that meetings refer to, and the commit fails.
 
@@ -113,5 +114,5 @@ This keeps the rule of ADR 0010: every change that the application makes to the 
 - **Positions with gaps**, such as 1000, 2000, 3000. Most moves write one row, but the gaps run out, and then a second path must renumber the column. Text keys never run out.
 - **Write our own key generator.** The algorithm is short, but it has edge cases, such as keys at the start and the end and keys that differ only in length. The crate is small, has one optional dependency (`serde`), and is tested. `rank.rs` keeps it replaceable.
 - **Send the cards already sorted, without a rank.** The frontend would not see the keys, but it would depend on the order of a list, which Spec 0006 says it must not do, and the fake backends of the specs would have to copy the order exactly. Sending `rank` keeps the rule "the frontend sorts".
-- **Keep `rank` as the column that the first migration adds**, with a default value such as an empty text so that it can be `NOT NULL`, to avoid a rebuild. The default would be a key that means nothing, and `position` would stay in the table unless its index is dropped first.
+- **Keep `rank` as the column that the second migration adds**, with a default value such as an empty text so that it can be `NOT NULL`, to avoid a rebuild. The default would be a key that means nothing, and `position` would stay in the table unless its index is dropped first.
 - **Rebuild with `PRAGMA defer_foreign_keys = ON`.** We tested it. The commit fails, because dropping the old table counts as deleting rows that meetings refer to.
