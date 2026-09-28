@@ -77,9 +77,10 @@ export function useCoveredInitiatives({
     meetingId: number;
     initial: number[];
 }): CoveredInitiatives {
-    const entries = useRef<Map<number, Entry> | null>(null);
-    if (entries.current === null)
-        entries.current = new Map(initial.map((id) => [id, newEntry(true)]));
+    // The map is created once and changed in place, so it keeps its identity between renders.
+    const [entries] = useState(
+        () => new Map(initial.map((id) => [id, newEntry(true)])),
+    );
     const [shown, setShown] = useState<Shown>(() => ({
         checked: new Set(initial),
         linked: new Set(initial),
@@ -91,15 +92,14 @@ export function useCoveredInitiatives({
     const failureToast = useFailureToast();
 
     function publish() {
-        setShown(sets(entries.current!));
+        setShown(sets(entries));
     }
 
     async function toggle(initiativeId: number, cover: boolean) {
-        const all = entries.current!;
-        let entry = all.get(initiativeId);
+        let entry = entries.get(initiativeId);
         if (entry === undefined) {
             entry = newEntry(false);
-            all.set(initiativeId, entry);
+            entries.set(initiativeId, entry);
         }
         const request = ++latestRequest.current;
         entry.latest = request;

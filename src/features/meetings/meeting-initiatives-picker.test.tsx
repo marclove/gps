@@ -25,13 +25,31 @@ const OLD: InitiativeSummary = {
     deletedAt: "2026-09-25T10:00:00.000Z",
 };
 
+const NEXT: InitiativeSummary = {
+    ...OLD,
+    id: 2,
+    name: "Pilot",
+    deletedAt: null,
+};
+
+const PREVIOUS: InitiativeSummary = {
+    ...OLD,
+    id: 3,
+    name: "Launch",
+    deletedAt: null,
+};
+
+/** The initiatives that the backend lists. */
+let initiatives: InitiativeSummary[];
+
 /** The reply to the removal, which the test ends when it needs to. */
 let removal: { resolve: () => void; reject: () => void };
 
 beforeEach(() => {
+    initiatives = [OLD];
     invoke.mockReset();
     invoke.mockImplementation((command: string) => {
-        if (command === "list_initiatives") return Promise.resolve([OLD]);
+        if (command === "list_initiatives") return Promise.resolve(initiatives);
         return new Promise((resolve, reject) => {
             removal = {
                 resolve: () => resolve({}),
@@ -65,6 +83,7 @@ async function openPopover() {
     });
     return {
         user,
+        popover,
         checkbox: within(popover).getByRole("checkbox", {
             name: "Old (deleted)",
         }),
@@ -98,5 +117,42 @@ describe("MeetingInitiativesPicker", () => {
 
         await waitFor(() => expect(checkbox).toBeChecked());
         expect(checkbox).not.toHaveAttribute("aria-disabled", "true");
+    });
+
+    it("moves the focus to the next checkbox when the removal of a deleted initiative is saved", async () => {
+        initiatives = [OLD, NEXT, PREVIOUS];
+        const { user, popover, checkbox } = await openPopover();
+
+        await user.click(checkbox);
+        expect(checkbox).toHaveFocus();
+        removal.resolve();
+
+        await waitFor(() => expect(checkbox).not.toBeInTheDocument());
+        expect(
+            within(popover).getByRole("checkbox", { name: "Pilot" }),
+        ).toHaveFocus();
+    });
+
+    it("moves the focus to the previous checkbox when the deleted initiative was the last", async () => {
+        initiatives = [OLD, PREVIOUS];
+        const { user, popover, checkbox } = await openPopover();
+
+        await user.click(checkbox);
+        removal.resolve();
+
+        await waitFor(() => expect(checkbox).not.toBeInTheDocument());
+        expect(
+            within(popover).getByRole("checkbox", { name: "Launch" }),
+        ).toHaveFocus();
+    });
+
+    it("moves the focus to the popover when no checkbox is left", async () => {
+        const { user, popover, checkbox } = await openPopover();
+
+        await user.click(checkbox);
+        removal.resolve();
+
+        await waitFor(() => expect(checkbox).not.toBeInTheDocument());
+        expect(popover).toHaveFocus();
     });
 });

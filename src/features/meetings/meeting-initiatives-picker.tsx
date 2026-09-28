@@ -1,3 +1,4 @@
+import { useLayoutEffect, useRef, type FocusEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -124,7 +125,13 @@ export function MeetingInitiativesPicker({
     );
 }
 
-/** The content of the popover: one labeled checkbox for each choice, in a list that scrolls. */
+/**
+ * The content of the popover: one labeled checkbox for each choice, in a list that scrolls.
+ *
+ * When the checkbox that has the keyboard focus leaves the list, the focus moves to the next
+ * checkbox. If there is no next checkbox, the focus moves to the previous one. If the list is
+ * empty, the focus moves to the popover. Thus the focus stays in the popover.
+ */
 function InitiativeCheckboxes({
     choices,
     checked,
@@ -134,9 +141,53 @@ function InitiativeCheckboxes({
     checked: ReadonlySet<number>;
     toggle: (initiativeId: number, cover: boolean) => Promise<void>;
 }) {
-    if (choices.length === 0) return <p>This project has no initiatives.</p>;
+    const root = useRef<HTMLElement>(null);
+    const checkboxes = useRef(new Map<number, HTMLElement>());
+    // The identifier of the choice whose checkbox has the focus.
+    const focused = useRef<number | null>(null);
+    // The identifiers of the choices, in the order of the last render.
+    const shownIds = useRef<number[]>([]);
+
+    useLayoutEffect(() => {
+        const ids = choices.map((choice) => choice.id);
+        const previous = shownIds.current;
+        shownIds.current = ids;
+        const id = focused.current;
+        if (id === null || ids.includes(id)) return;
+        focused.current = null;
+        // Move the focus only when it was lost with the checkbox, not when the user moved it.
+        const active = document.activeElement;
+        if (active !== null && active !== document.body) return;
+        const index = previous.indexOf(id);
+        const next =
+            previous.slice(index + 1).find((other) => ids.includes(other)) ??
+            previous
+                .slice(0, Math.max(index, 0))
+                .reverse()
+                .find((other) => ids.includes(other));
+        const target =
+            (next === undefined ? undefined : checkboxes.current.get(next)) ??
+            root.current?.closest<HTMLElement>('[role="dialog"]');
+        target?.focus();
+    }, [choices]);
+
+    function onBlur(event: FocusEvent) {
+        // When the checkbox leaves the page, the focus goes to no element. Keep the choice
+        // then, so that the focus can move to a checkbox near it.
+        if (event.relatedTarget !== null) focused.current = null;
+    }
+
+    if (choices.length === 0)
+        return (
+            <p ref={(element) => void (root.current = element)}>
+                This project has no initiatives.
+            </p>
+        );
     return (
-        <div className="flex max-h-80 flex-col gap-1 overflow-y-auto">
+        <div
+            ref={(element) => void (root.current = element)}
+            className="flex max-h-80 flex-col gap-1 overflow-y-auto"
+        >
             {choices.map((choice) => {
                 const isChecked = checked.has(choice.id);
                 return (
@@ -145,11 +196,18 @@ function InitiativeCheckboxes({
                         className="flex min-w-0 items-start gap-2 px-1 py-1 break-words"
                     >
                         <Checkbox
+                            ref={(element) => {
+                                if (element === null)
+                                    checkboxes.current.delete(choice.id);
+                                else checkboxes.current.set(choice.id, element);
+                            }}
                             className="mt-0.5"
                             checked={isChecked}
                             // The backend refuses to add a deleted initiative, so the user
                             // cannot check one again after unchecking it.
                             disabled={choice.deleted && !isChecked}
+                            onFocus={() => (focused.current = choice.id)}
+                            onBlur={onBlur}
                             onCheckedChange={(value) =>
                                 void toggle(choice.id, value)
                             }

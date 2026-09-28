@@ -171,6 +171,46 @@ describe("useCoveredInitiatives", () => {
         await expectToast(REMOVE_FAILED);
     });
 
+    it("ignores an older save that fails after a newer save of the same initiative succeeded", async () => {
+        const { result } = renderCovered();
+
+        const checked = toggle(result, 2, true);
+        const unchecked = toggle(result, 2, false);
+        await settle(() => pending[1].resolve(), unchecked);
+        expect(result.current.checked.has(2)).toBe(false);
+
+        await settle(() => pending[0].reject(), checked);
+
+        expect(result.current.checked.has(2)).toBe(false);
+        expect(result.current.linked.has(2)).toBe(false);
+        expect(
+            within(notifications()).queryByText(ADD_FAILED),
+        ).not.toBeInTheDocument();
+    });
+
+    it("keeps the newer state when an older save fails while a newer save is in flight", async () => {
+        const { result } = renderCovered();
+
+        // Three clicks, so that the newest state differs from the state that was saved last.
+        const first = toggle(result, 2, true);
+        const second = toggle(result, 2, false);
+        const third = toggle(result, 2, true);
+        await settle(() => pending[0].reject(), first);
+
+        expect(result.current.checked.has(2)).toBe(true);
+        await expectToast(ADD_FAILED);
+
+        await settle(() => pending[2].resolve(), third);
+
+        expect(result.current.checked.has(2)).toBe(true);
+        await expectNoToast(ADD_FAILED);
+
+        await settle(() => pending[1].resolve(), second);
+
+        expect(result.current.checked.has(2)).toBe(true);
+        expect(result.current.linked.has(2)).toBe(true);
+    });
+
     it("keeps the failure toast when a later toggle of another initiative succeeds after the failure", async () => {
         const { result } = renderCovered();
 
