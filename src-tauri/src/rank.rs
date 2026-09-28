@@ -52,10 +52,6 @@ impl std::error::Error for Error {}
 ///
 /// Returns [`Error::Invalid`] when a bound is not a valid rank key, and
 /// [`Error::OutOfOrder`] when the bounds are equal or reversed.
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "initiatives use it from the rank task on")
-)]
 pub fn between(before: Option<&str>, after: Option<&str>) -> Result<String, Error> {
     let lower = before.map(validate).transpose()?;
     let upper = after.map(validate).transpose()?;

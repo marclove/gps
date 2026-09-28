@@ -19,7 +19,7 @@ function summary(
         name: `Initiative ${id}`,
         raciRole: null,
         horizon: "now",
-        position: 0,
+        rank: "8",
         createdAt: "2026-09-01T00:00:00Z",
         updatedAt: "2026-09-01T00:00:00Z",
         completedAt: null,
@@ -40,9 +40,9 @@ function ids(board: Board): Record<Column, number[]> {
 /** A board with 1 and 2 in Now, 3 in Next, nothing in Later, and 5 then 4 in Done. */
 function sampleBoard(): Board {
     return buildBoard([
-        summary(1, { horizon: "now", position: 0 }),
-        summary(2, { horizon: "now", position: 1 }),
-        summary(3, { horizon: "next", position: 0 }),
+        summary(1, { horizon: "now", rank: "4" }),
+        summary(2, { horizon: "now", rank: "8" }),
+        summary(3, { horizon: "next", rank: "4" }),
         summary(4, { completedAt: "2026-09-02T00:00:00Z" }),
         summary(5, { completedAt: "2026-09-03T00:00:00Z" }),
     ]);
@@ -64,21 +64,21 @@ describe("buildBoard", () => {
         });
     });
 
-    it("orders Now, Next, and Later by position", () => {
+    it("orders Now, Next, and Later by rank as text", () => {
         const board = buildBoard([
-            summary(1, { horizon: "later", position: 2 }),
-            summary(2, { horizon: "later", position: 0 }),
-            summary(3, { horizon: "later", position: 1 }),
+            summary(1, { horizon: "later", rank: "c" }),
+            summary(2, { horizon: "later", rank: "4" }),
+            summary(3, { horizon: "later", rank: "81f" }),
         ]);
 
         expect(board.later.map((card) => card.id)).toEqual([2, 3, 1]);
     });
 
-    it("orders cards with the same position by identifier", () => {
+    it("orders cards with the same rank by identifier", () => {
         const board = buildBoard([
-            summary(3, { horizon: "next", position: 0 }),
-            summary(1, { horizon: "next", position: 0 }),
-            summary(2, { horizon: "next", position: 0 }),
+            summary(3, { horizon: "next", rank: "4" }),
+            summary(1, { horizon: "next", rank: "4" }),
+            summary(2, { horizon: "next", rank: "4" }),
         ]);
 
         expect(board.next.map((card) => card.id)).toEqual([1, 2, 3]);
@@ -137,9 +137,9 @@ describe("columnOf", () => {
 describe("moveCard", () => {
     it("moves a card down in its column", () => {
         const board = buildBoard([
-            summary(1, { horizon: "now", position: 0 }),
-            summary(2, { horizon: "now", position: 1 }),
-            summary(3, { horizon: "now", position: 2 }),
+            summary(1, { horizon: "now", rank: "4" }),
+            summary(2, { horizon: "now", rank: "8" }),
+            summary(3, { horizon: "now", rank: "c" }),
         ]);
 
         expect(moveCard(board, 1, "now", 2).now.map((c) => c.id)).toEqual([
@@ -149,9 +149,9 @@ describe("moveCard", () => {
 
     it("moves a card up in its column", () => {
         const board = buildBoard([
-            summary(1, { horizon: "now", position: 0 }),
-            summary(2, { horizon: "now", position: 1 }),
-            summary(3, { horizon: "now", position: 2 }),
+            summary(1, { horizon: "now", rank: "4" }),
+            summary(2, { horizon: "now", rank: "8" }),
+            summary(3, { horizon: "now", rank: "c" }),
         ]);
 
         expect(moveCard(board, 3, "now", 0).now.map((c) => c.id)).toEqual([
@@ -233,11 +233,11 @@ describe("addCard", () => {
     it("puts the card at the top of Later and keeps the other cards", () => {
         const withSix = addCard(
             sampleBoard(),
-            summary(6, { horizon: "later", position: 0 }),
+            summary(6, { horizon: "later", rank: "4" }),
         );
         const board = addCard(
             withSix,
-            summary(7, { horizon: "later", position: 0 }),
+            summary(7, { horizon: "later", rank: "4" }),
         );
 
         expect(ids(board)).toEqual({
@@ -265,7 +265,7 @@ describe("addCard", () => {
 
 describe("replaceCard", () => {
     it("replaces the card and keeps its place", () => {
-        const renamed = summary(1, { name: "Launch", position: 0 });
+        const renamed = summary(1, { name: "Launch", rank: "4" });
 
         const board = replaceCard(sampleBoard(), renamed);
 

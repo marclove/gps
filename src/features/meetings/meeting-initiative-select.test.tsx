@@ -23,7 +23,7 @@ function summary(
         name,
         raciRole: null,
         horizon: "now",
-        position: id - 1,
+        rank: id.toString(16),
         createdAt: "2026-09-24T10:00:00.000Z",
         updatedAt: "2026-09-24T10:00:00.000Z",
         completedAt: null,

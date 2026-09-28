@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
     COLUMNS,
+    compareRanks,
     createInitiative,
     deletedInitiativeChoices,
     deleteInitiative,
@@ -115,7 +116,7 @@ function summary(
         name: `Initiative ${fields.id}`,
         raciRole: null,
         horizon: "now",
-        position: 0,
+        rank: "8",
         createdAt: "2026-09-01T00:00:00Z",
         updatedAt: "2026-09-01T00:00:00Z",
         completedAt: null,
@@ -127,14 +128,43 @@ function summary(
 const COMPLETED = "2026-09-20T00:00:00Z";
 const DELETED = "2026-09-21T00:00:00Z";
 
+describe("compareRanks", () => {
+    it("compareRanks sorts by character codes, not by language rules", () => {
+        expect(compareRanks("81f", "c")).toBeLessThan(0);
+        expect(compareRanks("c", "81f")).toBeGreaterThan(0);
+        // localeCompare puts "a" before "B", but the character code of "B" is smaller.
+        expect(compareRanks("B", "a")).toBeLessThan(0);
+        expect(compareRanks("8", "8")).toBe(0);
+    });
+});
+
 describe("initiativeChoiceGroups", () => {
-    it("groups the open initiatives by horizon, sorted by position and then by id", () => {
+    it("sorts by rank when the order of the ranks differs from the order of the ids", () => {
+        const groups = initiativeChoiceGroups([
+            summary({ id: 1, name: "Third", rank: "c" }),
+            summary({ id: 2, name: "First", rank: "4" }),
+            summary({ id: 3, name: "Second", rank: "81f" }),
+        ]);
+
+        expect(groups).toEqual([
+            {
+                label: "Now",
+                choices: [
+                    { id: 2, label: "First" },
+                    { id: 3, label: "Second" },
+                    { id: 1, label: "Third" },
+                ],
+            },
+        ]);
+    });
+
+    it("groups the open initiatives by horizon, sorted by rank and then by id", () => {
         const groups = initiativeChoiceGroups([
             summary({ id: 5, name: "Later one", horizon: "later" }),
-            summary({ id: 4, name: "Now second", position: 1 }),
+            summary({ id: 4, name: "Now second", rank: "c" }),
             summary({ id: 3, name: "Next one", horizon: "next" }),
-            summary({ id: 2, name: "Now tie", position: 0 }),
-            summary({ id: 1, name: "Now first", position: 0 }),
+            summary({ id: 2, name: "Now tie", rank: "8" }),
+            summary({ id: 1, name: "Now first", rank: "8" }),
         ]);
 
         expect(groups).toEqual([

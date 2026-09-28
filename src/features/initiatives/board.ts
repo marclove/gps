@@ -1,5 +1,6 @@
 import {
     COLUMNS,
+    compareRanks,
     type Column,
     type InitiativeSummary,
 } from "@/lib/initiatives";
@@ -15,7 +16,7 @@ export function emptyBoard(): Board {
 /**
  * Makes the board from the initiative summaries. A completed initiative goes into Done, and
  * another initiative goes into the column of its horizon. Now, Next, and Later are sorted by
- * position and then by identifier. Done is sorted by the time of completion, the initiative
+ * rank and then by identifier. Done is sorted by the time of completion, the initiative
  * completed last first, and then by identifier, the largest first.
  */
 export function buildBoard(summaries: InitiativeSummary[]): Board {
@@ -26,7 +27,9 @@ export function buildBoard(summaries: InitiativeSummary[]): Board {
         );
     }
     for (const column of ["now", "next", "later"] as const) {
-        board[column].sort((a, b) => a.position - b.position || a.id - b.id);
+        board[column].sort(
+            (a, b) => compareRanks(a.rank, b.rank) || a.id - b.id,
+        );
     }
     // RFC 3339 timestamps in UTC sort correctly as text.
     board.done.sort(
@@ -47,7 +50,7 @@ export function columnOf(board: Board, id: number): Column | null {
 }
 
 /**
- * Returns a board with the card moved to the column `to`, at the position `index` in that
+ * Returns a board with the card moved to the column `to`, at the place `index` in that
  * column, counted without the card. An index larger than the column puts the card at the end.
  * A card moved to Done goes first in Done, and the index has no effect. A move inside Done
  * does not change the board. If no column holds the card, the function returns the board that

@@ -18,7 +18,7 @@ const PILOT: Initiative = {
     description: "",
     raciRole: null,
     horizon: "next",
-    position: 0,
+    rank: "8",
     createdAt: "2026-09-01T10:00:00Z",
     updatedAt: "2026-09-01T10:00:00Z",
     completedAt: null,
