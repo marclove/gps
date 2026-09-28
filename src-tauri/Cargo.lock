@@ -1068,6 +1068,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "fractional_index"
+version = "2.0.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ce01fad85c73f947e62a39152c7b0f785af7f44859da36e421c42a3023bcbe3a"
+
+[[package]]
 name = "futures-channel"
 version = "0.3.34"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1383,6 +1389,7 @@ dependencies = [
 name = "gps"
 version = "0.1.0"
 dependencies = [
+ "fractional_index",
  "rusqlite",
  "rusqlite_migration",
  "serde",

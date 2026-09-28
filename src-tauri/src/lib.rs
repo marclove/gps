@@ -1,6 +1,7 @@
 mod db;
 mod initiatives;
 mod meetings;
+mod rank;
 mod tasks;
 
 use std::sync::Mutex;
