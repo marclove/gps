@@ -203,11 +203,18 @@ mod tests {
     fn foreign_keys_are_enforced() {
         let connection = open_in_memory();
         let result = connection.execute(
-            "INSERT INTO tasks (meeting_id, description, created_at, updated_at)
+            "INSERT INTO tasks (meeting_id, title, created_at, updated_at)
              VALUES (999, 'x', 't', 't')",
             [],
         );
-        assert!(result.is_err());
+        assert!(
+            matches!(
+                result,
+                Err(rusqlite::Error::SqliteFailure(ref error, _))
+                    if error.extended_code == rusqlite::ffi::SQLITE_CONSTRAINT_FOREIGNKEY
+            ),
+            "{result:?}"
+        );
     }
 
     #[test]

@@ -6,7 +6,7 @@ Date: 2026-09-28
 
 Accepted
 
-Supersedes the names of the column `description`, the command `update_task_description`, and the field `description` in [ADR 0010](0010-store-tasks-in-their-own-table.md).
+Supersedes the name of the column `description`, the name of the command `update_task_description`, and the name of the field `description` in [ADR 0010](0010-store-tasks-in-their-own-table.md).
 
 ## Context
 
