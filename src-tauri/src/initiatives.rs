@@ -366,8 +366,9 @@ pub fn update(
 /// changed. Does not change the column or the rank, so the initiative keeps its place on the
 /// roadmap. If the initiative already belongs to the project, changes nothing.
 ///
-/// The project must exist and must not be deleted. If an initiative of the project that is not
-/// deleted has the same name, without regard to uppercase and lowercase letters, returns
+/// Refuses a deleted initiative. The project must exist and must not be deleted, also when the
+/// initiative already belongs to it. If an initiative of the project that is not deleted has
+/// the same name, without regard to uppercase and lowercase letters, returns
 /// `MoveOutcome::NameTaken` and changes nothing. An empty name never conflicts.
 pub fn set_project(
     connection: &Connection,
@@ -376,10 +377,13 @@ pub fn set_project(
 ) -> Result<MoveOutcome, Error> {
     let transaction = connection.unchecked_transaction()?;
     let initiative = get(&transaction, id)?.ok_or(Error::NotFound(id))?;
+    if initiative.deleted_at.is_some() {
+        return Err(Error::Deleted(id));
+    }
+    check_project(&transaction, project_id)?;
     if initiative.project_id == project_id {
         return Ok(MoveOutcome::Moved { initiative });
     }
-    check_project(&transaction, project_id)?;
     if name_is_taken(&transaction, project_id, Some(id), &initiative.name)? {
         return Ok(MoveOutcome::NameTaken);
     }
@@ -1597,6 +1601,40 @@ mod tests {
 
         assert_eq!(fetch(&connection, launch), before);
         assert_eq!(fetch_meeting(&connection, meeting), meeting_before);
+    }
+
+    #[test]
+    fn set_project_refuses_a_deleted_project_that_the_initiative_already_has() {
+        let connection = open_in_memory();
+        let launch = add(&connection, "Launch", "now");
+        // The backend refuses to delete a project with initiatives, so the project is marked
+        // as deleted directly.
+        connection
+            .execute(
+                "UPDATE projects SET deleted_at = 't' WHERE id = ?1",
+                params![home(&connection)],
+            )
+            .unwrap();
+
+        assert!(matches!(
+            set_project(&connection, launch, home(&connection)),
+            Err(Error::ProjectDeleted(id)) if id == home(&connection)
+        ));
+    }
+
+    #[test]
+    fn set_project_refuses_a_deleted_initiative() {
+        let connection = open_in_memory();
+        let billing = project(&connection, "Billing");
+        let launch = add(&connection, "Launch", "now");
+        delete(&connection, launch).unwrap();
+        let before = fetch(&connection, launch);
+
+        assert!(matches!(
+            set_project(&connection, launch, billing),
+            Err(Error::Deleted(id)) if id == launch
+        ));
+        assert_eq!(fetch(&connection, launch), before);
     }
 
     #[test]
