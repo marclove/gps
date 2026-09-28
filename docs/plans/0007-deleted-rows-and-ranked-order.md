@@ -6,7 +6,7 @@
 
 **Architecture:** The work goes in two vertical slices. The first slice renames the column, the Rust functions, the backend commands, the frontend functions, and the shared toast provider, and then changes the words for meetings. The second slice adds a module `rank.rs` with its own generator of rank keys, changes how `db.rs` applies migrations so that a migration can rebuild a table that other tables refer to, and then replaces `position` with `rank` in the database, the backend, the interface between frontend and backend, and the frontend.
 
-**Tech Stack:** Rust with `rusqlite` 0.40, and `rusqlite_migration` 2.6, with a generator of rank keys of our own in `rank.rs`; React 19 with TypeScript; Vitest with React Testing Library in jsdom, and Vitest browser mode in WebKit.
+**Tech Stack:** Rust with `rusqlite` 0.40 and `rusqlite_migration` 2.6; rank keys come from our own generator in `rank.rs`; React 19 with TypeScript; Vitest with React Testing Library in jsdom, and Vitest browser mode in WebKit.
 
 **Spec:** `docs/specs/0007-deleted-rows-and-ranked-order.md`, argued in `docs/adrs/0017-mark-deleted-rows-and-order-cards-by-rank.md`. Read both before you start a task.
 
@@ -85,7 +85,7 @@ fn deleted_at_replaces_archived_at() {
 
 - [ ] **Step 2:** Run `cargo test --manifest-path src-tauri/Cargo.toml deleted_at_replaces_archived_at`. Expected: FAIL on the `deleted_at` assertion for `meetings`.
 
-- [ ] **Step 3: Add the migration** at the end of `MIGRATIONS`:
+- [ ] **Step 3: Add the migration** at the end of `MIGRATIONS`, and end it with `.foreign_key_check()`:
 
 ```sql
 ALTER TABLE meetings RENAME COLUMN archived_at TO deleted_at;
@@ -156,7 +156,7 @@ Note: an earlier version of this task used the crate `fractional_index`. It was 
 - Modify: `src-tauri/src/db.rs`
 
 **Interfaces:**
-- Produces: `fn migrations() -> Migrations<'static>` replaces the constant `MIGRATIONS`, because `M::up_with_hook` is not a `const fn`. The entries and their order stay as they are. `prepare(connection)` runs `PRAGMA foreign_keys = OFF`, then the migrations, then `PRAGMA foreign_keys = ON`. A private function `apply(connection: &mut Connection, migrations: &Migrations) -> Result<(), rusqlite_migration::Error>` holds these three steps, so that tests can pass their own migrations. Task 5 adds its migrations to `migrations()` and ends each of them with `.foreign_key_check()`, because foreign keys are not enforced while migrations run. The docstring of `migrations()` states this rule for every new migration that changes a table or its data.
+- Produces: `fn migrations() -> Migrations<'static>` replaces the constant `MIGRATIONS`, because `M::up_with_hook` is not a `const fn`. The entries and their order stay as they are. `prepare(connection)` runs `PRAGMA foreign_keys = OFF`, then the migrations, then `PRAGMA foreign_keys = ON`. A private function `apply(connection: &mut Connection, migrations: &Migrations) -> Result<(), rusqlite_migration::Error>` holds these three steps, so that tests can pass their own migrations. Every new migration that changes a table or its data ends with `.foreign_key_check()`, because foreign keys are not enforced while migrations run. This includes the migration from Task 1 and the migrations that Task 5 adds to `migrations()`. The docstring of `migrations()` states this rule.
 
 - [ ] **Step 1: Write the failing tests** in `db.rs`:
   - `foreign_keys_are_on_after_open`: `PRAGMA foreign_keys` reads 1 on `open_in_memory()`.
@@ -165,7 +165,7 @@ Note: an earlier version of this task used the crate `fractional_index`. It was 
 
 - [ ] **Step 2:** Run `cargo test --manifest-path src-tauri/Cargo.toml db::`. Expected: FAIL to compile, because `apply` does not exist.
 
-- [ ] **Step 3: Implement** `migrations()`, `apply`, and the new `prepare`. Update the docstring of `prepare` to say why foreign keys are off during migrations, and that each rebuild must check them itself. `migrations_are_valid` uses `migrations()`.
+- [ ] **Step 3: Implement** `migrations()`, `apply`, and the new `prepare`. Update the docstring of `prepare` to say why foreign keys are off during migrations, and that every new migration that changes a table or its data must end with `.foreign_key_check()`. `migrations_are_valid` uses `migrations()`.
 
 - [ ] **Step 4: Verify.** Run `cargo test --manifest-path src-tauri/Cargo.toml && bun run lint:rust`. Expected: PASS.
 

@@ -59,7 +59,8 @@ fn migrations() -> Migrations<'static> {
         M::up(
         "ALTER TABLE meetings RENAME COLUMN archived_at TO deleted_at;
     ALTER TABLE initiatives RENAME COLUMN archived_at TO deleted_at;",
-        ),
+        )
+        .foreign_key_check(),
         M::up_with_hook("ALTER TABLE initiatives ADD COLUMN rank TEXT;", fill_ranks)
             .foreign_key_check(),
         M::up(REBUILD_INITIATIVES).foreign_key_check(),
