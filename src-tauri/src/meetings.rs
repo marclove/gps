@@ -295,9 +295,8 @@ pub fn remove_initiative(
 /// Returns the meeting as it is stored after the change.
 ///
 /// If the project changes, also removes all initiatives from the meeting, and sets the time the
-/// meeting was last changed. If the meeting already has the project, changes
-/// nothing, also when the project is deleted. Otherwise the project must exist and must not be
-/// deleted.
+/// meeting was last changed. If the meeting already has the project, changes nothing, also when
+/// the project is deleted. Otherwise the project must exist and must not be deleted.
 pub fn set_project(
     connection: &Connection,
     id: i64,

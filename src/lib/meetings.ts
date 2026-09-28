@@ -62,11 +62,13 @@ export function updateMeeting(
 /**
  * Makes a meeting cover an initiative, in addition to the initiatives that it covers, and
  * returns the stored meeting. The backend rejects an initiative that is deleted or does not
- * exist. If the meeting already covers the initiative, nothing changes. If the initiative
- * belongs to another project than the meeting, or the meeting has no project, the backend sets
- * the project of the meeting to the project of the initiative when the meeting covers no
- * initiative. When the meeting covers an initiative, also a deleted one, the backend rejects
- * the change and changes nothing.
+ * exist. If the meeting already covers the initiative, nothing changes.
+ *
+ * If the meeting has no project, or a different project than the initiative, and the meeting
+ * covers no initiative, the backend also sets the project of the meeting to the project of the
+ * initiative. If such a meeting covers an initiative, also a deleted one, the backend rejects
+ * the change and changes nothing. When the initiative belongs to the project of the meeting,
+ * the backend adds it also when the meeting covers other initiatives.
  */
 export function addMeetingInitiative(
     id: number,
