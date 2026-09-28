@@ -35,7 +35,7 @@ function meeting(projectId: number | null): Meeting {
         name: "Weekly sync",
         date: "2026-09-24",
         notes: "",
-        initiativeId: null,
+        initiativeIds: [],
         projectId,
         createdAt: "2026-09-24T10:00:00.000Z",
         updatedAt: "2026-09-24T10:00:00.000Z",

@@ -67,6 +67,7 @@ fn migrations() -> Migrations<'static> {
         M::up("ALTER TABLE tasks RENAME COLUMN description TO title;").foreign_key_check(),
         M::up(CREATE_PROJECTS).foreign_key_check(),
         M::up(PUT_INITIATIVES_IN_PROJECTS).foreign_key_check(),
+        M::up(ADD_MEETING_INITIATIVES).foreign_key_check(),
     ])
 }
 
@@ -191,6 +192,47 @@ CREATE INDEX meetings_project_id ON meetings(project_id);
 UPDATE meetings
 SET project_id = (SELECT project_id FROM initiatives WHERE initiatives.id = meetings.initiative_id)
 WHERE initiative_id IS NOT NULL;
+";
+
+/// Moves the initiative of each meeting to the new table `meeting_initiatives`, so that a
+/// meeting can cover any number of initiatives.
+///
+/// Creates `meeting_initiatives` with one row for each initiative that a meeting covers, and an
+/// index that makes it fast to find the meetings of an initiative. Copies the `initiative_id`
+/// of each meeting that has one into a row, also for deleted meetings and deleted initiatives.
+/// The time when the user chose the initiative is not known, so the row gets the `updated_at`
+/// of the meeting as `created_at`.
+///
+/// Rebuilds the table `meetings` without `initiative_id`, because `SQLite` cannot drop a column
+/// that has a foreign key. The rows keep their identifiers and their project, so the references
+/// from `tasks` and `meeting_initiatives` stay valid.
+const ADD_MEETING_INITIATIVES: &str = "
+CREATE TABLE meeting_initiatives (
+    meeting_id    INTEGER NOT NULL REFERENCES meetings(id),
+    initiative_id INTEGER NOT NULL REFERENCES initiatives(id),
+    created_at    TEXT NOT NULL,
+    PRIMARY KEY (meeting_id, initiative_id)
+);
+CREATE INDEX meeting_initiatives_initiative_id ON meeting_initiatives(initiative_id);
+INSERT INTO meeting_initiatives (meeting_id, initiative_id, created_at)
+SELECT id, initiative_id, updated_at FROM meetings WHERE initiative_id IS NOT NULL;
+CREATE TABLE meetings_new (
+    id         INTEGER PRIMARY KEY,
+    name       TEXT NOT NULL,
+    notes      TEXT NOT NULL DEFAULT '',
+    date       TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    deleted_at TEXT,
+    project_id INTEGER REFERENCES projects(id)
+);
+INSERT INTO meetings_new
+    (id, name, notes, date, created_at, updated_at, deleted_at, project_id)
+SELECT id, name, notes, date, created_at, updated_at, deleted_at, project_id
+FROM meetings;
+DROP TABLE meetings;
+ALTER TABLE meetings_new RENAME TO meetings;
+CREATE INDEX meetings_project_id ON meetings(project_id);
 ";
 
 /// Opens the database file at `path`, and creates it if it does not exist.
@@ -324,7 +366,7 @@ mod tests {
 
         let meeting = crate::meetings::get(&connection, 1).unwrap().unwrap();
         assert_eq!(meeting.name, "Kickoff");
-        assert_eq!(meeting.initiative_id, None);
+        assert!(meeting.initiative_ids.is_empty());
         let tasks = crate::tasks::list_for_meeting(&connection, 1).unwrap();
         assert_eq!(tasks.len(), 1);
         assert_eq!(tasks[0].title, "Send the deck");
@@ -476,7 +518,7 @@ mod tests {
         assert!(!columns.contains(&"position".to_owned()));
         let initiative_id: i64 = connection
             .query_row(
-                "SELECT initiative_id FROM meetings WHERE id = 1",
+                "SELECT initiative_id FROM meeting_initiatives WHERE meeting_id = 1",
                 [],
                 |row| row.get(0),
             )
@@ -609,10 +651,14 @@ mod tests {
             column_values::<Option<i64>>(&connection, "meetings", "project_id"),
             [Some(unsorted), None]
         );
-        assert_eq!(
-            column_values::<Option<i64>>(&connection, "meetings", "initiative_id"),
-            [Some(2), None]
-        );
+        let links: Vec<(i64, i64)> = connection
+            .prepare("SELECT meeting_id, initiative_id FROM meeting_initiatives")
+            .unwrap()
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?)))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert_eq!(links, [(1, 2)]);
         let enabled: bool = connection
             .pragma_query_value(None, "foreign_keys", |row| row.get(0))
             .unwrap();
@@ -634,5 +680,92 @@ mod tests {
             .query_row("SELECT count(*) FROM projects", [], |row| row.get(0))
             .unwrap();
         assert_eq!(count, 0);
+    }
+
+    /// The number of migrations before the migration that moves the initiative of each meeting
+    /// to the table `meeting_initiatives`.
+    const VERSION_WITHOUT_MEETING_INITIATIVES: usize = 10;
+
+    #[test]
+    fn migration_copies_the_initiative_of_each_meeting_into_meeting_initiatives() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        migrations()
+            .to_version(&mut connection, VERSION_WITHOUT_MEETING_INITIATIVES)
+            .unwrap();
+        connection
+            .execute_batch(
+                "INSERT INTO projects (id, name, created_at, updated_at)
+                 VALUES (1, 'Billing', 't', 't');
+                 INSERT INTO initiatives
+                     (id, project_id, name, horizon, rank, created_at, updated_at, deleted_at)
+                 VALUES (1, 1, 'Launch', 'now', 'a', 't', 't', NULL),
+                        (2, 1, 'Pilot', 'now', 'b', 't', 't', 't');
+                 INSERT INTO meetings (id, name, notes, date, created_at, updated_at,
+                                       deleted_at, initiative_id, project_id)
+                 VALUES (1, 'Sync', '', '2026-09-24', 't', 'u1', NULL, 1, 1),
+                        (2, 'Review', '', '2026-09-24', 't', 'u2', 'd', 2, 1),
+                        (3, 'Free', '', '2026-09-24', 't', 'u3', NULL, NULL, NULL);
+                 INSERT INTO tasks (id, meeting_id, title, created_at, updated_at)
+                 VALUES (1, 1, 'Send the deck', 't', 't');",
+            )
+            .unwrap();
+
+        apply(&mut connection, &migrations()).unwrap();
+
+        let links: Vec<(i64, i64, String)> = connection
+            .prepare(
+                "SELECT meeting_id, initiative_id, created_at FROM meeting_initiatives
+                 ORDER BY meeting_id",
+            )
+            .unwrap()
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert_eq!(links, [(1, 1, "u1".to_owned()), (2, 2, "u2".to_owned())]);
+        let columns: Vec<String> = connection
+            .prepare("SELECT name FROM pragma_table_info('meetings')")
+            .unwrap()
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert!(!columns.contains(&"initiative_id".to_owned()));
+        assert_eq!(
+            column_values::<Option<i64>>(&connection, "meetings", "project_id"),
+            [Some(1), Some(1), None]
+        );
+        assert_eq!(
+            column_values::<Option<String>>(&connection, "meetings", "deleted_at"),
+            [None, Some("d".to_owned()), None]
+        );
+        assert_eq!(
+            column_values::<Option<i64>>(&connection, "tasks", "meeting_id"),
+            [Some(1)]
+        );
+        let enabled: bool = connection
+            .pragma_query_value(None, "foreign_keys", |row| row.get(0))
+            .unwrap();
+        assert!(enabled);
+        let missing = connection.execute(
+            "INSERT INTO meeting_initiatives (meeting_id, initiative_id, created_at)
+             VALUES (1, 999, 't')",
+            [],
+        );
+        assert!(missing.is_err());
+        let repeated = connection.execute(
+            "INSERT INTO meeting_initiatives (meeting_id, initiative_id, created_at)
+             VALUES (1, 1, 't')",
+            [],
+        );
+        assert!(repeated.is_err());
+        let index: i64 = connection
+            .query_row(
+                "SELECT count(*) FROM sqlite_master WHERE name = 'meetings_project_id'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(index, 1);
     }
 }

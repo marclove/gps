@@ -44,11 +44,11 @@ export function MeetingEditor({
         date: meeting.date,
         notes: meeting.notes,
     });
-    // The project and the initiative of the meeting, as the backend stored them last. A new
-    // project clears the initiative, so the initiative row starts again after a project change.
+    // The project and the initiatives of the meeting, as the backend stored them last. A new
+    // project clears the initiatives, so the initiative row starts again after a project change.
     const [assignment, setAssignment] = useState({
         projectId: meeting.projectId,
-        initiativeId: meeting.initiativeId,
+        initiativeIds: meeting.initiativeIds,
     });
     const save = useCallback(
         (changes: MeetingChanges) => updateMeeting(meeting.id, changes),
@@ -165,7 +165,7 @@ export function MeetingEditor({
                             onSaved={(saved) =>
                                 setAssignment({
                                     projectId: saved.projectId,
-                                    initiativeId: saved.initiativeId,
+                                    initiativeIds: saved.initiativeIds,
                                 })
                             }
                         />
@@ -173,7 +173,7 @@ export function MeetingEditor({
                             key={assignment.projectId ?? "none"}
                             meetingId={meeting.id}
                             projectId={assignment.projectId}
-                            initiativeId={assignment.initiativeId}
+                            initiativeId={assignment.initiativeIds[0] ?? null}
                         />
                     </>
                 }

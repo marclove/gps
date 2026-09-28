@@ -24,7 +24,7 @@ type Meeting = {
     date: string;
     notes: string;
     projectId: number | null;
-    initiativeId: number | null;
+    initiativeIds: number[];
     createdAt: string;
     updatedAt: string;
 };
@@ -39,7 +39,7 @@ function withoutDeleteTime(stored: StoredMeeting): Meeting {
         date,
         notes,
         projectId,
-        initiativeId,
+        initiativeIds,
         createdAt,
         updatedAt,
     } = stored;
@@ -49,7 +49,7 @@ function withoutDeleteTime(stored: StoredMeeting): Meeting {
         date,
         notes,
         projectId,
-        initiativeId,
+        initiativeIds,
         createdAt,
         updatedAt,
     };
@@ -69,7 +69,7 @@ class FakeBackend {
             id: this.nextId++,
             notes: "",
             projectId: null,
-            initiativeId: null,
+            initiativeIds: [],
             createdAt: now,
             updatedAt: now,
             deletedAt: null,

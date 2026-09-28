@@ -12,12 +12,14 @@ export type Meeting = {
     createdAt: string;
     /** The time when the meeting was last changed, as an RFC 3339 timestamp in UTC. */
     updatedAt: string;
-    /** The initiative that the meeting is assigned to, or `null` if it is not assigned. */
-    initiativeId: number | null;
+    /**
+     * The identifiers of the initiatives that the meeting covers, also deleted ones, in
+     * ascending order.
+     */
+    initiativeIds: number[];
     /**
      * The project that the meeting is about, or `null` for no project. The project can be
-     * deleted. If the meeting is assigned to an initiative, this is the project of that
-     * initiative.
+     * deleted. Each initiative that the meeting covers belongs to this project.
      */
     projectId: number | null;
 };

@@ -9,7 +9,7 @@
 //!
 //! Each initiative belongs to one project. Its name is unique among the initiatives of that
 //! project that are not deleted. Every initiative that is not deleted belongs to a project that
-//! is not deleted. The meetings that are assigned to an initiative are about its project.
+//! is not deleted. The meetings that cover an initiative are about its project.
 
 use std::fmt;
 
@@ -140,7 +140,8 @@ pub enum RenameOutcome {
     reason = "each value lives only until the command sends it to the frontend"
 )]
 pub enum MoveOutcome {
-    /// The initiative and its meetings belong to the other project now.
+    /// The initiative belongs to the other project now. Each meeting that covered only this
+    /// initiative moved with it. Each other meeting that covered it stays and no longer covers it.
     Moved {
         /// The initiative as it is stored after the move.
         initiative: Initiative,
@@ -360,11 +361,26 @@ pub fn update(
     get(connection, id)?.ok_or(Error::NotFound(id))
 }
 
-/// Moves an initiative, and every meeting that is assigned to it, to the project `project_id`.
+/// The SQL query for the identifiers of the meetings that cover the initiative `?1` and also
+/// cover another initiative. The other initiative can be completed or deleted.
+const MEETINGS_WITH_ANOTHER_INITIATIVE: &str = "
+    SELECT meeting_id FROM meeting_initiatives AS this
+    WHERE this.initiative_id = ?1
+      AND EXISTS (SELECT 1 FROM meeting_initiatives AS other
+                  WHERE other.meeting_id = this.meeting_id
+                    AND other.initiative_id <> ?1)";
+
+/// Moves an initiative to the project `project_id`, and keeps each meeting that covers the
+/// initiative in one project with all of its initiatives.
 ///
-/// Sets the time the initiative was last changed, and the time each moved meeting was last
-/// changed. Does not change the column or the rank, so the initiative keeps its place on the
-/// roadmap. If the initiative already belongs to the project, changes nothing.
+/// A meeting that covers only this initiative moves to the project too, and still covers the
+/// initiative. A meeting that also covers another initiative, also a completed or deleted one,
+/// stays in its project and stops covering this initiative. Sets the time each of these
+/// meetings was last changed.
+///
+/// Sets the time the initiative was last changed. Does not change the column or the rank, so
+/// the initiative keeps its place on the roadmap. If the initiative already belongs to the
+/// project, changes nothing.
 ///
 /// Refuses a deleted initiative. The project must exist and must not be deleted, also when the
 /// initiative already belongs to it. If an initiative of the project that is not deleted has
@@ -393,7 +409,22 @@ pub fn set_project(
     )?;
     transaction.execute(
         &format!(
-            "UPDATE meetings SET project_id = ?2, updated_at = {NOW} WHERE initiative_id = ?1"
+            "UPDATE meetings SET updated_at = {NOW}
+             WHERE id IN ({MEETINGS_WITH_ANOTHER_INITIATIVE})"
+        ),
+        params![id],
+    )?;
+    transaction.execute(
+        &format!(
+            "DELETE FROM meeting_initiatives
+             WHERE initiative_id = ?1 AND meeting_id IN ({MEETINGS_WITH_ANOTHER_INITIATIVE})"
+        ),
+        params![id],
+    )?;
+    transaction.execute(
+        &format!(
+            "UPDATE meetings SET project_id = ?2, updated_at = {NOW}
+             WHERE id IN (SELECT meeting_id FROM meeting_initiatives WHERE initiative_id = ?1)"
         ),
         params![id, project_id],
     )?;
@@ -448,7 +479,7 @@ pub fn move_to(
 /// database, with its column and rank. Records the current time as the time the initiative was
 /// deleted. No other initiative changes. Deleting an initiative that is already deleted keeps
 /// the time that was recorded first and changes nothing else. Does not change `updated_at` or
-/// the meetings that are assigned to the initiative.
+/// the meetings that cover the initiative.
 pub fn delete(connection: &Connection, id: i64) -> Result<(), Error> {
     let initiative = get(connection, id)?.ok_or(Error::NotFound(id))?;
     if initiative.deleted_at.is_some() {
@@ -1432,7 +1463,7 @@ mod tests {
         assert_eq!(Error::Deleted(7).to_string(), "initiative 7 is deleted");
     }
 
-    /// Creates a meeting that is assigned to the initiative `id`, sets its `updated_at` to
+    /// Creates a meeting that covers only the initiative `id`, sets its `updated_at` to
     /// `OLD_TIME`, and returns its identifier.
     fn meeting_of(connection: &Connection, id: i64) -> i64 {
         let meeting = meetings::create(connection, "2026-09-24").unwrap();
@@ -1507,8 +1538,26 @@ mod tests {
         ));
     }
 
+    /// Makes the meeting `meeting_id` also cover the initiative `initiative_id`, without a
+    /// check of the project, and sets the `updated_at` of the meeting to `OLD_TIME`.
+    fn cover(connection: &Connection, meeting_id: i64, initiative_id: i64) {
+        connection
+            .execute(
+                "INSERT INTO meeting_initiatives (meeting_id, initiative_id, created_at)
+                 VALUES (?1, ?2, 't')",
+                params![meeting_id, initiative_id],
+            )
+            .unwrap();
+        connection
+            .execute(
+                "UPDATE meetings SET updated_at = ?2 WHERE id = ?1",
+                params![meeting_id, OLD_TIME],
+            )
+            .unwrap();
+    }
+
     #[test]
-    fn set_project_moves_the_initiative_and_its_meetings() {
+    fn set_project_moves_a_meeting_that_covers_only_that_initiative() {
         let connection = open_in_memory();
         let billing = project(&connection, "Billing");
         add(&connection, "A", "now");
@@ -1535,10 +1584,49 @@ mod tests {
         for id in [first, second] {
             let meeting = fetch_meeting(&connection, id);
             assert_eq!(meeting.project_id, Some(billing));
-            assert_eq!(meeting.initiative_id, Some(b));
+            assert_eq!(meeting.initiative_ids, vec![b]);
             assert_ne!(meeting.updated_at, OLD_TIME);
         }
         assert_eq!(fetch_meeting(&connection, unrelated.id), unrelated);
+    }
+
+    #[test]
+    fn set_project_keeps_a_meeting_that_covers_another_initiative() {
+        let connection = open_in_memory();
+        let billing = project(&connection, "Billing");
+        let moved = add(&connection, "Moved", "now");
+        let other = add(&connection, "Other", "now");
+        let meeting = meeting_of(&connection, moved);
+        cover(&connection, meeting, other);
+
+        let MoveOutcome::Moved { .. } = set_project(&connection, moved, billing).unwrap() else {
+            panic!("the move should succeed");
+        };
+
+        let meeting = fetch_meeting(&connection, meeting);
+        assert_eq!(meeting.project_id, Some(home(&connection)));
+        assert_eq!(meeting.initiative_ids, vec![other]);
+        assert_ne!(meeting.updated_at, OLD_TIME);
+    }
+
+    #[test]
+    fn set_project_keeps_a_meeting_whose_other_initiative_is_deleted() {
+        let connection = open_in_memory();
+        let billing = project(&connection, "Billing");
+        let moved = add(&connection, "Moved", "now");
+        let other = add(&connection, "Other", "now");
+        let meeting = meeting_of(&connection, moved);
+        cover(&connection, meeting, other);
+        delete(&connection, other).unwrap();
+
+        let MoveOutcome::Moved { .. } = set_project(&connection, moved, billing).unwrap() else {
+            panic!("the move should succeed");
+        };
+
+        let meeting = fetch_meeting(&connection, meeting);
+        assert_eq!(meeting.project_id, Some(home(&connection)));
+        assert_eq!(meeting.initiative_ids, vec![other]);
+        assert_ne!(meeting.updated_at, OLD_TIME);
     }
 
     #[test]
