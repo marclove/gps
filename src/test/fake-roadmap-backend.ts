@@ -1,6 +1,6 @@
 /**
- * An in-memory fake of the backend commands for meetings and initiatives, for the
- * feature specs of the roadmap. It keeps the order of the initiatives in each column
+ * An in-memory fake of the backend commands for projects, meetings, and initiatives, for
+ * the feature specs of the roadmap and of projects. It keeps the order of the initiatives in each column
  * in the same way as the real backend: each initiative has a rank, a text key, and a
  * change gives only the changed initiative a new rank, between the ranks of its new
  * neighbors. The keys are not the keys that the real backend makes.
@@ -42,8 +42,18 @@ function byRank(a: { rank: string }, b: { rank: string }): number {
 export type Horizon = "now" | "next" | "later";
 export type RaciRole = "responsible" | "accountable" | "consulted" | "informed";
 
+export type StoredProject = {
+    id: number;
+    name: string;
+    description: string;
+    createdAt: string;
+    updatedAt: string;
+    deletedAt: string | null;
+};
+
 export type StoredInitiative = {
     id: number;
+    projectId: number;
     name: string;
     description: string;
     raciRole: RaciRole | null;
@@ -60,13 +70,20 @@ export type StoredMeeting = {
     name: string;
     date: string;
     notes: string;
+    projectId: number | null;
     initiativeId: number | null;
     createdAt: string;
     updatedAt: string;
+    deletedAt: string | null;
 };
 
 export type SeedInitiative = {
     name: string;
+    /**
+     * The project. By default, the first project that was seeded. If no project exists, the
+     * fake seeds a project named "Unsorted" first.
+     */
+    project?: StoredProject;
     horizon?: Horizon;
     raciRole?: RaciRole | null;
     description?: string;
@@ -78,6 +95,15 @@ export type SeedInitiative = {
 
 /** The names of the commands that the fake can be told to fail. */
 export type FailingCommand =
+    | "list_projects"
+    | "create_project"
+    | "get_project"
+    | "rename_project"
+    | "update_project"
+    | "delete_project"
+    | "restore_project"
+    | "set_initiative_project"
+    | "set_meeting_project"
     | "list_initiatives"
     | "create_initiative"
     | "get_initiative"
@@ -93,6 +119,7 @@ export type FailingCommand =
 function summary(initiative: StoredInitiative) {
     const {
         id,
+        projectId,
         name,
         raciRole,
         horizon,
@@ -104,6 +131,7 @@ function summary(initiative: StoredInitiative) {
     } = initiative;
     return {
         id,
+        projectId,
         name,
         raciRole,
         horizon,
@@ -115,7 +143,13 @@ function summary(initiative: StoredInitiative) {
     };
 }
 
+/** Returns the name of a project or an initiative in the form that decides if two names are the same. */
+function nameKey(name: string): string {
+    return name.trim().toLowerCase();
+}
+
 export class FakeRoadmapBackend {
+    projects: StoredProject[] = [];
     initiatives: StoredInitiative[] = [];
     meetings: StoredMeeting[] = [];
     /** The commands that reject with "database is locked" until removed from this set. */
@@ -123,6 +157,9 @@ export class FakeRoadmapBackend {
     /** The commands that reject once, and then work again. */
     failingOnce = new Set<FailingCommand>();
     private nextId = 1;
+    // Projects count their own identifiers, as a table of the real database does, so that
+    // seeding a project does not change the identifiers of initiatives and meetings.
+    private nextProjectId = 1;
     private clock = 0;
 
     private now(): string {
@@ -183,11 +220,31 @@ export class FakeRoadmapBackend {
         return ranks[ranks.length - 1]?.rank ?? null;
     }
 
+    seedProject(
+        name: string,
+        fields: { description?: string; deleted?: boolean } = {},
+    ): StoredProject {
+        const now = this.now();
+        const project: StoredProject = {
+            id: this.nextProjectId++,
+            name,
+            description: fields.description ?? "",
+            createdAt: now,
+            updatedAt: now,
+            deletedAt: fields.deleted ? now : null,
+        };
+        this.projects.push(project);
+        return project;
+    }
+
     seedInitiative(fields: SeedInitiative): StoredInitiative {
         const horizon = fields.horizon ?? "later";
+        const project =
+            fields.project ?? this.projects[0] ?? this.seedProject("Unsorted");
         const now = this.now();
         const initiative: StoredInitiative = {
             id: this.nextId++,
+            projectId: project.id,
             name: fields.name,
             description: fields.description ?? "",
             raciRole: fields.raciRole ?? null,
@@ -202,19 +259,34 @@ export class FakeRoadmapBackend {
         return initiative;
     }
 
+    /**
+     * Seeds a meeting. A meeting with an initiative is about the project of the initiative.
+     * Otherwise it is about `fields.project`, or about no project.
+     */
     seedMeeting(
         name: string,
         initiativeId: number | null = null,
+        fields: {
+            project?: StoredProject;
+            date?: string;
+            deleted?: boolean;
+        } = {},
     ): StoredMeeting {
         const now = this.now();
+        const projectId =
+            initiativeId !== null
+                ? this.initiative(initiativeId).projectId
+                : (fields.project?.id ?? null);
         const meeting: StoredMeeting = {
             id: this.nextId++,
             name,
-            date: "2026-09-24",
+            date: fields.date ?? "2026-09-24",
             notes: "",
+            projectId,
             initiativeId,
             createdAt: now,
             updatedAt: now,
+            deletedAt: fields.deleted ? now : null,
         };
         this.meetings.push(meeting);
         return meeting;
@@ -233,6 +305,41 @@ export class FakeRoadmapBackend {
             .map((i) => i.name);
     }
 
+    findProject(name: string): StoredProject {
+        const project = this.projects.find((p) => p.name === name);
+        if (!project) throw new Error(`no project named ${name}`);
+        return project;
+    }
+
+    findMeeting(name: string): StoredMeeting {
+        const meeting = this.meetings.find((m) => m.name === name);
+        if (!meeting) throw new Error(`no meeting named ${name}`);
+        return meeting;
+    }
+
+    /**
+     * Returns the text of a card on the roadmap without the line that shows the name of its
+     * project, so that specs about the other parts of a card do not repeat the project. Do
+     * not give an initiative the name of a project in such specs.
+     */
+    cardText(card: HTMLElement): string {
+        const names = new Set(
+            this.projects.map((p) =>
+                p.name.trim() === "" ? "Untitled project" : p.name,
+            ),
+        );
+        const copy = card.cloneNode(true) as HTMLElement;
+        for (const element of Array.from(copy.querySelectorAll("*"))) {
+            if (
+                element.children.length === 0 &&
+                names.has(element.textContent ?? "")
+            ) {
+                element.remove();
+            }
+        }
+        return copy.textContent ?? "";
+    }
+
     find(name: string): StoredInitiative {
         const initiative = this.initiatives.find((i) => i.name === name);
         if (!initiative) throw new Error(`no initiative named ${name}`);
@@ -240,20 +347,59 @@ export class FakeRoadmapBackend {
     }
 
     /**
-     * Tells if an initiative that is not deleted, other than `except`, has the same
-     * name, without regard to case and to spaces at the start and end.
+     * Tells if an initiative of the project that is not deleted, other than `except`, has
+     * the same name, without regard to case and to spaces at the start and end.
      */
-    private nameTaken(name: string, except: StoredInitiative | null): boolean {
-        const key = name.trim().toLowerCase();
+    private nameTaken(
+        name: string,
+        projectId: number,
+        except: StoredInitiative | null,
+    ): boolean {
+        const key = nameKey(name);
         return (
             key !== "" &&
             this.initiatives.some(
                 (i) =>
                     i !== except &&
+                    i.projectId === projectId &&
                     i.deletedAt === null &&
-                    i.name.trim().toLowerCase() === key,
+                    nameKey(i.name) === key,
             )
         );
+    }
+
+    /**
+     * Tells if a project that is not deleted, other than `except`, has the same name,
+     * without regard to case and to spaces at the start and end.
+     */
+    private projectNameTaken(
+        name: string,
+        except: StoredProject | null,
+    ): boolean {
+        const key = nameKey(name);
+        return (
+            key !== "" &&
+            this.projects.some(
+                (p) =>
+                    p !== except &&
+                    p.deletedAt === null &&
+                    nameKey(p.name) === key,
+            )
+        );
+    }
+
+    private project(id: unknown): StoredProject {
+        const project = this.projects.find((p) => p.id === id);
+        if (!project) throw `project ${String(id)} not found`;
+        return project;
+    }
+
+    /** Returns the project, and throws if it does not exist or is deleted. */
+    private activeProject(id: unknown): StoredProject {
+        const project = this.project(id);
+        if (project.deletedAt !== null)
+            throw `project ${String(id)} is deleted`;
+        return project;
     }
 
     private initiative(id: unknown): StoredInitiative {
@@ -266,6 +412,13 @@ export class FakeRoadmapBackend {
         const meeting = this.meetings.find((m) => m.id === id);
         if (!meeting) throw `meeting ${String(id)} not found`;
         return meeting;
+    }
+
+    /** Returns the meeting as `get_meeting` returns it, without `deletedAt`. */
+    private meetingResult(meeting: StoredMeeting) {
+        const result: Partial<StoredMeeting> = { ...meeting };
+        delete result.deletedAt;
+        return result;
     }
 
     private checkFailure(command: string) {
@@ -282,14 +435,19 @@ export class FakeRoadmapBackend {
         this.checkFailure(command);
         switch (command) {
             case "list_meetings":
-                return this.meetings.map(({ id, name, date, updatedAt }) => ({
-                    id,
-                    name,
-                    date,
-                    updatedAt,
-                }));
-            case "get_meeting":
-                return this.meetings.find((m) => m.id === args.id) ?? null;
+                return this.meetings
+                    .filter((m) => m.deletedAt === null)
+                    .map(({ id, name, date, updatedAt, projectId }) => ({
+                        id,
+                        name,
+                        date,
+                        updatedAt,
+                        projectId,
+                    }));
+            case "get_meeting": {
+                const meeting = this.meetings.find((m) => m.id === args.id);
+                return meeting ? this.meetingResult(meeting) : null;
+            }
             case "list_meeting_tasks":
                 return [];
             case "update_meeting": {
@@ -300,19 +458,118 @@ export class FakeRoadmapBackend {
                     notes: args.notes,
                     updatedAt: this.now(),
                 });
-                return meeting;
+                return this.meetingResult(meeting);
             }
-            case "delete_meeting":
+            case "delete_meeting": {
+                const meeting = this.meeting(args.id);
+                meeting.deletedAt ??= this.now();
+                return null;
+            }
             case "restore_meeting":
-                this.meeting(args.id);
+                this.meeting(args.id).deletedAt = null;
                 return null;
             case "set_meeting_initiative": {
                 const meeting = this.meeting(args.id);
                 const initiativeId = args.initiativeId as number | null;
-                if (initiativeId !== null) this.initiative(initiativeId);
+                if (initiativeId !== null) {
+                    meeting.projectId = this.initiative(initiativeId).projectId;
+                }
                 meeting.initiativeId = initiativeId;
                 meeting.updatedAt = this.now();
-                return meeting;
+                return this.meetingResult(meeting);
+            }
+            case "set_meeting_project": {
+                const meeting = this.meeting(args.id);
+                const projectId = args.projectId as number | null;
+                if (projectId !== meeting.projectId) {
+                    if (projectId !== null) this.activeProject(projectId);
+                    meeting.projectId = projectId;
+                    meeting.initiativeId = null;
+                    meeting.updatedAt = this.now();
+                }
+                return this.meetingResult(meeting);
+            }
+            case "list_projects":
+                // The order is on purpose not the order of the names, because the
+                // frontend sorts the projects.
+                return [...this.projects]
+                    .reverse()
+                    .filter(
+                        (p) =>
+                            args.includeDeleted === true ||
+                            p.deletedAt === null,
+                    )
+                    .map((project) => ({ ...project }));
+            case "create_project": {
+                const name = (args.name as string).trim();
+                const description = args.description as string;
+                if (name === "" && description === "") {
+                    throw "a project needs a name or a description";
+                }
+                if (this.projectNameTaken(name, null)) {
+                    return { status: "nameTaken" };
+                }
+                const project = this.seedProject(name, { description });
+                return { status: "created", project: { ...project } };
+            }
+            case "get_project": {
+                const project = this.projects.find((p) => p.id === args.id);
+                return project ? { ...project } : null;
+            }
+            case "rename_project": {
+                const project = this.project(args.id);
+                const name = (args.name as string).trim();
+                if (this.projectNameTaken(name, project)) {
+                    return { status: "nameTaken" };
+                }
+                project.name = name;
+                project.updatedAt = this.now();
+                return { status: "renamed", project: { ...project } };
+            }
+            case "update_project": {
+                const project = this.project(args.id);
+                project.description = args.description as string;
+                project.updatedAt = this.now();
+                return { ...project };
+            }
+            case "delete_project": {
+                const project = this.project(args.id);
+                if (
+                    this.initiatives.some(
+                        (i) =>
+                            i.projectId === project.id && i.deletedAt === null,
+                    )
+                ) {
+                    return { status: "hasInitiatives" };
+                }
+                project.deletedAt ??= this.now();
+                return { status: "deleted" };
+            }
+            case "restore_project": {
+                const project = this.project(args.id);
+                if (project.deletedAt !== null) {
+                    if (this.projectNameTaken(project.name, project)) {
+                        return { status: "nameTaken" };
+                    }
+                    project.deletedAt = null;
+                }
+                return { status: "restored" };
+            }
+            case "set_initiative_project": {
+                const initiative = this.initiative(args.id);
+                const project = this.activeProject(args.projectId);
+                if (this.nameTaken(initiative.name, project.id, initiative)) {
+                    return { status: "nameTaken" };
+                }
+                initiative.projectId = project.id;
+                initiative.updatedAt = this.now();
+                for (const meeting of this.meetings) {
+                    if (meeting.initiativeId === initiative.id) {
+                        meeting.projectId = project.id;
+                        meeting.updatedAt = initiative.updatedAt;
+                    }
+                }
+                return { status: "moved", initiative: { ...initiative } };
             }
             case "list_initiatives":
                 // The order is on purpose not the order of the board, because the
@@ -332,10 +589,14 @@ export class FakeRoadmapBackend {
                 if (name === "" && description === "" && raciRole === null) {
                     throw "an initiative needs a name, a description, or a role";
                 }
-                if (this.nameTaken(name, null)) return { status: "nameTaken" };
+                const project = this.activeProject(args.projectId);
+                if (this.nameTaken(name, project.id, null)) {
+                    return { status: "nameTaken" };
+                }
                 const now = this.now();
                 const initiative: StoredInitiative = {
                     id: this.nextId++,
+                    projectId: project.id,
                     name,
                     description,
                     raciRole,
@@ -361,7 +622,7 @@ export class FakeRoadmapBackend {
             case "rename_initiative": {
                 const initiative = this.initiative(args.id);
                 const name = (args.name as string).trim();
-                if (this.nameTaken(name, initiative)) {
+                if (this.nameTaken(name, initiative.projectId, initiative)) {
                     return { status: "nameTaken" };
                 }
                 initiative.name = name;
@@ -399,7 +660,16 @@ export class FakeRoadmapBackend {
             case "restore_initiative": {
                 const initiative = this.initiative(args.id);
                 if (initiative.deletedAt !== null) {
-                    if (this.nameTaken(initiative.name, initiative)) {
+                    if (this.project(initiative.projectId).deletedAt !== null) {
+                        return { status: "projectDeleted" };
+                    }
+                    if (
+                        this.nameTaken(
+                            initiative.name,
+                            initiative.projectId,
+                            initiative,
+                        )
+                    ) {
                         return { status: "nameTaken" };
                     }
                     initiative.deletedAt = null;

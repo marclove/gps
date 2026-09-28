@@ -6,7 +6,7 @@ import { FakeRoadmapBackend } from "@/test/fake-roadmap-backend";
 
 // Feature spec for the section, the roadmap, and creating an initiative in
 // docs/specs/0006-managing-initiatives.md, with the changes of
-// docs/specs/0007-deleted-rows-and-ranked-order.md.
+// docs/specs/0007-deleted-rows-and-ranked-order.md and docs/specs/0008-projects.md.
 // The Tauri backend is replaced by an in-memory fake of the meeting and initiative commands.
 
 const invoke = vi.hoisted(() => vi.fn());
@@ -18,6 +18,9 @@ let backend: FakeRoadmapBackend;
 beforeEach(() => {
     invoke.mockReset();
     backend = new FakeRoadmapBackend();
+    // Every initiative needs a project. When exactly one project exists, a draft starts in
+    // it, so the specs of Spec 0006 create initiatives as before.
+    backend.seedProject("Unsorted");
     invoke.mockImplementation(backend.handle);
 });
 
@@ -57,7 +60,7 @@ function cardTexts(
 ): string[] {
     return within(column(name, { hidden }))
         .queryAllByRole("button", { hidden })
-        .map((card) => card.textContent ?? "");
+        .map((card) => backend.cardText(card));
 }
 
 describe("Initiatives section", () => {
@@ -67,6 +70,7 @@ describe("Initiatives section", () => {
 
         const links = within(mainNavigation()).getAllByRole("link");
         expect(links.map((link) => link.textContent)).toEqual([
+            "Projects",
             "Meetings",
             "Initiatives",
         ]);
@@ -74,12 +78,12 @@ describe("Initiatives section", () => {
             await screen.findByRole("button", { name: "New note" }),
         ).toBeInTheDocument();
 
-        await user.click(links[1]);
+        await user.click(links[2]);
 
         expect(
             await screen.findByRole("button", { name: "New initiative" }),
         ).toBeInTheDocument();
-        expect(links[1]).toHaveAttribute("aria-current", "page");
+        expect(links[2]).toHaveAttribute("aria-current", "page");
         expect(
             within(
                 screen.getByRole("navigation", { name: "breadcrumb" }),

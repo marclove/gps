@@ -16,6 +16,7 @@ type Meeting = {
     name: string;
     date: string;
     notes: string;
+    projectId: number | null;
     initiativeId: number | null;
     createdAt: string;
     updatedAt: string;
@@ -30,6 +31,7 @@ function seed(name: string, notes = "") {
         name,
         date: "2026-09-24",
         notes,
+        projectId: null,
         initiativeId: null,
         createdAt: now,
         updatedAt: now,
@@ -49,6 +51,7 @@ async function handle(command: string, args: Record<string, unknown> = {}) {
             }));
         case "list_meeting_tasks":
             return [];
+        case "list_projects":
         case "list_initiatives":
             return [];
         case "get_meeting":

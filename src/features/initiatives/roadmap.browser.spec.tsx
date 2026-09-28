@@ -6,7 +6,8 @@ import { FakeRoadmapBackend, type Horizon } from "@/test/fake-roadmap-backend";
 import { dragWithPointer, waitForCardInColumn } from "@/test/pointer-drag";
 
 // Feature spec for dragging cards and for the layout of the roadmap and the sheet in
-// docs/specs/0006-managing-initiatives.md.
+// docs/specs/0006-managing-initiatives.md, with the changes of
+// docs/specs/0008-projects.md.
 // It runs in WebKit with the application's CSS, at the default window size of
 // 1200 by 800 pixels. The Tauri backend is replaced by an in-memory fake.
 
@@ -19,6 +20,9 @@ let backend: FakeRoadmapBackend;
 beforeEach(() => {
     invoke.mockReset();
     backend = new FakeRoadmapBackend();
+    // Every initiative needs a project. When exactly one project exists, a draft starts in
+    // it, so the specs of Spec 0006 create initiatives as before.
+    backend.seedProject("Unsorted");
     invoke.mockImplementation(backend.handle);
 });
 
@@ -45,7 +49,7 @@ function column(name: ColumnName) {
 function cardTexts(name: ColumnName): string[] {
     return within(column(name))
         .queryAllByRole("button")
-        .map((card) => card.textContent ?? "");
+        .map((card) => backend.cardText(card));
 }
 
 function card(name: string) {
@@ -358,10 +362,11 @@ describe("Layout", () => {
         );
         await openInitiativesPage();
         const first = await within(column("Later")).findByRole("button", {
-            name: /^Initiative 1$/,
+            // The card also shows its project after the name.
+            name: /^Initiative 1(?!\d)/,
         });
         const last = within(column("Later")).getByRole("button", {
-            name: /^Initiative 60$/,
+            name: /^Initiative 60(?!\d)/,
         });
         const chrome = [
             screen.getByRole("navigation", { name: "breadcrumb" }),

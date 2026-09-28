@@ -23,6 +23,7 @@ type Meeting = {
     name: string;
     date: string;
     notes: string;
+    projectId: number | null;
     initiativeId: number | null;
     createdAt: string;
     updatedAt: string;
@@ -32,9 +33,26 @@ type StoredMeeting = Meeting & { deletedAt: string | null };
 
 /** Returns the meeting as the commands return it, without the time it was deleted. */
 function withoutDeleteTime(stored: StoredMeeting): Meeting {
-    const { id, name, date, notes, initiativeId, createdAt, updatedAt } =
-        stored;
-    return { id, name, date, notes, initiativeId, createdAt, updatedAt };
+    const {
+        id,
+        name,
+        date,
+        notes,
+        projectId,
+        initiativeId,
+        createdAt,
+        updatedAt,
+    } = stored;
+    return {
+        id,
+        name,
+        date,
+        notes,
+        projectId,
+        initiativeId,
+        createdAt,
+        updatedAt,
+    };
 }
 
 type UpdateArgs = Pick<Meeting, "id" | "name" | "date" | "notes">;
@@ -50,6 +68,7 @@ class FakeBackend {
         const meeting: StoredMeeting = {
             id: this.nextId++,
             notes: "",
+            projectId: null,
             initiativeId: null,
             createdAt: now,
             updatedAt: now,
@@ -104,6 +123,7 @@ class FakeBackend {
                 });
             case "list_meeting_tasks":
                 return [];
+            case "list_projects":
             case "list_initiatives":
                 return [];
             case "get_meeting": {

@@ -2,7 +2,7 @@
 
 Ticket: [0008 Projects](../features/0008-projects.md)
 
-Executable specs: `src/features/projects/projects.spec.tsx`, `src/features/projects/project-page.spec.tsx`, `src/features/initiatives/initiative-project.spec.tsx`, and `src/features/meetings/meeting-project.spec.tsx`. The earlier specs `src/features/initiatives/roadmap.spec.tsx`, `src/features/initiatives/initiative-sheet.spec.tsx`, `src/features/initiatives/roadmap.browser.spec.tsx`, and `src/features/meetings/meeting-initiative.spec.tsx` now check the behavior of Specs 0006 and 0007 with the changes that this spec describes under "Changes to earlier specs".
+Executable specs: `src/features/projects/projects.spec.tsx`, `src/features/projects/project-page.spec.tsx`, `src/features/initiatives/initiative-project.spec.tsx`, `src/features/initiatives/filtered-roadmap.browser.spec.tsx`, and `src/features/meetings/meeting-project.spec.tsx`. The earlier specs `src/features/initiatives/roadmap.spec.tsx`, `src/features/initiatives/initiative-sheet.spec.tsx`, `src/features/initiatives/roadmap.browser.spec.tsx`, and `src/features/meetings/meeting-initiative.spec.tsx` now check the behavior of Specs 0006 and 0007 with the changes that this spec describes under "Changes to earlier specs".
 
 ## Summary
 
@@ -48,9 +48,9 @@ The terms "meeting", "Meetings page", and "editor page" are defined in [Spec 000
 
 - The page header shows the breadcrumb "Projects", which links to the Projects page, followed by the name of the project, or "Untitled project". The save status is at the right of the header.
 - At the left are the "Project name" field and the description in the Markdown editor with its toolbar, labeled "Description".
-- At the right is a sidebar named "Project details". From top to bottom, it shows the "Delete" button, the list "Initiatives" with a "New initiative" button, and the list "Meetings".
+- At the right is a sidebar named "Project details". From top to bottom, it shows the "Delete" button, the list "Initiatives" with a "New initiative" button, and the list "Meetings". Each list is a region named after its heading.
 - Changes to the name and the description are saved automatically, as on the meeting editor page. The save status says "Saving…", "Saved", or "Couldn't save" with a "Retry" button.
-- A project that does not exist shows "This project doesn't exist." with a link back to the Projects page.
+- A project that does not exist shows "This project doesn't exist." with a link named "Back to Projects" that opens the Projects page.
 
 ### Unique project names
 
