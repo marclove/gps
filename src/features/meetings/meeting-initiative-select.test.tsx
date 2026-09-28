@@ -20,6 +20,7 @@ function summary(
 ): InitiativeSummary {
     return {
         id,
+        projectId: 1,
         name,
         raciRole: null,
         horizon: "now",
@@ -39,6 +40,7 @@ function meeting(initiativeId: number | null): Meeting {
         date: "2026-09-24",
         notes: "",
         initiativeId,
+        projectId: null,
         createdAt: "2026-09-24T10:00:00.000Z",
         updatedAt: "2026-09-24T10:00:00.000Z",
     };
@@ -48,13 +50,17 @@ const LAUNCH = summary(1, "Launch");
 const PILOT = summary(2, "Pilot");
 
 /** Renders the select inside the providers of the toasts that report its failures. */
-function element(initiativeId: number | null = null) {
+function element(
+    initiativeId: number | null = null,
+    projectId: number | null = 1,
+) {
     return (
         <Toaster toastManager={toast}>
             <FailureToastProvider>
                 <DeleteProvider>
                     <MeetingInitiativeSelect
                         meetingId={7}
+                        projectId={projectId}
                         initiativeId={initiativeId}
                     />
                 </DeleteProvider>
@@ -113,6 +119,24 @@ describe("MeetingInitiativeSelect", () => {
                 ),
             ),
         ).toEqual([["Launch", "Pilot"], ["Won"]]);
+    });
+
+    it("has only the empty choice and is disabled when the meeting has no project", async () => {
+        invoke.mockImplementation((command: string) =>
+            command === "list_initiatives"
+                ? Promise.resolve([LAUNCH, PILOT])
+                : Promise.reject(`unexpected command ${command}`),
+        );
+        render(element(null, null));
+
+        await waitFor(() =>
+            expect(invoke).toHaveBeenCalledWith("list_initiatives", {
+                includeDeleted: true,
+            }),
+        );
+        await act(async () => {});
+        expect(Array.from(select().options).map((o) => o.value)).toEqual([""]);
+        expect(select()).toBeDisabled();
     });
 
     it("keeps the latest choice without a toast when an earlier save fails after it", async () => {

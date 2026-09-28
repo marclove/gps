@@ -28,12 +28,17 @@ const roleClassNames: Record<RaciRole, string> = {
     informed: "text-muted-foreground",
 };
 
-/** The text of a card: the check mark in Done, the name, and the role of the user. */
+/**
+ * The text of a card: the check mark in Done, the name, the name of the project, and the role
+ * of the user.
+ */
 function CardContent({
     initiative,
+    projectName,
     done,
 }: {
     initiative: InitiativeSummary;
+    projectName: string;
     done: boolean;
 }) {
     return (
@@ -48,6 +53,9 @@ function CardContent({
                 <span className="min-w-0 font-medium break-words">
                     {initiativeDisplayName(initiative.name)}
                 </span>
+            </span>
+            <span className="min-w-0 text-xs break-words text-muted-foreground">
+                {projectName}
             </span>
             {initiative.raciRole !== null && (
                 <span
@@ -65,7 +73,8 @@ function CardContent({
 
 /**
  * A card on the roadmap. It is a button as wide as its column that shows the name of the
- * initiative, and the role of the user when there is one. A card in Done also shows a check
+ * initiative, the name of its project `projectName` below it, and the role of the user when
+ * there is one. A card in Done also shows a check
  * mark, and its text is muted. A click on the card, or the Enter key, calls `onOpen` with the
  * identifier of the initiative. The user drags the card with the pointer, or picks it up with
  * Space. While the card is dragged, it stays in its list as a faded placeholder, and the board
@@ -75,10 +84,12 @@ function CardContent({
  */
 export function InitiativeCard({
     initiative,
+    projectName,
     column,
     onOpen,
 }: {
     initiative: InitiativeSummary;
+    projectName: string;
     column: Column;
     onOpen: (id: number) => void;
 }) {
@@ -107,21 +118,27 @@ export function InitiativeCard({
                 isDragging && "opacity-40",
             )}
         >
-            <CardContent initiative={initiative} done={done} />
+            <CardContent
+                initiative={initiative}
+                projectName={projectName}
+                done={done}
+            />
         </button>
     );
 }
 
 /**
  * A copy of a card that the board shows below the pointer while the card is dragged. It
- * looks like the card in the column `column`. Screen readers and the keyboard ignore it,
- * because the card itself stays in its list.
+ * looks like the card in the column `column`, with the name of its project `projectName`.
+ * Screen readers and the keyboard ignore it, because the card itself stays in its list.
  */
 export function InitiativeCardCopy({
     initiative,
+    projectName,
     column,
 }: {
     initiative: InitiativeSummary;
+    projectName: string;
     column: Column;
 }) {
     const done = column === "done";
@@ -134,7 +151,11 @@ export function InitiativeCardCopy({
                 done && "text-muted-foreground",
             )}
         >
-            <CardContent initiative={initiative} done={done} />
+            <CardContent
+                initiative={initiative}
+                projectName={projectName}
+                done={done}
+            />
         </div>
     );
 }

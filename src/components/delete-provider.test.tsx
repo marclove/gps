@@ -12,6 +12,7 @@ import { Toaster } from "@/components/toaster";
 import { toast } from "@/components/ui/toast";
 import { DeleteProvider } from "./delete-provider";
 import {
+    DeleteRefusedError,
     useDelete,
     type DeleteApi,
     type ItemToDelete,
@@ -24,9 +25,15 @@ vi.mock("@tauri-apps/api/core", () => ({ invoke }));
 
 /** Answers every command as the backend does when it succeeds. */
 function succeed(command: string) {
-    return Promise.resolve(
-        command === "restore_initiative" ? { status: "restored" } : null,
-    );
+    switch (command) {
+        case "restore_initiative":
+        case "restore_project":
+            return Promise.resolve({ status: "restored" });
+        case "delete_project":
+            return Promise.resolve({ status: "deleted" });
+        default:
+            return Promise.resolve(null);
+    }
 }
 
 beforeEach(() => {
@@ -423,6 +430,32 @@ describe("DeleteProvider", () => {
         expect(harness.version()).toBe(1);
     });
 
+    it("says that the project is deleted, without Undo, when the project of the initiative is deleted", async () => {
+        invoke.mockImplementation((command: string) =>
+            command === "restore_initiative"
+                ? Promise.resolve({ status: "projectDeleted" })
+                : succeed(command),
+        );
+        const harness = renderHarness();
+        await act(() =>
+            harness.deleteItem({ kind: "initiative", id: 1, name: "Launch" }),
+        );
+
+        await act(() => fireEvent.click(undoButton()));
+
+        const toasts = notifications();
+        expect(
+            await within(toasts).findByText(
+                'Couldn\'t restore "Launch" because its project is deleted.',
+            ),
+        ).toBeInTheDocument();
+        expect(
+            within(toasts).queryByRole("button", { name: "Undo" }),
+        ).not.toBeInTheDocument();
+        expect(harness.restoredId()).toBe("none");
+        expect(harness.version()).toBe(1);
+    });
+
     it("gives the kind with a restored item, so a page for meetings ignores an initiative with the same identifier", async () => {
         const handled: RestoredItem[] = [];
         const harness = renderHarness(
@@ -450,5 +483,91 @@ describe("DeleteProvider", () => {
 
         await waitFor(() => expect(harness.restoredKind()).toBe("meeting"));
         expect(handled).toEqual([{ kind: "meeting", id: 1 }]);
+    });
+
+    it("deletes and restores a project with the project commands", async () => {
+        const harness = renderHarness();
+
+        await act(() =>
+            harness.deleteItem({ kind: "project", id: 1, name: "Checkout" }),
+        );
+
+        expect(invoke).toHaveBeenCalledWith("delete_project", { id: 1 });
+        expect(
+            within(notifications()).getByText('Deleted "Checkout".'),
+        ).toBeInTheDocument();
+
+        await act(() => fireEvent.click(undoButton()));
+
+        await waitFor(() => expect(harness.restoredKind()).toBe("project"));
+        expect(harness.restoredId()).toBe("1");
+        expect(invoke).toHaveBeenCalledWith("restore_project", { id: 1 });
+    });
+
+    it("rejects with the refusal and shows no toast when a project still has initiatives", async () => {
+        invoke.mockImplementation((command: string) =>
+            command === "delete_project"
+                ? Promise.resolve({ status: "hasInitiatives" })
+                : succeed(command),
+        );
+        const harness = renderHarness();
+
+        let error: unknown;
+        await act(() =>
+            harness
+                .deleteItem({ kind: "project", id: 1, name: "Checkout" })
+                .catch((e: unknown) => {
+                    error = e;
+                }),
+        );
+
+        expect(error).toBeInstanceOf(DeleteRefusedError);
+        expect((error as Error).message).toBe(
+            'Couldn\'t delete "Checkout" because it still has initiatives.',
+        );
+        expect(
+            screen.queryByText('Deleted "Checkout".'),
+        ).not.toBeInTheDocument();
+        expect(
+            screen.queryByRole("button", { name: "Undo" }),
+        ).not.toBeInTheDocument();
+        expect(harness.version()).toBe(0);
+    });
+
+    it("says that the name is taken, without Undo, when another project has the name", async () => {
+        invoke.mockImplementation((command: string) =>
+            command === "restore_project"
+                ? Promise.resolve({ status: "nameTaken" })
+                : succeed(command),
+        );
+        const harness = renderHarness();
+        await act(() =>
+            harness.deleteItem({ kind: "project", id: 1, name: "Checkout" }),
+        );
+
+        await act(() => fireEvent.click(undoButton()));
+
+        const toasts = notifications();
+        expect(
+            await within(toasts).findByText(
+                'Couldn\'t restore "Checkout" because another project has that name.',
+            ),
+        ).toBeInTheDocument();
+        expect(
+            within(toasts).queryByRole("button", { name: "Undo" }),
+        ).not.toBeInTheDocument();
+        expect(harness.restoredId()).toBe("none");
+    });
+
+    it("names a project with an empty name Untitled project in the delete toast", async () => {
+        const harness = renderHarness();
+
+        await act(() =>
+            harness.deleteItem({ kind: "project", id: 1, name: "" }),
+        );
+
+        expect(
+            within(notifications()).getByText('Deleted "Untitled project".'),
+        ).toBeInTheDocument();
     });
 });

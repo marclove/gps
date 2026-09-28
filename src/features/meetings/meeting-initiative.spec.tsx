@@ -2,11 +2,14 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "@/App";
-import { FakeRoadmapBackend } from "@/test/fake-roadmap-backend";
+import {
+    FakeRoadmapBackend,
+    type StoredProject,
+} from "@/test/fake-roadmap-backend";
 
 // Feature spec for the assignment of a meeting to an initiative in
 // docs/specs/0006-managing-initiatives.md, with the changes of
-// docs/specs/0007-deleted-rows-and-ranked-order.md.
+// docs/specs/0007-deleted-rows-and-ranked-order.md and docs/specs/0008-projects.md.
 // The Tauri backend is replaced by an in-memory fake of the meeting and initiative commands.
 
 const invoke = vi.hoisted(() => vi.fn());
@@ -14,10 +17,14 @@ const invoke = vi.hoisted(() => vi.fn());
 vi.mock("@tauri-apps/api/core", () => ({ invoke }));
 
 let backend: FakeRoadmapBackend;
+let unsorted: StoredProject;
 
 beforeEach(() => {
     invoke.mockReset();
     backend = new FakeRoadmapBackend();
+    // The select box offers only the initiatives of the meeting's project, so every meeting
+    // and initiative of these specs is in this project.
+    unsorted = backend.seedProject("Unsorted");
     invoke.mockImplementation(backend.handle);
 });
 
@@ -72,7 +79,7 @@ function selectedText() {
 
 describe("Assigning a meeting to an initiative", () => {
     it("shows an Initiative row between the Date row and the Delete button", async () => {
-        backend.seedMeeting("Weekly sync");
+        backend.seedMeeting("Weekly sync", null, { project: unsorted });
         const user = renderApp();
 
         await openMeeting(user, /Weekly sync/);
@@ -107,7 +114,7 @@ describe("Assigning a meeting to an initiative", () => {
             completed: true,
             deleted: true,
         });
-        backend.seedMeeting("Weekly sync");
+        backend.seedMeeting("Weekly sync", null, { project: unsorted });
         const user = renderApp();
 
         await openMeeting(user, /Weekly sync/);
@@ -178,7 +185,9 @@ describe("Assigning a meeting to an initiative", () => {
             name: "Launch",
             horizon: "now",
         });
-        const meeting = backend.seedMeeting("Weekly sync");
+        const meeting = backend.seedMeeting("Weekly sync", null, {
+            project: unsorted,
+        });
         const user = renderApp();
         await openMeeting(user, /Weekly sync/);
 
@@ -207,7 +216,9 @@ describe("Assigning a meeting to an initiative", () => {
     it("can reassign a meeting to a completed initiative", async () => {
         backend.seedInitiative({ name: "Launch", horizon: "now" });
         const won = backend.seedInitiative({ name: "Won", completed: true });
-        const meeting = backend.seedMeeting("Weekly sync");
+        const meeting = backend.seedMeeting("Weekly sync", null, {
+            project: unsorted,
+        });
         const user = renderApp();
         await openMeeting(user, /Weekly sync/);
 
@@ -270,7 +281,7 @@ describe("Assigning a meeting to an initiative", () => {
 
     it("says so when the initiatives cannot be loaded, and loads them again on Retry", async () => {
         backend.seedInitiative({ name: "Launch", horizon: "now" });
-        backend.seedMeeting("Weekly sync");
+        backend.seedMeeting("Weekly sync", null, { project: unsorted });
         backend.failingOnce.add("list_initiatives");
         const user = renderApp();
 
@@ -294,7 +305,7 @@ describe("Assigning a meeting to an initiative", () => {
     it("offers an initiative again when its delete is undone while a meeting is open", async () => {
         backend.seedInitiative({ name: "Launch", horizon: "now" });
         backend.seedInitiative({ name: "Pilot", horizon: "next" });
-        backend.seedMeeting("Weekly sync");
+        backend.seedMeeting("Weekly sync", null, { project: unsorted });
         const user = renderApp();
         const mainNavigation = () =>
             screen.getByRole("navigation", { name: "Main" });

@@ -21,6 +21,7 @@ type Meeting = {
     name: string;
     date: string;
     notes: string;
+    projectId: number | null;
     initiativeId: number | null;
     createdAt: string;
     updatedAt: string;
@@ -39,6 +40,7 @@ class FakeBackend {
         const meeting: Meeting = {
             id: this.nextId++,
             notes: "",
+            projectId: null,
             initiativeId: null,
             createdAt: now,
             updatedAt: now,
@@ -89,6 +91,7 @@ class FakeBackend {
                 });
             case "list_meeting_tasks":
                 return [];
+            case "list_projects":
             case "list_initiatives":
                 return [];
             case "get_meeting":

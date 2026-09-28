@@ -14,7 +14,14 @@ import {
 } from "@/lib/initiatives";
 import { deleteMeeting, displayName, restoreMeeting } from "@/lib/meetings";
 import {
+    deleteProject,
+    projectDisplayName,
+    restoreProject,
+    type RestoreProjectResult,
+} from "@/lib/projects";
+import {
     DeleteContext,
+    DeleteRefusedError,
     type DeleteKind,
     type ItemToDelete,
     type RestoredItem,
@@ -25,13 +32,22 @@ const TOAST_TIMEOUT = 8000;
 
 /** The commands and the text that deleting and restoring one kind of item use. */
 type KindActions = {
-    /** Deletes the item with the given identifier. */
-    remove: (id: number) => Promise<void>;
+    /**
+     * Deletes the item with the given identifier and the given shown name. Gives
+     * `null` when the item is deleted. When the backend refuses the delete, gives the
+     * text of the failure toast, and nothing is deleted.
+     */
+    remove: (
+        id: number,
+        shownName: string,
+    ) => Promise<{ refusedText: string } | null>;
     /**
      * Restores the item with the given identifier. Gives `nameTaken` if the backend
-     * does not restore the item because another item has its name.
+     * does not restore the item because another item has its name, and
+     * `projectDeleted` if it does not restore an initiative because its project is
+     * deleted.
      */
-    restore: (id: number) => Promise<RestoreResult>;
+    restore: (id: number) => Promise<RestoreResult | RestoreProjectResult>;
     /** Returns the name to show for a stored name. */
     displayName: (name: string) => string;
     /** Returns the text of the toast after a delete, for the shown name. */
@@ -40,12 +56,17 @@ type KindActions = {
     restoreFailedText: string;
     /** Returns the text of the toast when another item has the name, for the shown name. */
     nameTakenText: (shownName: string) => string;
+    /**
+     * Returns the text of the toast when the project of the item is deleted, for the
+     * shown name.
+     */
+    projectDeletedText: (shownName: string) => string;
 };
 
 /** The commands and the text for each kind of item. */
 const KINDS: Record<DeleteKind, KindActions> = {
     meeting: {
-        remove: deleteMeeting,
+        remove: (id) => deleteMeeting(id).then(() => null),
         // The backend always restores a meeting, because meeting names need not be
         // unique.
         restore: (id) =>
@@ -54,15 +75,35 @@ const KINDS: Record<DeleteKind, KindActions> = {
         deletedText: (shownName) => `Deleted "${shownName}".`,
         restoreFailedText: "Couldn't restore the meeting. Try again.",
         nameTakenText: () => "Couldn't restore the meeting. Try again.",
+        projectDeletedText: () => "Couldn't restore the meeting. Try again.",
     },
     initiative: {
-        remove: deleteInitiative,
+        remove: (id) => deleteInitiative(id).then(() => null),
         restore: restoreInitiative,
         displayName: initiativeDisplayName,
         deletedText: (shownName) => `Deleted "${shownName}".`,
         restoreFailedText: "Couldn't restore the initiative. Try again.",
         nameTakenText: (shownName) =>
             `Couldn't restore "${shownName}" because another initiative has that name.`,
+        projectDeletedText: (shownName) =>
+            `Couldn't restore "${shownName}" because its project is deleted.`,
+    },
+    project: {
+        remove: async (id, shownName) => {
+            const result = await deleteProject(id);
+            return result.status === "hasInitiatives"
+                ? {
+                      refusedText: `Couldn't delete "${shownName}" because it still has initiatives.`,
+                  }
+                : null;
+        },
+        restore: restoreProject,
+        displayName: projectDisplayName,
+        deletedText: (shownName) => `Deleted "${shownName}".`,
+        restoreFailedText: "Couldn't restore the project. Try again.",
+        nameTakenText: (shownName) =>
+            `Couldn't restore "${shownName}" because another project has that name.`,
+        projectDeletedText: () => "Couldn't restore the project. Try again.",
     },
 };
 
@@ -105,14 +146,19 @@ export function DeleteProvider({ children }: { children: ReactNode }) {
             actions.restore(item.id).then(
                 (result) => {
                     restoringToasts.current.delete(toastId);
-                    if (result.status === "nameTaken") {
+                    if (
+                        result.status === "nameTaken" ||
+                        result.status === "projectDeleted"
+                    ) {
                         // Nothing changed, so `version` and `restored` stay the
                         // same. Undo is removed, because trying again cannot
                         // succeed.
+                        const shownName = actions.displayName(item.name);
                         update(toastId, {
-                            title: actions.nameTakenText(
-                                actions.displayName(item.name),
-                            ),
+                            title:
+                                result.status === "nameTaken"
+                                    ? actions.nameTakenText(shownName)
+                                    : actions.projectDeletedText(shownName),
                             timeout: TOAST_TIMEOUT,
                             actionProps: undefined,
                         });
@@ -147,12 +193,14 @@ export function DeleteProvider({ children }: { children: ReactNode }) {
     const deleteItem = useCallback(
         async (item: ItemToDelete) => {
             const actions = KINDS[item.kind];
-            await actions.remove(item.id);
+            const shownName = actions.displayName(item.name);
+            const refusal = await actions.remove(item.id, shownName);
+            if (refusal) throw new DeleteRefusedError(refusal.refusedText);
             if (openToastId.current) close(openToastId.current);
             deleteCount.current += 1;
             const generation = deleteCount.current;
             const id = add({
-                title: actions.deletedText(actions.displayName(item.name)),
+                title: actions.deletedText(shownName),
                 timeout: TOAST_TIMEOUT,
                 actionProps: {
                     children: "Undo",

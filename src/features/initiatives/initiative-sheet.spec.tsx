@@ -6,7 +6,7 @@ import { FakeRoadmapBackend } from "@/test/fake-roadmap-backend";
 
 // Feature spec for the sheet, saving, and deleting an initiative in
 // docs/specs/0006-managing-initiatives.md, with the changes of
-// docs/specs/0007-deleted-rows-and-ranked-order.md.
+// docs/specs/0007-deleted-rows-and-ranked-order.md and docs/specs/0008-projects.md.
 // The Tauri backend is replaced by an in-memory fake of the meeting and initiative commands.
 
 const invoke = vi.hoisted(() => vi.fn());
@@ -18,6 +18,9 @@ let backend: FakeRoadmapBackend;
 beforeEach(() => {
     invoke.mockReset();
     backend = new FakeRoadmapBackend();
+    // Every initiative needs a project. When exactly one project exists, a draft starts in
+    // it, so the specs of Spec 0006 create initiatives as before.
+    backend.seedProject("Unsorted");
     invoke.mockImplementation(backend.handle);
 });
 
@@ -55,7 +58,7 @@ function cardTexts(
 ): string[] {
     return within(column(name, { hidden }))
         .queryAllByRole("button", { hidden })
-        .map((card) => card.textContent ?? "");
+        .map((card) => backend.cardText(card));
 }
 
 function card(name: RegExp) {
@@ -114,7 +117,7 @@ function follows(first: Element, second: Element) {
 }
 
 describe("The sheet", () => {
-    it("shows the name, role, toolbar, description, Delete, and Save, in that order, and Close last", async () => {
+    it("shows the name, role, project, toolbar, description, Delete, and Save, in that order, and Close last", async () => {
         backend.seedInitiative({
             name: "Launch",
             horizon: "now",
@@ -128,6 +131,7 @@ describe("The sheet", () => {
         const parts = [
             nameField(sheet),
             roleSelect(sheet),
+            within(sheet).getByRole("combobox", { name: "Project" }),
             within(sheet).getByRole("toolbar", { name: "Formatting" }),
             description(sheet),
             within(sheet).getByRole("button", { name: "Delete" }),

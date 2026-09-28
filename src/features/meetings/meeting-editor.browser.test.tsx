@@ -46,6 +46,7 @@ async function handle(command: string, args: Record<string, unknown> = {}) {
             }));
         case "list_meeting_tasks":
             return [];
+        case "list_projects":
         case "list_initiatives":
             return [];
         case "get_meeting":

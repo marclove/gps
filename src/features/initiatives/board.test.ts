@@ -4,6 +4,8 @@ import {
     addCard,
     buildBoard,
     columnOf,
+    filterBoard,
+    fullIndex,
     moveCard,
     removeCard,
     replaceCard,
@@ -16,6 +18,7 @@ function summary(
 ): InitiativeSummary {
     return {
         id,
+        projectId: 1,
         name: `Initiative ${id}`,
         raciRole: null,
         horizon: "now",
@@ -296,5 +299,90 @@ describe("removeCard", () => {
         const board = sampleBoard();
 
         expect(removeCard(board, 99)).toBe(board);
+    });
+});
+
+describe("filterBoard", () => {
+    it("keeps only the cards of the project in each column, in order", () => {
+        const board = buildBoard([
+            summary(1, { horizon: "now", rank: "1", projectId: 1 }),
+            summary(2, { horizon: "now", rank: "2", projectId: 2 }),
+            summary(3, { horizon: "now", rank: "3", projectId: 1 }),
+            summary(4, { horizon: "next", projectId: 2 }),
+            summary(5, { horizon: "later", projectId: 1 }),
+            summary(6, { completedAt: "2026-09-02T00:00:00Z", projectId: 1 }),
+            summary(7, { completedAt: "2026-09-03T00:00:00Z", projectId: 2 }),
+        ]);
+
+        expect(ids(filterBoard(board, 1))).toEqual({
+            now: [1, 3],
+            next: [],
+            later: [5],
+            done: [6],
+        });
+    });
+
+    it("returns all cards when no project is chosen", () => {
+        const board = sampleBoard();
+
+        expect(ids(filterBoard(board, null))).toEqual(ids(board));
+    });
+});
+
+describe("fullIndex", () => {
+    /** The cards with the names, which start with C in project 1 and with B in project 2. */
+    function cards(names: string[]): InitiativeSummary[] {
+        return names.map((name) =>
+            summary(Number(name.slice(1)) + (name.startsWith("C") ? 0 : 100), {
+                name,
+                projectId: name.startsWith("C") ? 1 : 2,
+            }),
+        );
+    }
+
+    function card(column: InitiativeSummary[], name: string): number {
+        return column.find((candidate) => candidate.name === name)!.id;
+    }
+
+    function shownOf(column: InitiativeSummary[]): InitiativeSummary[] {
+        return column.filter((candidate) => candidate.projectId === 1);
+    }
+
+    it("puts a card moved up directly after the shown card above the drop", () => {
+        const column = cards(["C1", "B1", "C2", "B2", "C3"]);
+
+        expect(fullIndex(column, shownOf(column), card(column, "C3"), 1)).toBe(
+            1,
+        );
+    });
+
+    it("puts a card moved down directly after the shown card above the drop", () => {
+        const column = cards(["C1", "B1", "C2", "B2", "C3"]);
+
+        expect(fullIndex(column, shownOf(column), card(column, "C1"), 1)).toBe(
+            2,
+        );
+    });
+
+    it("puts a card dropped at the top directly before the shown card below the drop", () => {
+        const column = cards(["B0", "C1", "B1", "C2", "B2", "C3"]);
+
+        expect(fullIndex(column, shownOf(column), card(column, "C2"), 0)).toBe(
+            1,
+        );
+    });
+
+    it("puts a card at the end of a column that shows no other card", () => {
+        const column = cards(["B1", "B2"]);
+
+        expect(fullIndex(column, [], 1, 0)).toBe(2);
+    });
+
+    it("does not count the dragged card when it sits above the neighbors of the drop", () => {
+        const column = cards(["C1", "C2", "B1", "C3"]);
+
+        expect(fullIndex(column, shownOf(column), card(column, "C1"), 1)).toBe(
+            1,
+        );
     });
 });

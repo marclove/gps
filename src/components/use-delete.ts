@@ -1,7 +1,19 @@
 import { createContext, useContext } from "react";
 
 /** A kind of item that the user can delete. */
-export type DeleteKind = "meeting" | "initiative";
+export type DeleteKind = "meeting" | "initiative" | "project";
+
+/**
+ * The error of `deleteItem` when the backend refuses the delete, for example because a
+ * project still has initiatives. Nothing was deleted. The message is the text for the
+ * failure toast.
+ */
+export class DeleteRefusedError extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = "DeleteRefusedError";
+    }
+}
 
 /** The kind, identifier, and name of an item to delete. */
 export type ItemToDelete = {
@@ -25,7 +37,9 @@ export type DeleteApi = {
      * the name of the item.
      *
      * Rejects if the item cannot be deleted. It does not show the toast in that
-     * case, so the caller can show its own failure message.
+     * case, so the caller can show its own failure message. When the backend refuses
+     * the delete, it rejects with `DeleteRefusedError`, whose message the caller
+     * shows.
      */
     deleteItem: (item: ItemToDelete) => Promise<void>;
     /**
@@ -35,7 +49,7 @@ export type DeleteApi = {
     version: number;
     /**
      * The item a restore just brought back, or `null` if none is pending. A page must
-     * examine the kind, because a meeting and an initiative can have the same
+     * examine the kind, because items of different kinds can have the same
      * identifier.
      */
     restored: RestoredItem | null;

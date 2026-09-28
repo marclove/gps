@@ -37,6 +37,9 @@ vi.mock("./roadmap-board", () => ({
             <button type="button" onClick={() => onMove(2, "next", 0)}>
                 Move B
             </button>
+            <button type="button" onClick={() => onMove(1, "now", 1)}>
+                Move A down
+            </button>
         </div>
     ),
 }));
@@ -108,6 +111,49 @@ function backendBoard(): Record<Column, string> {
 }
 
 describe("InitiativesPage", () => {
+    it("says that the projects could not be loaded when only they fail, and loads both again on Retry", async () => {
+        backend.seedInitiative({ name: "A", horizon: "now" });
+        const handle = invoke.getMockImplementation()!;
+        invoke.mockImplementation(
+            (command: string, args: Record<string, unknown> = {}) =>
+                command === "list_projects"
+                    ? Promise.reject(new Error("disk full"))
+                    : handle(command, args),
+        );
+        const user = userEvent.setup();
+        renderPage();
+
+        expect(
+            await screen.findByText("Couldn't load projects"),
+        ).toBeInTheDocument();
+        expect(
+            screen.queryByText("Couldn't load initiatives"),
+        ).not.toBeInTheDocument();
+
+        invoke.mockImplementation(handle);
+        await user.click(screen.getByRole("button", { name: "Retry" }));
+
+        await waitFor(() => expect(shownBoard().now).toBe("A"));
+        expect(
+            screen.queryByText("Couldn't load projects"),
+        ).not.toBeInTheDocument();
+    });
+
+    it("says that the initiatives could not be loaded when they fail", async () => {
+        const handle = invoke.getMockImplementation()!;
+        invoke.mockImplementation(
+            (command: string, args: Record<string, unknown> = {}) =>
+                command === "list_initiatives"
+                    ? Promise.reject(new Error("disk full"))
+                    : handle(command, args),
+        );
+        renderPage();
+
+        expect(
+            await screen.findByText("Couldn't load initiatives"),
+        ).toBeInTheDocument();
+    });
+
     it("shows the backend board after a failed move, also when a later move succeeded", async () => {
         backend.seedInitiative({ name: "A", horizon: "now" });
         backend.seedInitiative({ name: "B", horizon: "now" });
@@ -168,5 +214,35 @@ describe("InitiativesPage", () => {
             }),
         );
         expect(shownBoard()).toEqual(backendBoard());
+    });
+
+    it("moves a card on a filtered board to the index among all cards of the column", async () => {
+        const checkout = backend.seedProject("Checkout");
+        const billing = backend.seedProject("Billing");
+        for (const [name, project] of [
+            ["C1", checkout],
+            ["B1", billing],
+            ["C2", checkout],
+            ["B2", billing],
+            ["C3", checkout],
+        ] as const) {
+            backend.seedInitiative({ name, horizon: "now", project });
+        }
+        const user = userEvent.setup();
+        renderPage();
+        const filter = screen.getByRole("combobox", { name: "Project" });
+        await waitFor(() => expect(shownBoard().now).toBe("C1,B1,C2,B2,C3"));
+        await user.selectOptions(filter, "Checkout");
+        expect(shownBoard().now).toBe("C1,C2,C3");
+
+        // The stub board drops C1 at the second place among the shown cards.
+        await user.click(screen.getByRole("button", { name: "Move A down" }));
+
+        expect(shownBoard().now).toBe("C2,C1,C3");
+        expect(heldMoves.map((move) => move.args)).toEqual([
+            { id: 1, destination: "now", index: 2 },
+        ]);
+        await act(async () => heldMoves[0].succeed());
+        expect(backendBoard().now).toBe("B1,C2,C1,B2,C3");
     });
 });

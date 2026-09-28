@@ -37,6 +37,7 @@ const MEETING: Meeting = {
     createdAt: "2026-09-24T17:00:00.000Z",
     updatedAt: "2026-09-24T17:00:00.000Z",
     initiativeId: null,
+    projectId: null,
 };
 
 type Answer = (args?: Record<string, unknown>) => unknown;
@@ -44,8 +45,8 @@ type Answer = (args?: Record<string, unknown>) => unknown;
 /**
  * Makes the fake backend answer each command by its name. A command in `answers`
  * gets that answer. Otherwise `get_meeting` returns MEETING, `list_meeting_tasks`
- * returns no tasks, `list_initiatives` returns no initiatives, and every other command
- * returns MEETING with its arguments.
+ * returns no tasks, `list_initiatives` returns no initiatives, `list_projects` returns no
+ * projects, and every other command returns MEETING with its arguments.
  */
 function serveMeeting(answers: Record<string, Answer> = {}) {
     invoke.mockImplementation(
@@ -55,6 +56,7 @@ function serveMeeting(answers: Record<string, Answer> = {}) {
             if (command === "get_meeting") return MEETING;
             if (command === "list_meeting_tasks") return [];
             if (command === "list_initiatives") return [];
+            if (command === "list_projects") return [];
             return { ...MEETING, ...args };
         },
     );
@@ -275,17 +277,36 @@ describe("MeetingEditorPage", () => {
         ).toBeInTheDocument();
     });
 
-    it("moves focus from the date to the initiative to Delete to the action items with Tab", async () => {
-        serveMeeting();
+    it("moves focus from the date to the project to the initiative to Delete to the action items with Tab", async () => {
+        serveMeeting({
+            get_meeting: () => ({ ...MEETING, projectId: 1 }),
+            list_projects: () => [
+                {
+                    id: 1,
+                    name: "Checkout",
+                    description: "",
+                    createdAt: "2026-09-24T17:00:00.000Z",
+                    updatedAt: "2026-09-24T17:00:00.000Z",
+                    deletedAt: null,
+                },
+            ],
+        });
         const user = userEvent.setup();
         renderPage("/meetings/42");
         await screen.findByText("No action items yet");
+        const project = screen.getByRole("combobox", {
+            name: "Meeting project",
+        });
         const initiative = screen.getByRole("combobox", {
             name: "Meeting initiative",
         });
+        await waitFor(() => expect(project).toBeEnabled());
         await waitFor(() => expect(initiative).toBeEnabled());
 
         screen.getByLabelText("Meeting date").focus();
+        await user.tab();
+        expect(project).toHaveFocus();
+
         await user.tab();
         expect(initiative).toHaveFocus();
 

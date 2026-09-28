@@ -23,6 +23,8 @@ export const COLUMNS: { id: Column; title: string }[] = [
  */
 export type Initiative = {
     id: number;
+    /** The project that the initiative belongs to. */
+    projectId: number;
     name: string;
     /** The description, as Markdown. */
     description: string;
@@ -38,7 +40,7 @@ export type Initiative = {
     rank: string;
     /** The time when the initiative was created, as an RFC 3339 timestamp in UTC. */
     createdAt: string;
-    /** The time when the initiative was last changed, as an RFC 3339 timestamp in UTC. */
+    /** The time when the name, the description, the role, or the project was last changed, as an RFC 3339 timestamp in UTC. */
     updatedAt: string;
     /** The time when the initiative was completed, as an RFC 3339 timestamp in UTC, or `null` if it is not completed. */
     completedAt: string | null;
@@ -67,6 +69,8 @@ export type InitiativeChanges = {
 
 /** The first values of a new initiative, which `createInitiative` saves. */
 export type NewInitiative = {
+    /** The project that the initiative belongs to. */
+    projectId: number;
     name: string;
     description: string;
     raciRole: RaciRole | null;
@@ -80,8 +84,15 @@ export type CreateResult =
 export type RenameResult =
     { status: "renamed"; initiative: Initiative } | { status: "nameTaken" };
 
+/** The answer of the backend to a move of an initiative to another project. */
+export type MoveToProjectResult =
+    { status: "moved"; initiative: Initiative } | { status: "nameTaken" };
+
 /** The answer of the backend to a restore of a deleted initiative. */
-export type RestoreResult = { status: "restored" } | { status: "nameTaken" };
+export type RestoreResult =
+    | { status: "restored" }
+    | { status: "nameTaken" }
+    | { status: "projectDeleted" };
 
 /** The name that is shown for an initiative with an empty name. */
 export const DEFAULT_INITIATIVE_NAME = "Untitled initiative";
@@ -124,16 +135,29 @@ function byLabel(a: { label: string }, b: { label: string }): number {
     return a.label.localeCompare(b.label, undefined, { sensitivity: "base" });
 }
 
+/** Returns the initiatives of the project. When `projectId` is `null`, returns no initiatives. */
+function ofProject(
+    all: InitiativeSummary[],
+    projectId: number | null,
+): InitiativeSummary[] {
+    return projectId === null
+        ? []
+        : all.filter((i) => i.projectId === projectId);
+}
+
 /**
  * Returns the groups of initiative choices for the select box of a meeting, without the empty
- * choice. The groups are "Now", "Next", and "Later", sorted by rank and then by
+ * choice. Only the initiatives of the project `projectId` are included, and no initiatives when
+ * `projectId` is `null`. The groups are "Now", "Next", and "Later", sorted by rank and then by
  * identifier, then "Completed", sorted by the shown name without regard to case. Deleted
  * initiatives are not included. Empty groups are not included.
  */
 export function initiativeChoiceGroups(
     all: InitiativeSummary[],
+    projectId: number | null,
 ): ChoiceGroup[] {
-    const open = all
+    const initiatives = ofProject(all, projectId);
+    const open = initiatives
         .filter((i) => i.deletedAt === null && i.completedAt === null)
         .sort((a, b) => compareRanks(a.rank, b.rank) || a.id - b.id);
     const groups: ChoiceGroup[] = COLUMNS.filter(
@@ -144,7 +168,7 @@ export function initiativeChoiceGroups(
     }));
     groups.push({
         label: "Completed",
-        choices: all
+        choices: initiatives
             .filter((i) => i.deletedAt === null && i.completedAt !== null)
             .map(choice)
             .sort(byLabel),
@@ -153,13 +177,17 @@ export function initiativeChoiceGroups(
 }
 
 /**
- * Returns the choices for the deleted initiatives, also the completed ones. The select box of
- * a meeting shows one of them only while it is the initiative that the meeting is assigned to.
+ * Returns the choices for the deleted initiatives of the project `projectId`, also the
+ * completed ones. Returns no choices when `projectId` is `null`. The select box of a meeting
+ * shows one of them only while it is the initiative that the meeting is assigned to.
  */
 export function deletedInitiativeChoices(
     all: InitiativeSummary[],
+    projectId: number | null,
 ): InitiativeChoice[] {
-    return all.filter((i) => i.deletedAt !== null).map(choice);
+    return ofProject(all, projectId)
+        .filter((i) => i.deletedAt !== null)
+        .map(choice);
 }
 
 /** Returns summaries of initiatives. Deleted initiatives are included only when asked. */
@@ -173,12 +201,14 @@ export function listInitiatives(options: {
 
 /**
  * Creates an initiative with the given values at the top of Later. The backend removes the
- * spaces at the start and end of the name. The result is "nameTaken" if another initiative
- * that is not deleted has the same name, and then nothing is saved. The backend rejects the
- * values when the name is empty, the description is empty, and the role is `null`.
+ * spaces at the start and end of the name. The result is "nameTaken" if another initiative of
+ * the project that is not deleted has the same name, and then nothing is saved. The backend
+ * rejects the values when the name is empty, the description is empty, and the role is
+ * `null`, and when the project is deleted or does not exist.
  */
 export function createInitiative(values: NewInitiative): Promise<CreateResult> {
     return invoke<CreateResult>("create_initiative", {
+        projectId: values.projectId,
         name: values.name,
         description: values.description,
         raciRole: values.raciRole,
@@ -192,7 +222,8 @@ export function getInitiative(id: number): Promise<Initiative | null> {
 
 /**
  * Renames an initiative. The backend removes the spaces at the start and end of the name. The
- * result is "nameTaken" if another initiative that is not deleted has the same name.
+ * result is "nameTaken" if another initiative of the project that is not deleted has the same
+ * name.
  */
 export function renameInitiative(
     id: number,
@@ -207,6 +238,22 @@ export function updateInitiative(
     changes: InitiativeChanges,
 ): Promise<Initiative> {
     return invoke<Initiative>("update_initiative", { id, ...changes });
+}
+
+/**
+ * Moves an initiative and the meetings that are assigned to it to another project. The
+ * initiative keeps its column and rank. The result is "nameTaken" if an initiative of the
+ * other project that is not deleted has the same name, and then nothing changes. The backend
+ * rejects a project that is deleted or does not exist.
+ */
+export function setInitiativeProject(
+    id: number,
+    projectId: number,
+): Promise<MoveToProjectResult> {
+    return invoke<MoveToProjectResult>("set_initiative_project", {
+        id,
+        projectId,
+    });
 }
 
 /**
@@ -229,7 +276,8 @@ export function deleteInitiative(id: number): Promise<void> {
 
 /**
  * Restores a deleted initiative, so it appears on the roadmap again. The result is
- * "nameTaken" if another initiative that is not deleted has the same name.
+ * "projectDeleted" if the project of the initiative is deleted, and "nameTaken" if another
+ * initiative of the project that is not deleted has the same name. Then nothing changes.
  */
 export function restoreInitiative(id: number): Promise<RestoreResult> {
     return invoke<RestoreResult>("restore_initiative", { id });

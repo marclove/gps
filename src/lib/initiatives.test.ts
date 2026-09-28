@@ -13,6 +13,7 @@ import {
     raciRoleLabel,
     renameInitiative,
     restoreInitiative,
+    setInitiativeProject,
     updateInitiative,
     type InitiativeSummary,
 } from "./initiatives";
@@ -30,6 +31,7 @@ describe("initiative commands", () => {
     it("calls the backend commands with their arguments", async () => {
         await listInitiatives({ includeDeleted: true });
         await createInitiative({
+            projectId: 5,
             name: " Launch ",
             description: "- Ship it",
             raciRole: "informed",
@@ -41,6 +43,7 @@ describe("initiative commands", () => {
             raciRole: "accountable",
         });
         await updateInitiative(3, { description: "", raciRole: null });
+        await setInitiativeProject(3, 5);
         await moveInitiative(3, "done", 0);
         await deleteInitiative(3);
         await restoreInitiative(3);
@@ -50,6 +53,7 @@ describe("initiative commands", () => {
             [
                 "create_initiative",
                 {
+                    projectId: 5,
                     name: " Launch ",
                     description: "- Ship it",
                     raciRole: "informed",
@@ -62,6 +66,7 @@ describe("initiative commands", () => {
                 { id: 3, description: "- Ship it", raciRole: "accountable" },
             ],
             ["update_initiative", { id: 3, description: "", raciRole: null }],
+            ["set_initiative_project", { id: 3, projectId: 5 }],
             ["move_initiative", { id: 3, destination: "done", index: 0 }],
             ["delete_initiative", { id: 3 }],
             ["restore_initiative", { id: 3 }],
@@ -77,6 +82,16 @@ describe("initiative commands", () => {
         invoke.mockResolvedValueOnce({ status: "restored" });
         await expect(restoreInitiative(3)).resolves.toEqual({
             status: "restored",
+        });
+
+        invoke.mockResolvedValueOnce({ status: "projectDeleted" });
+        await expect(restoreInitiative(3)).resolves.toEqual({
+            status: "projectDeleted",
+        });
+
+        invoke.mockResolvedValueOnce({ status: "nameTaken" });
+        await expect(setInitiativeProject(3, 5)).resolves.toEqual({
+            status: "nameTaken",
         });
     });
 });
@@ -113,6 +128,7 @@ function summary(
     fields: Partial<InitiativeSummary> & { id: number },
 ): InitiativeSummary {
     return {
+        projectId: 1,
         name: `Initiative ${fields.id}`,
         raciRole: null,
         horizon: "now",
@@ -140,11 +156,14 @@ describe("compareRanks", () => {
 
 describe("initiativeChoiceGroups", () => {
     it("sorts by rank when the order of the ranks differs from the order of the ids", () => {
-        const groups = initiativeChoiceGroups([
-            summary({ id: 1, name: "Third", rank: "c" }),
-            summary({ id: 2, name: "First", rank: "4" }),
-            summary({ id: 3, name: "Second", rank: "81f" }),
-        ]);
+        const groups = initiativeChoiceGroups(
+            [
+                summary({ id: 1, name: "Third", rank: "c" }),
+                summary({ id: 2, name: "First", rank: "4" }),
+                summary({ id: 3, name: "Second", rank: "81f" }),
+            ],
+            1,
+        );
 
         expect(groups).toEqual([
             {
@@ -159,13 +178,16 @@ describe("initiativeChoiceGroups", () => {
     });
 
     it("groups the open initiatives by horizon, sorted by rank and then by id", () => {
-        const groups = initiativeChoiceGroups([
-            summary({ id: 5, name: "Later one", horizon: "later" }),
-            summary({ id: 4, name: "Now second", rank: "c" }),
-            summary({ id: 3, name: "Next one", horizon: "next" }),
-            summary({ id: 2, name: "Now tie", rank: "8" }),
-            summary({ id: 1, name: "Now first", rank: "8" }),
-        ]);
+        const groups = initiativeChoiceGroups(
+            [
+                summary({ id: 5, name: "Later one", horizon: "later" }),
+                summary({ id: 4, name: "Now second", rank: "c" }),
+                summary({ id: 3, name: "Next one", horizon: "next" }),
+                summary({ id: 2, name: "Now tie", rank: "8" }),
+                summary({ id: 1, name: "Now first", rank: "8" }),
+            ],
+            1,
+        );
 
         expect(groups).toEqual([
             {
@@ -182,18 +204,21 @@ describe("initiativeChoiceGroups", () => {
     });
 
     it("puts completed initiatives in their own group, sorted by name, and leaves out deleted ones", () => {
-        const groups = initiativeChoiceGroups([
-            summary({ id: 1, name: "zeta", completedAt: COMPLETED }),
-            summary({ id: 2, name: "Alpha", completedAt: COMPLETED }),
-            summary({
-                id: 3,
-                name: "beta",
-                completedAt: COMPLETED,
-                deletedAt: DELETED,
-            }),
-            summary({ id: 4, name: "Gamma", deletedAt: DELETED }),
-            summary({ id: 5, name: "", deletedAt: DELETED }),
-        ]);
+        const groups = initiativeChoiceGroups(
+            [
+                summary({ id: 1, name: "zeta", completedAt: COMPLETED }),
+                summary({ id: 2, name: "Alpha", completedAt: COMPLETED }),
+                summary({
+                    id: 3,
+                    name: "beta",
+                    completedAt: COMPLETED,
+                    deletedAt: DELETED,
+                }),
+                summary({ id: 4, name: "Gamma", deletedAt: DELETED }),
+                summary({ id: 5, name: "", deletedAt: DELETED }),
+            ],
+            1,
+        );
 
         expect(groups).toEqual([
             {
@@ -207,17 +232,20 @@ describe("initiativeChoiceGroups", () => {
     });
 
     it("lists the deleted initiatives, completed or not, with their shown names", () => {
-        const choices = deletedInitiativeChoices([
-            summary({ id: 1, name: "Open" }),
-            summary({ id: 2, name: "Won", completedAt: COMPLETED }),
-            summary({
-                id: 3,
-                name: "beta",
-                completedAt: COMPLETED,
-                deletedAt: DELETED,
-            }),
-            summary({ id: 5, name: "", deletedAt: DELETED }),
-        ]);
+        const choices = deletedInitiativeChoices(
+            [
+                summary({ id: 1, name: "Open" }),
+                summary({ id: 2, name: "Won", completedAt: COMPLETED }),
+                summary({
+                    id: 3,
+                    name: "beta",
+                    completedAt: COMPLETED,
+                    deletedAt: DELETED,
+                }),
+                summary({ id: 5, name: "", deletedAt: DELETED }),
+            ],
+            1,
+        );
 
         expect(choices).toEqual([
             { id: 3, label: "beta" },
@@ -227,7 +255,7 @@ describe("initiativeChoiceGroups", () => {
 
     it("shows the default name for an initiative with an empty name", () => {
         expect(
-            initiativeChoiceGroups([summary({ id: 1, name: "   " })]),
+            initiativeChoiceGroups([summary({ id: 1, name: "   " })], 1),
         ).toEqual([
             {
                 label: "Now",
@@ -236,7 +264,47 @@ describe("initiativeChoiceGroups", () => {
         ]);
     });
 
+    it("leaves out the initiatives of other projects", () => {
+        const all = [
+            summary({ id: 1, name: "Launch" }),
+            summary({ id: 2, name: "Invoices", projectId: 2 }),
+            summary({ id: 3, name: "Won", completedAt: COMPLETED }),
+            summary({
+                id: 4,
+                name: "Paid",
+                projectId: 2,
+                completedAt: COMPLETED,
+            }),
+            summary({ id: 5, name: "Old", deletedAt: DELETED }),
+            summary({
+                id: 6,
+                name: "Gone",
+                projectId: 2,
+                deletedAt: DELETED,
+            }),
+        ];
+
+        expect(initiativeChoiceGroups(all, 1)).toEqual([
+            { label: "Now", choices: [{ id: 1, label: "Launch" }] },
+            { label: "Completed", choices: [{ id: 3, label: "Won" }] },
+        ]);
+        expect(deletedInitiativeChoices(all, 1)).toEqual([
+            { id: 5, label: "Old" },
+        ]);
+    });
+
+    it("returns no choices when there is no project", () => {
+        const all = [
+            summary({ id: 1, name: "Launch" }),
+            summary({ id: 2, name: "Won", completedAt: COMPLETED }),
+            summary({ id: 3, name: "Old", deletedAt: DELETED }),
+        ];
+
+        expect(initiativeChoiceGroups(all, null)).toEqual([]);
+        expect(deletedInitiativeChoices(all, null)).toEqual([]);
+    });
+
     it("returns no groups when there are no initiatives", () => {
-        expect(initiativeChoiceGroups([])).toEqual([]);
+        expect(initiativeChoiceGroups([], 1)).toEqual([]);
     });
 });
