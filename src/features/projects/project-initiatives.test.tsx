@@ -226,6 +226,10 @@ describe("ProjectInitiatives", () => {
 
         expect(rows()).toEqual([]);
         expect(currentSheet().id).toBeNull();
+        // The row that opened the sheet is gone, so the focus goes to New initiative.
+        expect(currentSheet().finalFocus?.current).toBe(
+            within(list()).getByRole("button", { name: "New initiative" }),
+        );
         const notifications = screen.getByRole("region", {
             name: "Notifications",
         });

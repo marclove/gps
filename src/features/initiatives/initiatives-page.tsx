@@ -32,8 +32,9 @@ import {
     replaceCard,
     type Board,
 } from "./board";
-import { InitiativeSheet, type SheetTarget } from "./initiative-sheet";
+import { InitiativeSheet } from "./initiative-sheet";
 import { RoadmapBoard } from "./roadmap-board";
+import { useInitiativeSheet } from "./use-initiative-sheet";
 
 type BoardState =
     | { kind: "loading" }
@@ -71,14 +72,17 @@ export function InitiativesPage() {
     const [attempt, setAttempt] = useState(0);
     // The project whose cards the roadmap shows, or `null` for all cards.
     const [filter, setFilter] = useState<number | null>(null);
-    // The initiative whose sheet is open, "new" for a draft, or `null`.
-    const [openId, setOpenId] = useState<SheetTarget | null>(null);
-    // True when the sheet closes because its initiative was deleted. Then the focus goes to
-    // "New initiative", because the card that opened the sheet is gone.
-    const [focusNewOnClose, setFocusNewOnClose] = useState(false);
     const failureToast = useFailureToast();
-    const { deleteItem, version, restored } = useDelete();
-    const newButton = useRef<HTMLButtonElement>(null);
+    const { version, restored } = useDelete();
+    const { openId, openInitiative, openDraft, newButton, sheet } =
+        useInitiativeSheet({
+            onDeleted: (id) =>
+                setState((current) =>
+                    current.kind === "loaded"
+                        ? { ...current, board: removeCard(current.board, id) }
+                        : current,
+                ),
+        });
     const boardArea = useRef<HTMLDivElement>(null);
     // The restored item that the page already focused, or that was restored before the page
     // opened. The page does not focus it again.
@@ -146,38 +150,6 @@ export function InitiativesPage() {
     function retry() {
         setState({ kind: "loading" });
         setAttempt((value) => value + 1);
-    }
-
-    function openInitiative(id: number) {
-        setFocusNewOnClose(false);
-        setOpenId(id);
-    }
-
-    async function deleteInitiative(id: number, savedName: string) {
-        try {
-            await deleteItem({ kind: "initiative", id, name: savedName });
-        } catch {
-            failureToast.show("Couldn't delete the initiative. Try again.");
-            return;
-        }
-        failureToast.clear();
-        setFocusNewOnClose(true);
-        setOpenId((current) => (current === id ? null : current));
-        setState((current) =>
-            current.kind === "loaded"
-                ? { ...current, board: removeCard(current.board, id) }
-                : current,
-        );
-    }
-
-    function openDraft() {
-        setFocusNewOnClose(false);
-        setOpenId("new");
-    }
-
-    function editCreated(id: number) {
-        // The draft sheet goes on to edit the initiative that it created.
-        setOpenId((current) => (current === "new" ? id : current));
     }
 
     async function move(id: number, to: Column, shownIndex: number) {
@@ -300,14 +272,10 @@ export function InitiativesPage() {
                 </div>
             )}
             <InitiativeSheet
-                id={openId}
+                {...sheet}
                 draftProjectId={filter}
                 name={openName}
-                onClose={() => setOpenId(null)}
                 onSaved={showSaved}
-                onCreated={editCreated}
-                onDelete={deleteInitiative}
-                finalFocus={focusNewOnClose ? newButton : undefined}
             />
         </div>
     );

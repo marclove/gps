@@ -1,7 +1,6 @@
 import { PlusIcon } from "lucide-react";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { useDelete } from "@/components/use-delete";
-import { useFailureToast } from "@/components/use-failure-toast";
 import { Button } from "@/components/ui/button";
 import {
     COLUMNS,
@@ -10,10 +9,8 @@ import {
     type InitiativeSummary,
 } from "@/lib/initiatives";
 import { buildBoard } from "@/features/initiatives/board";
-import {
-    InitiativeSheet,
-    type SheetTarget,
-} from "@/features/initiatives/initiative-sheet";
+import { InitiativeSheet } from "@/features/initiatives/initiative-sheet";
+import { useInitiativeSheet } from "@/features/initiatives/use-initiative-sheet";
 
 type ListState =
     | { kind: "loading" }
@@ -56,14 +53,21 @@ export function ProjectInitiatives({
 }) {
     const [list, setList] = useState<ListState>({ kind: "loading" });
     const [attempt, setAttempt] = useState(0);
-    // The initiative whose sheet is open, "new" for a draft, or `null`.
-    const [openId, setOpenId] = useState<SheetTarget | null>(null);
-    // True when the sheet closes because its initiative was deleted. Then the focus goes to
-    // "New initiative", because the row that opened the sheet is gone.
-    const [focusNewOnClose, setFocusNewOnClose] = useState(false);
-    const { deleteItem, version } = useDelete();
-    const failureToast = useFailureToast();
-    const newButton = useRef<HTMLButtonElement>(null);
+    const { version } = useDelete();
+    const { openId, openInitiative, openDraft, newButton, sheet } =
+        useInitiativeSheet({
+            onDeleted: (id) =>
+                setList((current) =>
+                    current.kind === "loaded"
+                        ? {
+                              kind: "loaded",
+                              initiatives: current.initiatives.filter(
+                                  (item) => item.id !== id,
+                              ),
+                          }
+                        : current,
+                ),
+        });
     const headingId = useId();
 
     useEffect(() => {
@@ -90,21 +94,6 @@ export function ProjectInitiatives({
         setAttempt((value) => value + 1);
     }
 
-    function openInitiative(id: number) {
-        setFocusNewOnClose(false);
-        setOpenId(id);
-    }
-
-    function openDraft() {
-        setFocusNewOnClose(false);
-        setOpenId("new");
-    }
-
-    function editCreated(id: number) {
-        // The draft sheet goes on to edit the initiative that it created.
-        setOpenId((current) => (current === "new" ? id : current));
-    }
-
     function showSaved(summary: InitiativeSummary) {
         if (projectId === null) return;
         setList((current) =>
@@ -115,28 +104,6 @@ export function ProjectInitiatives({
                           current.initiatives,
                           summary,
                           projectId,
-                      ),
-                  }
-                : current,
-        );
-    }
-
-    async function deleteInitiative(id: number, savedName: string) {
-        try {
-            await deleteItem({ kind: "initiative", id, name: savedName });
-        } catch {
-            failureToast.show("Couldn't delete the initiative. Try again.");
-            return;
-        }
-        failureToast.clear();
-        setFocusNewOnClose(true);
-        setOpenId((current) => (current === id ? null : current));
-        setList((current) =>
-            current.kind === "loaded"
-                ? {
-                      kind: "loaded",
-                      initiatives: current.initiatives.filter(
-                          (item) => item.id !== id,
                       ),
                   }
                 : current,
@@ -224,14 +191,10 @@ export function ProjectInitiatives({
                 )}
             </div>
             <InitiativeSheet
-                id={openId}
+                {...sheet}
                 draftProjectId={projectId}
                 name={openName}
-                onClose={() => setOpenId(null)}
                 onSaved={showSaved}
-                onCreated={editCreated}
-                onDelete={deleteInitiative}
-                finalFocus={focusNewOnClose ? newButton : undefined}
             />
         </section>
     );
