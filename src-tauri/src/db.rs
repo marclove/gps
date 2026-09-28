@@ -66,6 +66,7 @@ fn migrations() -> Migrations<'static> {
         M::up(REBUILD_INITIATIVES).foreign_key_check(),
         M::up("ALTER TABLE tasks RENAME COLUMN description TO title;").foreign_key_check(),
         M::up(CREATE_PROJECTS).foreign_key_check(),
+        M::up(PUT_INITIATIVES_IN_PROJECTS).foreign_key_check(),
     ])
 }
 
@@ -140,6 +141,56 @@ CREATE TABLE projects (
 );
 CREATE UNIQUE INDEX projects_name ON projects(name COLLATE NOCASE)
     WHERE deleted_at IS NULL AND name <> '';
+";
+
+/// Puts every initiative in a project, and gives each meeting an optional project.
+///
+/// If the table `initiatives` has rows, creates one project named "Unsorted" and puts every
+/// initiative in it, also the completed and the deleted ones. A new project gets the largest
+/// identifier, so `max(id)` finds it. If the table has no rows, creates no project.
+///
+/// Rebuilds the table `initiatives` with `project_id INTEGER NOT NULL`, because `SQLite` cannot
+/// add such a column. The rows keep their identifiers, so the references from `meetings` stay
+/// valid. The unique index of names now applies within one project.
+///
+/// Adds `project_id` to `meetings`, and gives each meeting that is assigned to an initiative the
+/// project of that initiative.
+const PUT_INITIATIVES_IN_PROJECTS: &str = "
+INSERT INTO projects (name, description, created_at, updated_at)
+SELECT 'Unsorted', '', strftime('%Y-%m-%dT%H:%M:%fZ', 'now'),
+       strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+WHERE EXISTS (SELECT 1 FROM initiatives);
+CREATE TABLE initiatives_new (
+    id           INTEGER PRIMARY KEY,
+    project_id   INTEGER NOT NULL REFERENCES projects(id),
+    name         TEXT NOT NULL DEFAULT '',
+    description  TEXT NOT NULL DEFAULT '',
+    raci_role    TEXT CHECK (raci_role IN ('responsible', 'accountable', 'consulted', 'informed')),
+    horizon      TEXT NOT NULL DEFAULT 'later' CHECK (horizon IN ('now', 'next', 'later')),
+    rank         TEXT NOT NULL,
+    created_at   TEXT NOT NULL,
+    updated_at   TEXT NOT NULL,
+    completed_at TEXT,
+    deleted_at   TEXT
+);
+INSERT INTO initiatives_new
+    (id, project_id, name, description, raci_role, horizon, rank, created_at, updated_at,
+     completed_at, deleted_at)
+SELECT id, (SELECT max(id) FROM projects), name, description, raci_role, horizon, rank,
+       created_at, updated_at, completed_at, deleted_at
+FROM initiatives;
+DROP TABLE initiatives;
+ALTER TABLE initiatives_new RENAME TO initiatives;
+CREATE UNIQUE INDEX initiatives_name ON initiatives(project_id, name COLLATE NOCASE)
+    WHERE deleted_at IS NULL AND name <> '';
+CREATE INDEX initiatives_project_id ON initiatives(project_id);
+CREATE UNIQUE INDEX initiatives_horizon_rank ON initiatives(horizon, rank)
+    WHERE completed_at IS NULL AND deleted_at IS NULL;
+ALTER TABLE meetings ADD COLUMN project_id INTEGER REFERENCES projects(id);
+CREATE INDEX meetings_project_id ON meetings(project_id);
+UPDATE meetings
+SET project_id = (SELECT project_id FROM initiatives WHERE initiatives.id = meetings.initiative_id)
+WHERE initiative_id IS NOT NULL;
 ";
 
 /// Opens the database file at `path`, and creates it if it does not exist.
@@ -491,5 +542,97 @@ mod tests {
             .unwrap();
         assert!(index.contains("COLLATE NOCASE"), "{index}");
         assert!(index.contains("deleted_at IS NULL"), "{index}");
+    }
+
+    /// The number of migrations before the migration that puts every initiative in a project.
+    const VERSION_WITHOUT_INITIATIVE_PROJECTS: usize = 9;
+
+    /// Returns the values of one column of every row of `table`, in the order of the
+    /// identifiers.
+    fn column_values<T: rusqlite::types::FromSql>(
+        connection: &Connection,
+        table: &str,
+        column: &str,
+    ) -> Vec<T> {
+        connection
+            .prepare(&format!("SELECT {column} FROM {table} ORDER BY id"))
+            .unwrap()
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap()
+    }
+
+    #[test]
+    fn migration_puts_every_initiative_in_unsorted_and_gives_meetings_their_project() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        migrations()
+            .to_version(&mut connection, VERSION_WITHOUT_INITIATIVE_PROJECTS)
+            .unwrap();
+        connection
+            .execute_batch(
+                "INSERT INTO initiatives
+                     (id, name, horizon, rank, created_at, updated_at, completed_at,
+                      deleted_at)
+                 VALUES (1, 'Board', 'now', 'a', 't', 't', NULL, NULL),
+                        (2, 'Done', 'now', 'b', 't', 't', 't', NULL),
+                        (3, 'Deleted', 'next', 'c', 't', 't', NULL, 't');
+                 INSERT INTO meetings (id, name, notes, date, created_at, updated_at,
+                                       initiative_id)
+                 VALUES (1, 'Assigned', '', '2026-09-24', 't', 't', 2),
+                        (2, 'Free', '', '2026-09-24', 't', 't', NULL);",
+            )
+            .unwrap();
+
+        apply(&mut connection, &migrations()).unwrap();
+
+        let projects: Vec<(i64, String, String)> = connection
+            .prepare("SELECT id, name, description FROM projects")
+            .unwrap()
+            .query_map([], |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert_eq!(projects.len(), 1);
+        let (unsorted, name, description) = projects[0].clone();
+        assert_eq!(name, "Unsorted");
+        assert_eq!(description, "");
+        assert_eq!(
+            column_values::<i64>(&connection, "initiatives", "project_id"),
+            [unsorted, unsorted, unsorted]
+        );
+        assert_eq!(
+            column_values::<String>(&connection, "initiatives", "rank"),
+            ["a", "b", "c"]
+        );
+        assert_eq!(
+            column_values::<Option<i64>>(&connection, "meetings", "project_id"),
+            [Some(unsorted), None]
+        );
+        assert_eq!(
+            column_values::<Option<i64>>(&connection, "meetings", "initiative_id"),
+            [Some(2), None]
+        );
+        let enabled: bool = connection
+            .pragma_query_value(None, "foreign_keys", |row| row.get(0))
+            .unwrap();
+        assert!(enabled);
+        let result = connection.execute("UPDATE initiatives SET project_id = 999", []);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn migration_of_an_empty_database_creates_no_project() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        migrations()
+            .to_version(&mut connection, VERSION_WITHOUT_INITIATIVE_PROJECTS)
+            .unwrap();
+
+        apply(&mut connection, &migrations()).unwrap();
+
+        let count: i64 = connection
+            .query_row("SELECT count(*) FROM projects", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(count, 0);
     }
 }

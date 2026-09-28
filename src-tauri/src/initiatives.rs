@@ -6,6 +6,10 @@
 //! initiatives on the board sort from the top in the order of their ranks, compared as text, and
 //! no two of them have the same rank. A unique index in the database enforces this rule. A
 //! move, a complete, a delete, and a restore each change only one initiative.
+//!
+//! Each initiative belongs to one project. Its name is unique among the initiatives of that
+//! project that are not deleted. Every initiative that is not deleted belongs to a project that
+//! is not deleted. The meetings that are assigned to an initiative are about its project.
 
 use std::fmt;
 
@@ -13,7 +17,7 @@ use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde::Serialize;
 
 use crate::meetings::NOW;
-use crate::rank;
+use crate::{projects, rank};
 
 /// The roles of the RACI model that the user can have in an initiative, as they are stored.
 pub const RACI_ROLES: [&str; 4] = ["responsible", "accountable", "consulted", "informed"];
@@ -30,6 +34,8 @@ pub const DONE: &str = "done";
 pub struct Initiative {
     /// The identifier that the database gives the initiative.
     pub id: i64,
+    /// The identifier of the project that the initiative belongs to.
+    pub project_id: i64,
     /// The name of the initiative, without spaces at the start or the end. It can be empty.
     pub name: String,
     /// The description, as Markdown.
@@ -46,8 +52,8 @@ pub struct Initiative {
     pub rank: String,
     /// The time when the initiative was created, as an RFC 3339 timestamp in UTC.
     pub created_at: String,
-    /// The time when the name, the description, or the role was last changed, as an RFC 3339
-    /// timestamp in UTC.
+    /// The time when the name, the description, the role, or the project was last changed, as
+    /// an RFC 3339 timestamp in UTC.
     pub updated_at: String,
     /// The time when the initiative was completed, as an RFC 3339 timestamp in UTC, or `None`
     /// if it is not completed.
@@ -63,6 +69,8 @@ pub struct Initiative {
 pub struct InitiativeSummary {
     /// The identifier that the database gives the initiative.
     pub id: i64,
+    /// The identifier of the project that the initiative belongs to.
+    pub project_id: i64,
     /// The name of the initiative, without spaces at the start or the end. It can be empty.
     pub name: String,
     /// The role of the user in the initiative, one of `RACI_ROLES`, or `None` if the user did
@@ -77,8 +85,8 @@ pub struct InitiativeSummary {
     pub rank: String,
     /// The time when the initiative was created, as an RFC 3339 timestamp in UTC.
     pub created_at: String,
-    /// The time when the name, the description, or the role was last changed, as an RFC 3339
-    /// timestamp in UTC.
+    /// The time when the name, the description, the role, or the project was last changed, as
+    /// an RFC 3339 timestamp in UTC.
     pub updated_at: String,
     /// The time when the initiative was completed, as an RFC 3339 timestamp in UTC, or `None`
     /// if it is not completed.
@@ -101,7 +109,8 @@ pub enum CreateOutcome {
         /// The initiative as it is stored after the create.
         initiative: Initiative,
     },
-    /// Another initiative that is not deleted has the same name. Nothing was saved.
+    /// Another initiative of the project that is not deleted has the same name. Nothing was
+    /// saved.
     NameTaken,
 }
 
@@ -118,7 +127,26 @@ pub enum RenameOutcome {
         /// The initiative as it is stored after the change.
         initiative: Initiative,
     },
-    /// Another initiative that is not deleted has the same name. Nothing was changed.
+    /// Another initiative of the project that is not deleted has the same name. Nothing was
+    /// changed.
+    NameTaken,
+}
+
+/// The result of a move of an initiative to another project.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(tag = "status", rename_all = "camelCase")]
+#[expect(
+    clippy::large_enum_variant,
+    reason = "each value lives only until the command sends it to the frontend"
+)]
+pub enum MoveOutcome {
+    /// The initiative and its meetings belong to the other project now.
+    Moved {
+        /// The initiative as it is stored after the move.
+        initiative: Initiative,
+    },
+    /// An initiative of the other project that is not deleted has the same name. Nothing was
+    /// changed.
     NameTaken,
 }
 
@@ -128,9 +156,12 @@ pub enum RenameOutcome {
 pub enum RestoreOutcome {
     /// The initiative is not deleted now.
     Restored,
-    /// Another initiative that is not deleted has the same name. Nothing was changed, and the
-    /// initiative stays deleted.
+    /// Another initiative of the project that is not deleted has the same name. Nothing was
+    /// changed, and the initiative stays deleted.
     NameTaken,
+    /// The project of the initiative is deleted. Nothing was changed, and the initiative stays
+    /// deleted.
+    ProjectDeleted,
 }
 
 /// A problem that stops an initiative operation.
@@ -144,6 +175,10 @@ pub enum Error {
     InvalidDestination(String),
     /// The initiative is deleted, so the operation cannot change it.
     Deleted(i64),
+    /// No project has the given identifier.
+    ProjectNotFound(i64),
+    /// The project with the given identifier is deleted, so it cannot take an initiative.
+    ProjectDeleted(i64),
     /// The name is empty, the description is empty, and there is no role, so the user did not
     /// change the new initiative. Such an initiative is never saved.
     Unchanged,
@@ -166,6 +201,8 @@ impl fmt::Display for Error {
                 "invalid destination \"{destination}\": use now, next, later, or done"
             ),
             Error::Deleted(id) => write!(f, "initiative {id} is deleted"),
+            Error::ProjectNotFound(id) => write!(f, "project {id} not found"),
+            Error::ProjectDeleted(id) => write!(f, "project {id} is deleted"),
             Error::Unchanged => write!(f, "an initiative needs a name, a description, or a role"),
             Error::Rank(error) => write!(f, "invalid rank: {error}"),
             Error::Database(error) => write!(f, "database error: {error}"),
@@ -197,8 +234,8 @@ pub fn list(
     include_deleted: bool,
 ) -> Result<Vec<InitiativeSummary>, Error> {
     let mut statement = connection.prepare(
-        "SELECT id, name, raci_role, horizon, rank, created_at, updated_at, completed_at,
-                deleted_at
+        "SELECT id, project_id, name, raci_role, horizon, rank, created_at, updated_at,
+                completed_at, deleted_at
          FROM initiatives
          WHERE ?1 OR deleted_at IS NULL
          ORDER BY horizon, rank, id",
@@ -207,31 +244,34 @@ pub fn list(
         .query_map(params![include_deleted], |row| {
             Ok(InitiativeSummary {
                 id: row.get(0)?,
-                name: row.get(1)?,
-                raci_role: row.get(2)?,
-                horizon: row.get(3)?,
-                rank: row.get(4)?,
-                created_at: row.get(5)?,
-                updated_at: row.get(6)?,
-                completed_at: row.get(7)?,
-                deleted_at: row.get(8)?,
+                project_id: row.get(1)?,
+                name: row.get(2)?,
+                raci_role: row.get(3)?,
+                horizon: row.get(4)?,
+                rank: row.get(5)?,
+                created_at: row.get(6)?,
+                updated_at: row.get(7)?,
+                completed_at: row.get(8)?,
+                deleted_at: row.get(9)?,
             })
         })?
         .collect::<Result<Vec<_>, _>>()?;
     Ok(summaries)
 }
 
-/// Creates an initiative with the given name, description, and role, at the top of the column
-/// `later`. It gets a rank before the ranks of all initiatives on the board in `later`. No other
-/// initiative changes.
+/// Creates an initiative in the project `project_id` with the given name, description, and
+/// role, at the top of the column `later`. It gets a rank before the ranks of all initiatives on
+/// the board in `later`. No other initiative changes.
 ///
 /// Removes the spaces at the start and the end of `name`. The role must be one of
 /// `RACI_ROLES`, or `None` for no role. If the name is empty, the description is empty, and
-/// the role is `None`, returns `Error::Unchanged`. If another initiative that is not deleted
-/// has the same name, without regard to uppercase and lowercase letters, returns
-/// `CreateOutcome::NameTaken` and saves nothing. An empty name never conflicts.
+/// the role is `None`, returns `Error::Unchanged`. The project must exist and must not be
+/// deleted. If another initiative of the project that is not deleted has the same name, without
+/// regard to uppercase and lowercase letters, returns `CreateOutcome::NameTaken` and saves
+/// nothing. An empty name never conflicts.
 pub fn create(
     connection: &Connection,
+    project_id: i64,
     name: &str,
     description: &str,
     raci_role: Option<&str>,
@@ -242,7 +282,8 @@ pub fn create(
         return Err(Error::Unchanged);
     }
     let transaction = connection.unchecked_transaction()?;
-    if name_is_taken(&transaction, None, name)? {
+    check_project(&transaction, project_id)?;
+    if name_is_taken(&transaction, project_id, None, name)? {
         return Ok(CreateOutcome::NameTaken);
     }
     let first = board_ranks(&transaction, "later", None)?.into_iter().next();
@@ -250,10 +291,11 @@ pub fn create(
     let id = transaction.query_row(
         &format!(
             "INSERT INTO initiatives
-                 (name, description, raci_role, horizon, rank, created_at, updated_at)
-             VALUES (?1, ?2, ?3, 'later', ?4, {NOW}, {NOW}) RETURNING id"
+                 (project_id, name, description, raci_role, horizon, rank, created_at,
+                  updated_at)
+             VALUES (?1, ?2, ?3, ?4, 'later', ?5, {NOW}, {NOW}) RETURNING id"
         ),
-        params![name, description, raci_role, rank],
+        params![project_id, name, description, raci_role, rank],
         |row| row.get(0),
     )?;
     transaction.commit()?;
@@ -265,8 +307,8 @@ pub fn create(
 pub fn get(connection: &Connection, id: i64) -> Result<Option<Initiative>, Error> {
     let initiative = connection
         .query_row(
-            "SELECT id, name, description, raci_role, horizon, rank, created_at, updated_at,
-                    completed_at, deleted_at
+            "SELECT id, project_id, name, description, raci_role, horizon, rank, created_at,
+                    updated_at, completed_at, deleted_at
              FROM initiatives WHERE id = ?1",
             params![id],
             initiative_from_row,
@@ -276,21 +318,21 @@ pub fn get(connection: &Connection, id: i64) -> Result<Option<Initiative>, Error
 }
 
 /// Removes the spaces at the start and the end of `name`, and saves it as the name of the
-/// initiative. Sets the time it was last changed. If another initiative that is not deleted
-/// has the same name, without regard to uppercase and lowercase letters, returns
+/// initiative. Sets the time it was last changed. If another initiative of the same project that
+/// is not deleted has the same name, without regard to uppercase and lowercase letters, returns
 /// `RenameOutcome::NameTaken` and changes nothing. An empty name never conflicts.
 pub fn rename(connection: &Connection, id: i64, name: &str) -> Result<RenameOutcome, Error> {
     let name = name.trim();
-    if get(connection, id)?.is_none() {
-        return Err(Error::NotFound(id));
-    }
-    if name_is_taken(connection, Some(id), name)? {
+    let transaction = connection.unchecked_transaction()?;
+    let initiative = get(&transaction, id)?.ok_or(Error::NotFound(id))?;
+    if name_is_taken(&transaction, initiative.project_id, Some(id), name)? {
         return Ok(RenameOutcome::NameTaken);
     }
-    connection.execute(
+    transaction.execute(
         &format!("UPDATE initiatives SET name = ?2, updated_at = {NOW} WHERE id = ?1"),
         params![id, name],
     )?;
+    transaction.commit()?;
     let initiative = get(connection, id)?.ok_or(Error::NotFound(id))?;
     Ok(RenameOutcome::Renamed { initiative })
 }
@@ -316,6 +358,44 @@ pub fn update(
         return Err(Error::NotFound(id));
     }
     get(connection, id)?.ok_or(Error::NotFound(id))
+}
+
+/// Moves an initiative, and every meeting that is assigned to it, to the project `project_id`.
+///
+/// Sets the time the initiative was last changed, and the time each moved meeting was last
+/// changed. Does not change the column or the rank, so the initiative keeps its place on the
+/// roadmap. If the initiative already belongs to the project, changes nothing.
+///
+/// The project must exist and must not be deleted. If an initiative of the project that is not
+/// deleted has the same name, without regard to uppercase and lowercase letters, returns
+/// `MoveOutcome::NameTaken` and changes nothing. An empty name never conflicts.
+pub fn set_project(
+    connection: &Connection,
+    id: i64,
+    project_id: i64,
+) -> Result<MoveOutcome, Error> {
+    let transaction = connection.unchecked_transaction()?;
+    let initiative = get(&transaction, id)?.ok_or(Error::NotFound(id))?;
+    if initiative.project_id == project_id {
+        return Ok(MoveOutcome::Moved { initiative });
+    }
+    check_project(&transaction, project_id)?;
+    if name_is_taken(&transaction, project_id, Some(id), &initiative.name)? {
+        return Ok(MoveOutcome::NameTaken);
+    }
+    transaction.execute(
+        &format!("UPDATE initiatives SET project_id = ?2, updated_at = {NOW} WHERE id = ?1"),
+        params![id, project_id],
+    )?;
+    transaction.execute(
+        &format!(
+            "UPDATE meetings SET project_id = ?2, updated_at = {NOW} WHERE initiative_id = ?1"
+        ),
+        params![id, project_id],
+    )?;
+    transaction.commit()?;
+    let initiative = get(connection, id)?.ok_or(Error::NotFound(id))?;
+    Ok(MoveOutcome::Moved { initiative })
 }
 
 /// Moves an initiative to a column of the roadmap, or completes it.
@@ -385,18 +465,27 @@ pub fn delete(connection: &Connection, id: i64) -> Result<(), Error> {
 /// column, so it comes directly after that initiative. A completed initiative goes back to the
 /// completed initiatives.
 ///
-/// If another initiative that is not deleted has the same name, returns
-/// `RestoreOutcome::NameTaken` and changes nothing. Restoring an initiative that is not deleted
-/// changes nothing.
+/// If the project of the initiative is deleted, returns `RestoreOutcome::ProjectDeleted` and
+/// changes nothing. If another initiative of the project that is not deleted has the same name,
+/// returns `RestoreOutcome::NameTaken` and changes nothing. Restoring an initiative that is not
+/// deleted changes nothing.
 pub fn restore(connection: &Connection, id: i64) -> Result<RestoreOutcome, Error> {
-    let initiative = get(connection, id)?.ok_or(Error::NotFound(id))?;
+    let transaction = connection.unchecked_transaction()?;
+    let initiative = get(&transaction, id)?.ok_or(Error::NotFound(id))?;
     if initiative.deleted_at.is_none() {
         return Ok(RestoreOutcome::Restored);
     }
-    if name_is_taken(connection, Some(id), &initiative.name)? {
+    if !projects::project_is_active(&transaction, initiative.project_id)? {
+        return Ok(RestoreOutcome::ProjectDeleted);
+    }
+    if name_is_taken(
+        &transaction,
+        initiative.project_id,
+        Some(id),
+        &initiative.name,
+    )? {
         return Ok(RestoreOutcome::NameTaken);
     }
-    let transaction = connection.unchecked_transaction()?;
     let mut rank = initiative.rank;
     if initiative.completed_at.is_none() {
         let ranks = board_ranks(&transaction, &initiative.horizon, Some(id))?;
@@ -421,19 +510,37 @@ fn check_role(raci_role: Option<&str>) -> Result<(), Error> {
     }
 }
 
-/// Returns true if an initiative that is not deleted has `name`, without regard to uppercase
-/// and lowercase letters. The initiative `except` does not count. An empty name is never
-/// taken.
-fn name_is_taken(connection: &Connection, except: Option<i64>, name: &str) -> Result<bool, Error> {
+/// Returns `Error::ProjectNotFound` if no project has the identifier `project_id`, and
+/// `Error::ProjectDeleted` if the project is deleted.
+fn check_project(connection: &Connection, project_id: i64) -> Result<(), Error> {
+    if projects::project_is_active(connection, project_id)? {
+        Ok(())
+    } else if projects::project_exists(connection, project_id)? {
+        Err(Error::ProjectDeleted(project_id))
+    } else {
+        Err(Error::ProjectNotFound(project_id))
+    }
+}
+
+/// Returns true if an initiative of the project `project_id` that is not deleted has `name`,
+/// without regard to uppercase and lowercase letters. The initiative `except` does not count. An
+/// empty name is never taken.
+fn name_is_taken(
+    connection: &Connection,
+    project_id: i64,
+    except: Option<i64>,
+    name: &str,
+) -> Result<bool, Error> {
     if name.is_empty() {
         return Ok(false);
     }
     let taken = connection.query_row(
         "SELECT EXISTS(
              SELECT 1 FROM initiatives
-             WHERE id IS NOT ?1 AND deleted_at IS NULL AND name = ?2 COLLATE NOCASE
+             WHERE project_id = ?1 AND id IS NOT ?2 AND deleted_at IS NULL
+                   AND name = ?3 COLLATE NOCASE
          )",
-        params![except, name],
+        params![project_id, except, name],
         |row| row.get(0),
     )?;
     Ok(taken)
@@ -476,15 +583,16 @@ fn board_ranks(
 fn initiative_from_row(row: &Row<'_>) -> rusqlite::Result<Initiative> {
     Ok(Initiative {
         id: row.get(0)?,
-        name: row.get(1)?,
-        description: row.get(2)?,
-        raci_role: row.get(3)?,
-        horizon: row.get(4)?,
-        rank: row.get(5)?,
-        created_at: row.get(6)?,
-        updated_at: row.get(7)?,
-        completed_at: row.get(8)?,
-        deleted_at: row.get(9)?,
+        project_id: row.get(1)?,
+        name: row.get(2)?,
+        description: row.get(3)?,
+        raci_role: row.get(4)?,
+        horizon: row.get(5)?,
+        rank: row.get(6)?,
+        created_at: row.get(7)?,
+        updated_at: row.get(8)?,
+        completed_at: row.get(9)?,
+        deleted_at: row.get(10)?,
     })
 }
 
@@ -492,6 +600,7 @@ fn initiative_from_row(row: &Row<'_>) -> rusqlite::Result<Initiative> {
 mod tests {
     use super::*;
     use crate::db::open_in_memory;
+    use crate::{meetings, projects};
 
     const OLD_TIME: &str = "2000-01-01T00:00:00.000Z";
 
@@ -562,10 +671,42 @@ mod tests {
         description: &str,
         raci_role: Option<&str>,
     ) -> Initiative {
-        match create(connection, name, description, raci_role).unwrap() {
+        created_in(connection, home(connection), name, description, raci_role)
+    }
+
+    /// Creates an initiative in the given project and returns it. Fails the test if the
+    /// initiative is not created.
+    fn created_in(
+        connection: &Connection,
+        project_id: i64,
+        name: &str,
+        description: &str,
+        raci_role: Option<&str>,
+    ) -> Initiative {
+        match create(connection, project_id, name, description, raci_role).unwrap() {
             CreateOutcome::Created { initiative } => initiative,
             CreateOutcome::NameTaken => panic!("the create should succeed"),
         }
+    }
+
+    /// Creates a project with the given name and returns its identifier.
+    fn project(connection: &Connection, name: &str) -> i64 {
+        match projects::create(connection, name, "").unwrap() {
+            projects::CreateOutcome::Created { project } => project.id,
+            projects::CreateOutcome::NameTaken => panic!("the create should succeed"),
+        }
+    }
+
+    /// Returns the identifier of the project "Home", which most tests use. Creates the project
+    /// if it does not exist.
+    fn home(connection: &Connection) -> i64 {
+        connection
+            .query_row("SELECT id FROM projects WHERE name = 'Home'", [], |row| {
+                row.get(0)
+            })
+            .optional()
+            .unwrap()
+            .unwrap_or_else(|| project(connection, "Home"))
     }
 
     /// Creates an initiative with the given name at the end of the given column.
@@ -626,7 +767,7 @@ mod tests {
         let connection = open_in_memory();
 
         for name in ["", "   "] {
-            let result = create(&connection, name, "", None);
+            let result = create(&connection, home(&connection), name, "", None);
             assert!(
                 matches!(result, Err(Error::Unchanged)),
                 "{name:?} should be refused"
@@ -663,7 +804,14 @@ mod tests {
         let later_before = column(&connection, "later");
 
         assert!(matches!(
-            create(&connection, " LAUNCH ", "Notes", Some("responsible")).unwrap(),
+            create(
+                &connection,
+                home(&connection),
+                " LAUNCH ",
+                "Notes",
+                Some("responsible")
+            )
+            .unwrap(),
             CreateOutcome::NameTaken
         ));
 
@@ -687,7 +835,7 @@ mod tests {
         for role in ["Responsible", "owner", ""] {
             assert!(
                 matches!(
-                    create(&connection, "Launch", "", Some(role)),
+                    create(&connection, home(&connection), "Launch", "", Some(role)),
                     Err(Error::InvalidRole(ref refused)) if refused == role
                 ),
                 "{role} should be refused"
@@ -1278,5 +1426,214 @@ mod tests {
             "invalid destination \"up\": use now, next, later, or done"
         );
         assert_eq!(Error::Deleted(7).to_string(), "initiative 7 is deleted");
+    }
+
+    /// Creates a meeting that is assigned to the initiative `id`, sets its `updated_at` to
+    /// `OLD_TIME`, and returns its identifier.
+    fn meeting_of(connection: &Connection, id: i64) -> i64 {
+        let meeting = meetings::create(connection, "2026-09-24").unwrap();
+        meetings::set_initiative(connection, meeting.id, Some(id)).unwrap();
+        connection
+            .execute(
+                "UPDATE meetings SET updated_at = ?2 WHERE id = ?1",
+                params![meeting.id, OLD_TIME],
+            )
+            .unwrap();
+        meeting.id
+    }
+
+    fn fetch_meeting(connection: &Connection, id: i64) -> meetings::Meeting {
+        meetings::get(connection, id).unwrap().unwrap()
+    }
+
+    #[test]
+    fn create_needs_a_project_that_is_not_deleted() {
+        let connection = open_in_memory();
+        let deleted = project(&connection, "Old");
+        projects::delete(&connection, deleted).unwrap();
+
+        assert!(matches!(
+            create(&connection, 999, "Launch", "", None),
+            Err(Error::ProjectNotFound(999))
+        ));
+        assert!(matches!(
+            create(&connection, deleted, "Launch", "", None),
+            Err(Error::ProjectDeleted(id)) if id == deleted
+        ));
+        assert_eq!(count(&connection), 0);
+        assert_eq!(Error::ProjectNotFound(7).to_string(), "project 7 not found");
+        assert_eq!(Error::ProjectDeleted(7).to_string(), "project 7 is deleted");
+
+        let billing = project(&connection, "Billing");
+        let initiative = created_in(&connection, billing, "Launch", "", None);
+        assert_eq!(initiative.project_id, billing);
+        assert_eq!(fetch(&connection, initiative.id).project_id, billing);
+    }
+
+    #[test]
+    fn names_are_unique_within_a_project() {
+        let connection = open_in_memory();
+        let billing = project(&connection, "Billing");
+        let checkout = project(&connection, "Checkout");
+        created_in(&connection, billing, "Launch", "", None);
+
+        let other = created_in(&connection, checkout, "LAUNCH", "", None);
+        assert_eq!(other.name, "LAUNCH");
+
+        assert!(matches!(
+            create(&connection, checkout, " launch ", "", None).unwrap(),
+            CreateOutcome::NameTaken
+        ));
+        let second = created_in(&connection, checkout, "Second", "", None);
+        assert!(matches!(
+            rename(&connection, second.id, "Launch").unwrap(),
+            RenameOutcome::NameTaken
+        ));
+        let moved_away = created_in(&connection, billing, "Other", "", None);
+        assert!(matches!(
+            rename(&connection, moved_away.id, "Second").unwrap(),
+            RenameOutcome::Renamed { .. }
+        ));
+
+        delete(&connection, other.id).unwrap();
+        created_in(&connection, checkout, "launch", "", None);
+        assert!(matches!(
+            restore(&connection, other.id).unwrap(),
+            RestoreOutcome::NameTaken
+        ));
+    }
+
+    #[test]
+    fn set_project_moves_the_initiative_and_its_meetings() {
+        let connection = open_in_memory();
+        let billing = project(&connection, "Billing");
+        add(&connection, "A", "now");
+        let b = add(&connection, "B", "now");
+        add(&connection, "C", "now");
+        set_updated_at(&connection, b, OLD_TIME);
+        let first = meeting_of(&connection, b);
+        let second = meeting_of(&connection, b);
+        let unrelated = meetings::create(&connection, "2026-09-24").unwrap();
+        let before = fetch(&connection, b);
+        let now_before = column(&connection, "now");
+
+        let MoveOutcome::Moved { initiative } = set_project(&connection, b, billing).unwrap()
+        else {
+            panic!("the move should succeed");
+        };
+
+        assert_eq!(initiative.project_id, billing);
+        assert_eq!(initiative.horizon, before.horizon);
+        assert_eq!(initiative.rank, before.rank);
+        assert_ne!(initiative.updated_at, OLD_TIME);
+        assert_eq!(fetch(&connection, b), initiative);
+        assert_eq!(column(&connection, "now"), now_before);
+        for id in [first, second] {
+            let meeting = fetch_meeting(&connection, id);
+            assert_eq!(meeting.project_id, Some(billing));
+            assert_eq!(meeting.initiative_id, Some(b));
+            assert_ne!(meeting.updated_at, OLD_TIME);
+        }
+        assert_eq!(fetch_meeting(&connection, unrelated.id), unrelated);
+    }
+
+    #[test]
+    fn set_project_returns_name_taken_and_changes_nothing() {
+        let connection = open_in_memory();
+        let billing = project(&connection, "Billing");
+        created_in(&connection, billing, "Launch", "", None);
+        let launch = add(&connection, "LAUNCH", "now");
+        set_updated_at(&connection, launch, OLD_TIME);
+        let meeting = meeting_of(&connection, launch);
+        let before = fetch(&connection, launch);
+        let meeting_before = fetch_meeting(&connection, meeting);
+
+        assert!(matches!(
+            set_project(&connection, launch, billing).unwrap(),
+            MoveOutcome::NameTaken
+        ));
+
+        assert_eq!(fetch(&connection, launch), before);
+        assert_eq!(fetch_meeting(&connection, meeting), meeting_before);
+    }
+
+    #[test]
+    fn set_project_accepts_the_name_of_a_deleted_initiative() {
+        let connection = open_in_memory();
+        let billing = project(&connection, "Billing");
+        let old = created_in(&connection, billing, "Launch", "", None);
+        delete(&connection, old.id).unwrap();
+        let launch = add(&connection, "Launch", "now");
+
+        let MoveOutcome::Moved { initiative } = set_project(&connection, launch, billing).unwrap()
+        else {
+            panic!("the move should succeed");
+        };
+        assert_eq!(initiative.project_id, billing);
+    }
+
+    #[test]
+    fn set_project_refuses_a_deleted_project() {
+        let connection = open_in_memory();
+        let deleted = project(&connection, "Old");
+        projects::delete(&connection, deleted).unwrap();
+        let launch = add(&connection, "Launch", "now");
+        let meeting = meeting_of(&connection, launch);
+        let before = fetch(&connection, launch);
+        let meeting_before = fetch_meeting(&connection, meeting);
+
+        assert!(matches!(
+            set_project(&connection, launch, deleted),
+            Err(Error::ProjectDeleted(id)) if id == deleted
+        ));
+        assert!(matches!(
+            set_project(&connection, launch, 999),
+            Err(Error::ProjectNotFound(999))
+        ));
+        assert!(matches!(
+            set_project(&connection, 999, home(&connection)),
+            Err(Error::NotFound(999))
+        ));
+
+        assert_eq!(fetch(&connection, launch), before);
+        assert_eq!(fetch_meeting(&connection, meeting), meeting_before);
+    }
+
+    #[test]
+    fn restore_returns_project_deleted() {
+        let connection = open_in_memory();
+        let billing = project(&connection, "Billing");
+        let launch = created_in(&connection, billing, "Launch", "", None);
+        delete(&connection, launch.id).unwrap();
+        projects::delete(&connection, billing).unwrap();
+        let before = fetch(&connection, launch.id);
+
+        assert!(matches!(
+            restore(&connection, launch.id).unwrap(),
+            RestoreOutcome::ProjectDeleted
+        ));
+
+        assert_eq!(fetch(&connection, launch.id), before);
+    }
+
+    #[test]
+    fn the_database_refuses_a_second_active_initiative_with_the_same_name_in_one_project() {
+        let connection = open_in_memory();
+        let billing = project(&connection, "Billing");
+        let checkout = project(&connection, "Checkout");
+        created_in(&connection, billing, "Launch", "", None);
+        let other = created_in(&connection, checkout, "Launch", "", None);
+
+        let result = connection.execute(
+            "UPDATE initiatives SET project_id = ?2 WHERE id = ?1",
+            params![other.id, billing],
+        );
+        assert!(result.is_err());
+
+        let result = connection.execute(
+            "UPDATE initiatives SET project_id = 999 WHERE id = ?1",
+            params![other.id],
+        );
+        assert!(result.is_err());
     }
 }

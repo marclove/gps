@@ -14,12 +14,18 @@ export type Meeting = {
     updatedAt: string;
     /** The initiative that the meeting is assigned to, or `null` if it is not assigned. */
     initiativeId: number | null;
+    /**
+     * The project that the meeting is about, or `null` for no project. The project can be
+     * deleted. If the meeting is assigned to an initiative, this is the project of that
+     * initiative.
+     */
+    projectId: number | null;
 };
 
 /** The part of a meeting that the list of meetings shows. */
 export type MeetingSummary = Pick<
     Meeting,
-    "id" | "name" | "date" | "updatedAt"
+    "id" | "name" | "date" | "updatedAt" | "projectId"
 >;
 
 /** The fields of a meeting that the user can change. */
@@ -53,13 +59,27 @@ export function updateMeeting(
 
 /**
  * Assigns a meeting to an initiative, or removes the assignment when `initiativeId` is
- * `null`, and returns the stored meeting.
+ * `null`, and returns the stored meeting. An assignment also sets the project of the meeting
+ * to the project of the initiative.
  */
 export function setMeetingInitiative(
     id: number,
     initiativeId: number | null,
 ): Promise<Meeting> {
     return invoke<Meeting>("set_meeting_initiative", { id, initiativeId });
+}
+
+/**
+ * Sets the project of a meeting, or no project when `projectId` is `null`, and returns the
+ * stored meeting. If the project changes, the backend also removes the assignment to an
+ * initiative. If the meeting already has the project, nothing changes. The backend rejects a
+ * project that is deleted or does not exist.
+ */
+export function setMeetingProject(
+    id: number,
+    projectId: number | null,
+): Promise<Meeting> {
+    return invoke<Meeting>("set_meeting_project", { id, projectId });
 }
 
 /** Deletes a meeting, so it no longer appears in the list of meetings. */

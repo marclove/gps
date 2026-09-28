@@ -37,6 +37,7 @@ const MEETING: Meeting = {
     createdAt: "2026-09-24T17:00:00.000Z",
     updatedAt: "2026-09-24T17:00:00.000Z",
     initiativeId: null,
+    projectId: null,
 };
 
 type Answer = (args?: Record<string, unknown>) => unknown;

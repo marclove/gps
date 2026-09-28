@@ -1,9 +1,14 @@
 //! Storage of meetings and their notes in the application database.
+//!
+//! A meeting is about one project or about no project. If a meeting is assigned to an
+//! initiative, the meeting is about the project of that initiative.
 
 use std::fmt;
 
 use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde::Serialize;
+
+use crate::projects;
 
 /// The name that a new meeting gets before the user changes it.
 pub const DEFAULT_NAME: &str = "Untitled meeting";
@@ -27,6 +32,9 @@ pub struct Meeting {
     /// The identifier of the initiative that the meeting is assigned to, or `None` if the
     /// meeting is not assigned to an initiative.
     pub initiative_id: Option<i64>,
+    /// The identifier of the project that the meeting is about, or `None` if the meeting is
+    /// about no project. The project can be deleted.
+    pub project_id: Option<i64>,
 }
 
 /// The part of a meeting that the list of meetings shows. It does not include the notes.
@@ -41,6 +49,9 @@ pub struct MeetingSummary {
     pub date: String,
     /// The time when the meeting was last changed, as an RFC 3339 timestamp in UTC.
     pub updated_at: String,
+    /// The identifier of the project that the meeting is about, or `None` if the meeting is
+    /// about no project. The project can be deleted.
+    pub project_id: Option<i64>,
 }
 
 /// A problem that stops a meeting operation.
@@ -52,6 +63,10 @@ pub enum Error {
     InvalidDate(String),
     /// No initiative has the given identifier.
     InitiativeNotFound(i64),
+    /// No project has the given identifier.
+    ProjectNotFound(i64),
+    /// The project with the given identifier is deleted, so a meeting cannot get it.
+    ProjectDeleted(i64),
     /// The database reported an error.
     Database(rusqlite::Error),
 }
@@ -67,6 +82,8 @@ impl fmt::Display for Error {
                 )
             }
             Error::InitiativeNotFound(id) => write!(f, "initiative {id} not found"),
+            Error::ProjectNotFound(id) => write!(f, "project {id} not found"),
+            Error::ProjectDeleted(id) => write!(f, "project {id} is deleted"),
             Error::Database(error) => write!(f, "database error: {error}"),
         }
     }
@@ -87,7 +104,7 @@ pub(crate) const NOW: &str = "strftime('%Y-%m-%dT%H:%M:%fZ', 'now')";
 /// meetings with the same date, the meeting that was created last is first.
 pub fn list(connection: &Connection) -> Result<Vec<MeetingSummary>, Error> {
     let mut statement = connection.prepare(
-        "SELECT id, name, date, updated_at FROM meetings
+        "SELECT id, name, date, updated_at, project_id FROM meetings
          WHERE deleted_at IS NULL
          ORDER BY date DESC, created_at DESC, id DESC",
     )?;
@@ -98,6 +115,7 @@ pub fn list(connection: &Connection) -> Result<Vec<MeetingSummary>, Error> {
                 name: row.get(1)?,
                 date: row.get(2)?,
                 updated_at: row.get(3)?,
+                project_id: row.get(4)?,
             })
         })?
         .collect::<Result<Vec<_>, _>>()?;
@@ -122,8 +140,8 @@ pub fn create(connection: &Connection, date: &str) -> Result<Meeting, Error> {
 pub fn get(connection: &Connection, id: i64) -> Result<Option<Meeting>, Error> {
     let meeting = connection
         .query_row(
-            "SELECT id, name, date, notes, created_at, updated_at, initiative_id FROM meetings
-             WHERE id = ?1",
+            "SELECT id, name, date, notes, created_at, updated_at, initiative_id, project_id
+             FROM meetings WHERE id = ?1",
             params![id],
             meeting_from_row,
         )
@@ -132,7 +150,7 @@ pub fn get(connection: &Connection, id: i64) -> Result<Option<Meeting>, Error> {
 }
 
 /// Replaces the name, date, and notes of a meeting, and sets the time it was last changed.
-/// Does not change the initiative of the meeting. Returns the meeting as it is stored after
+/// Does not change the initiative or the project of the meeting. Returns the meeting as it is stored after
 /// the change.
 pub fn update(
     connection: &Connection,
@@ -158,28 +176,78 @@ pub fn update(
 /// Assigns a meeting to an initiative, or removes the assignment when `initiative_id` is
 /// `None`. The initiative can be completed or deleted. Sets the time the meeting was last
 /// changed. Returns the meeting as it is stored after the change.
+///
+/// An assignment also sets the project of the meeting to the project of the initiative. A
+/// removal of the assignment does not change the project.
 pub fn set_initiative(
     connection: &Connection,
     id: i64,
     initiative_id: Option<i64>,
 ) -> Result<Meeting, Error> {
-    if let Some(initiative_id) = initiative_id {
-        let initiative_exists: bool = connection.query_row(
-            "SELECT EXISTS(SELECT 1 FROM initiatives WHERE id = ?1)",
-            params![initiative_id],
-            |row| row.get(0),
-        )?;
-        if !initiative_exists {
-            return Err(Error::InitiativeNotFound(initiative_id));
-        }
-    }
-    let changed = connection.execute(
-        &format!("UPDATE meetings SET initiative_id = ?2, updated_at = {NOW} WHERE id = ?1"),
-        params![id, initiative_id],
-    )?;
+    let transaction = connection.unchecked_transaction()?;
+    let changed = if let Some(initiative_id) = initiative_id {
+        let project_id: i64 = transaction
+            .query_row(
+                "SELECT project_id FROM initiatives WHERE id = ?1",
+                params![initiative_id],
+                |row| row.get(0),
+            )
+            .optional()?
+            .ok_or(Error::InitiativeNotFound(initiative_id))?;
+        transaction.execute(
+            &format!(
+                "UPDATE meetings SET initiative_id = ?2, project_id = ?3, updated_at = {NOW}
+                 WHERE id = ?1"
+            ),
+            params![id, initiative_id, project_id],
+        )?
+    } else {
+        transaction.execute(
+            &format!("UPDATE meetings SET initiative_id = NULL, updated_at = {NOW} WHERE id = ?1"),
+            params![id],
+        )?
+    };
     if changed == 0 {
         return Err(Error::NotFound(id));
     }
+    transaction.commit()?;
+    get(connection, id)?.ok_or(Error::NotFound(id))
+}
+
+/// Sets the project that a meeting is about, or sets no project when `project_id` is `None`.
+/// Returns the meeting as it is stored after the change.
+///
+/// If the project changes, also removes the assignment of the meeting to an initiative, and
+/// sets the time the meeting was last changed. If the meeting already has the project, changes
+/// nothing, also when the project is deleted. Otherwise the project must exist and must not be
+/// deleted.
+pub fn set_project(
+    connection: &Connection,
+    id: i64,
+    project_id: Option<i64>,
+) -> Result<Meeting, Error> {
+    let transaction = connection.unchecked_transaction()?;
+    let meeting = get(&transaction, id)?.ok_or(Error::NotFound(id))?;
+    if meeting.project_id == project_id {
+        return Ok(meeting);
+    }
+    if let Some(project_id) = project_id {
+        if !projects::project_is_active(&transaction, project_id)? {
+            return Err(if projects::project_exists(&transaction, project_id)? {
+                Error::ProjectDeleted(project_id)
+            } else {
+                Error::ProjectNotFound(project_id)
+            });
+        }
+    }
+    transaction.execute(
+        &format!(
+            "UPDATE meetings SET project_id = ?2, initiative_id = NULL, updated_at = {NOW}
+             WHERE id = ?1"
+        ),
+        params![id, project_id],
+    )?;
+    transaction.commit()?;
     get(connection, id)?.ok_or(Error::NotFound(id))
 }
 
@@ -235,6 +303,7 @@ fn meeting_from_row(row: &Row<'_>) -> rusqlite::Result<Meeting> {
         created_at: row.get(4)?,
         updated_at: row.get(5)?,
         initiative_id: row.get(6)?,
+        project_id: row.get(7)?,
     })
 }
 
@@ -242,7 +311,7 @@ fn meeting_from_row(row: &Row<'_>) -> rusqlite::Result<Meeting> {
 mod tests {
     use super::*;
     use crate::db::open_in_memory;
-    use crate::initiatives;
+    use crate::{initiatives, projects};
 
     #[test]
     fn list_is_empty_for_a_new_database() {
@@ -427,12 +496,30 @@ mod tests {
             .unwrap();
     }
 
-    /// Creates an initiative with a description and returns it.
-    fn new_initiative(connection: &Connection) -> initiatives::Initiative {
-        match initiatives::create(connection, "", "x", None).unwrap() {
+    /// Creates a project with the given name and returns its identifier.
+    fn new_project(connection: &Connection, name: &str) -> i64 {
+        match projects::create(connection, name, "").unwrap() {
+            projects::CreateOutcome::Created { project } => project.id,
+            projects::CreateOutcome::NameTaken => panic!("the create should succeed"),
+        }
+    }
+
+    /// Creates an initiative with a description in the given project and returns it.
+    fn initiative_in(connection: &Connection, project_id: i64) -> initiatives::Initiative {
+        match initiatives::create(connection, project_id, "", "x", None).unwrap() {
             initiatives::CreateOutcome::Created { initiative } => initiative,
             initiatives::CreateOutcome::NameTaken => panic!("the create should succeed"),
         }
+    }
+
+    /// Creates an initiative with a description in a new project without a name, and returns
+    /// the initiative.
+    fn new_initiative(connection: &Connection) -> initiatives::Initiative {
+        let project_id = match projects::create(connection, "", "x").unwrap() {
+            projects::CreateOutcome::Created { project } => project.id,
+            projects::CreateOutcome::NameTaken => panic!("an empty name is never taken"),
+        };
+        initiative_in(connection, project_id)
     }
 
     #[test]
@@ -516,5 +603,112 @@ mod tests {
         let updated = update(&connection, created.id, "Weekly sync", "2026-09-25", "").unwrap();
 
         assert_eq!(updated.initiative_id, Some(initiative.id));
+    }
+
+    #[test]
+    fn a_new_meeting_has_no_project() {
+        let connection = open_in_memory();
+        let meeting = create(&connection, "2026-09-24").unwrap();
+        assert_eq!(meeting.project_id, None);
+        assert_eq!(list(&connection).unwrap()[0].project_id, None);
+    }
+
+    #[test]
+    fn set_initiative_sets_the_project_of_the_initiative() {
+        let connection = open_in_memory();
+        let billing = new_project(&connection, "Billing");
+        let checkout = new_project(&connection, "Checkout");
+        let initiative = initiative_in(&connection, checkout);
+        let meeting = create(&connection, "2026-09-24").unwrap();
+        set_project(&connection, meeting.id, Some(billing)).unwrap();
+
+        let assigned = set_initiative(&connection, meeting.id, Some(initiative.id)).unwrap();
+
+        assert_eq!(assigned.initiative_id, Some(initiative.id));
+        assert_eq!(assigned.project_id, Some(checkout));
+        assert_eq!(get(&connection, meeting.id).unwrap(), Some(assigned));
+        assert_eq!(list(&connection).unwrap()[0].project_id, Some(checkout));
+
+        let removed = set_initiative(&connection, meeting.id, None).unwrap();
+        assert_eq!(removed.initiative_id, None);
+        assert_eq!(removed.project_id, Some(checkout));
+    }
+
+    #[test]
+    fn set_project_clears_the_initiative_when_it_changes() {
+        let connection = open_in_memory();
+        let billing = new_project(&connection, "Billing");
+        let initiative = new_initiative(&connection);
+        let meeting = create(&connection, "2026-09-24").unwrap();
+        set_initiative(&connection, meeting.id, Some(initiative.id)).unwrap();
+        set_updated_at(&connection, meeting.id, OLD_TIME);
+
+        let moved = set_project(&connection, meeting.id, Some(billing)).unwrap();
+
+        assert_eq!(moved.project_id, Some(billing));
+        assert_eq!(moved.initiative_id, None);
+        assert_ne!(moved.updated_at, OLD_TIME);
+        assert_eq!(get(&connection, meeting.id).unwrap(), Some(moved));
+
+        set_updated_at(&connection, meeting.id, OLD_TIME);
+        let cleared = set_project(&connection, meeting.id, None).unwrap();
+        assert_eq!(cleared.project_id, None);
+        assert_ne!(cleared.updated_at, OLD_TIME);
+    }
+
+    #[test]
+    fn set_project_to_the_same_project_changes_nothing() {
+        let connection = open_in_memory();
+        let initiative = new_initiative(&connection);
+        let meeting = create(&connection, "2026-09-24").unwrap();
+        set_initiative(&connection, meeting.id, Some(initiative.id)).unwrap();
+        set_updated_at(&connection, meeting.id, OLD_TIME);
+        let before = get(&connection, meeting.id).unwrap().unwrap();
+
+        let same = set_project(&connection, meeting.id, Some(initiative.project_id)).unwrap();
+
+        assert_eq!(same, before);
+        assert_eq!(same.initiative_id, Some(initiative.id));
+        assert_eq!(same.updated_at, OLD_TIME);
+
+        let other = create(&connection, "2026-09-24").unwrap();
+        set_updated_at(&connection, other.id, OLD_TIME);
+        assert_eq!(
+            set_project(&connection, other.id, None).unwrap().updated_at,
+            OLD_TIME
+        );
+    }
+
+    #[test]
+    fn set_project_refuses_a_deleted_project_but_a_meeting_keeps_one() {
+        let connection = open_in_memory();
+        let billing = new_project(&connection, "Billing");
+        let checkout = new_project(&connection, "Checkout");
+        let meeting = create(&connection, "2026-09-24").unwrap();
+        set_project(&connection, meeting.id, Some(billing)).unwrap();
+        projects::delete(&connection, billing).unwrap();
+        projects::delete(&connection, checkout).unwrap();
+        let before = get(&connection, meeting.id).unwrap().unwrap();
+
+        assert!(matches!(
+            set_project(&connection, meeting.id, Some(checkout)),
+            Err(Error::ProjectDeleted(id)) if id == checkout
+        ));
+        assert!(matches!(
+            set_project(&connection, meeting.id, Some(999)),
+            Err(Error::ProjectNotFound(999))
+        ));
+        assert!(matches!(
+            set_project(&connection, 42, None),
+            Err(Error::NotFound(42))
+        ));
+        assert_eq!(get(&connection, meeting.id).unwrap(), Some(before.clone()));
+        assert_eq!(before.project_id, Some(billing));
+        assert_eq!(
+            set_project(&connection, meeting.id, Some(billing)).unwrap(),
+            before
+        );
+        assert_eq!(Error::ProjectNotFound(7).to_string(), "project 7 not found");
+        assert_eq!(Error::ProjectDeleted(7).to_string(), "project 7 is deleted");
     }
 }

@@ -33,6 +33,7 @@ type LoadState =
  * - `id` is the identifier of the initiative, "new" for a draft, or `null` when the sheet is
  *   closed. A draft is a new initiative that is not saved yet. For a draft, the name field
  *   gets the focus.
+ * - `draftProjectId` is the project that a draft starts in, or `null` to let the form choose.
  * - `name` is the saved name of the initiative. The sheet uses it as its title.
  * - `onClose` is called when the user closes the sheet, also with the "Save" button.
  * - `onSaved` receives the summary of the initiative after each save that succeeds. For a
@@ -47,6 +48,7 @@ type LoadState =
  */
 export function InitiativeSheet({
     id,
+    draftProjectId,
     name,
     onClose,
     onSaved,
@@ -55,6 +57,7 @@ export function InitiativeSheet({
     finalFocus,
 }: {
     id: SheetTarget | null;
+    draftProjectId: number | null;
     name: string;
     onClose: () => void;
     onSaved: (summary: InitiativeSummary) => void;
@@ -116,6 +119,7 @@ export function InitiativeSheet({
                     <SheetBody
                         key={bodyKey}
                         id={shown.id}
+                        draftProjectId={draftProjectId}
                         nameRef={nameInput}
                         onSaved={onSaved}
                         onCreated={onCreated}
@@ -135,6 +139,7 @@ export function InitiativeSheet({
  */
 function SheetBody({
     id,
+    draftProjectId,
     nameRef,
     onSaved,
     onCreated,
@@ -142,6 +147,7 @@ function SheetBody({
     onClose,
 }: {
     id: SheetTarget;
+    draftProjectId: number | null;
     nameRef: RefObject<HTMLInputElement | null>;
     onSaved: (summary: InitiativeSummary) => void;
     onCreated: (id: number) => void;
@@ -180,6 +186,7 @@ function SheetBody({
         return (
             <InitiativeForm
                 initiative={state.initiative}
+                draftProjectId={draftProjectId}
                 onSaved={onSaved}
                 onCreated={onCreated}
                 onDelete={(savedName) => {
@@ -223,11 +230,19 @@ function SheetBody({
                     className={NAME_FIELD_CLASSES}
                 />
             </div>
-            <div className="grid gap-1.5">
-                <span className={FIELD_LABEL_CLASSES}>Role</span>
-                <NativeSelect aria-label="RACI role" disabled>
-                    <NativeSelectOption value="" />
-                </NativeSelect>
+            <div className="flex items-start gap-4">
+                <div className="grid gap-1.5">
+                    <span className={FIELD_LABEL_CLASSES}>Role</span>
+                    <NativeSelect aria-label="RACI role" disabled>
+                        <NativeSelectOption value="" />
+                    </NativeSelect>
+                </div>
+                <div className="grid gap-1.5">
+                    <span className={FIELD_LABEL_CLASSES}>Project</span>
+                    <NativeSelect aria-label="Project" disabled>
+                        <NativeSelectOption value="" />
+                    </NativeSelect>
+                </div>
             </div>
         </div>
     );

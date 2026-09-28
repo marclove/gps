@@ -13,6 +13,7 @@ import {
     raciRoleLabel,
     renameInitiative,
     restoreInitiative,
+    setInitiativeProject,
     updateInitiative,
     type InitiativeSummary,
 } from "./initiatives";
@@ -30,6 +31,7 @@ describe("initiative commands", () => {
     it("calls the backend commands with their arguments", async () => {
         await listInitiatives({ includeDeleted: true });
         await createInitiative({
+            projectId: 5,
             name: " Launch ",
             description: "- Ship it",
             raciRole: "informed",
@@ -41,6 +43,7 @@ describe("initiative commands", () => {
             raciRole: "accountable",
         });
         await updateInitiative(3, { description: "", raciRole: null });
+        await setInitiativeProject(3, 5);
         await moveInitiative(3, "done", 0);
         await deleteInitiative(3);
         await restoreInitiative(3);
@@ -50,6 +53,7 @@ describe("initiative commands", () => {
             [
                 "create_initiative",
                 {
+                    projectId: 5,
                     name: " Launch ",
                     description: "- Ship it",
                     raciRole: "informed",
@@ -62,6 +66,7 @@ describe("initiative commands", () => {
                 { id: 3, description: "- Ship it", raciRole: "accountable" },
             ],
             ["update_initiative", { id: 3, description: "", raciRole: null }],
+            ["set_initiative_project", { id: 3, projectId: 5 }],
             ["move_initiative", { id: 3, destination: "done", index: 0 }],
             ["delete_initiative", { id: 3 }],
             ["restore_initiative", { id: 3 }],
@@ -77,6 +82,16 @@ describe("initiative commands", () => {
         invoke.mockResolvedValueOnce({ status: "restored" });
         await expect(restoreInitiative(3)).resolves.toEqual({
             status: "restored",
+        });
+
+        invoke.mockResolvedValueOnce({ status: "projectDeleted" });
+        await expect(restoreInitiative(3)).resolves.toEqual({
+            status: "projectDeleted",
+        });
+
+        invoke.mockResolvedValueOnce({ status: "nameTaken" });
+        await expect(setInitiativeProject(3, 5)).resolves.toEqual({
+            status: "nameTaken",
         });
     });
 });
@@ -113,6 +128,7 @@ function summary(
     fields: Partial<InitiativeSummary> & { id: number },
 ): InitiativeSummary {
     return {
+        projectId: 1,
         name: `Initiative ${fields.id}`,
         raciRole: null,
         horizon: "now",

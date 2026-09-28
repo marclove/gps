@@ -16,6 +16,7 @@ function summary(
 ): InitiativeSummary {
     return {
         id,
+        projectId: 1,
         name: `Initiative ${id}`,
         raciRole: null,
         horizon: "now",

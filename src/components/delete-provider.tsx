@@ -43,7 +43,9 @@ type KindActions = {
     ) => Promise<{ refusedText: string } | null>;
     /**
      * Restores the item with the given identifier. Gives `nameTaken` if the backend
-     * does not restore the item because another item has its name.
+     * does not restore the item because another item has its name, and
+     * `projectDeleted` if it does not restore an initiative because its project is
+     * deleted.
      */
     restore: (id: number) => Promise<RestoreResult | RestoreProjectResult>;
     /** Returns the name to show for a stored name. */
@@ -54,6 +56,11 @@ type KindActions = {
     restoreFailedText: string;
     /** Returns the text of the toast when another item has the name, for the shown name. */
     nameTakenText: (shownName: string) => string;
+    /**
+     * Returns the text of the toast when the project of the item is deleted, for the
+     * shown name.
+     */
+    projectDeletedText: (shownName: string) => string;
 };
 
 /** The commands and the text for each kind of item. */
@@ -68,6 +75,7 @@ const KINDS: Record<DeleteKind, KindActions> = {
         deletedText: (shownName) => `Deleted "${shownName}".`,
         restoreFailedText: "Couldn't restore the meeting. Try again.",
         nameTakenText: () => "Couldn't restore the meeting. Try again.",
+        projectDeletedText: () => "Couldn't restore the meeting. Try again.",
     },
     initiative: {
         remove: (id) => deleteInitiative(id).then(() => null),
@@ -77,6 +85,8 @@ const KINDS: Record<DeleteKind, KindActions> = {
         restoreFailedText: "Couldn't restore the initiative. Try again.",
         nameTakenText: (shownName) =>
             `Couldn't restore "${shownName}" because another initiative has that name.`,
+        projectDeletedText: (shownName) =>
+            `Couldn't restore "${shownName}" because its project is deleted.`,
     },
     project: {
         remove: async (id, shownName) => {
@@ -93,6 +103,7 @@ const KINDS: Record<DeleteKind, KindActions> = {
         restoreFailedText: "Couldn't restore the project. Try again.",
         nameTakenText: (shownName) =>
             `Couldn't restore "${shownName}" because another project has that name.`,
+        projectDeletedText: () => "Couldn't restore the project. Try again.",
     },
 };
 
@@ -135,14 +146,19 @@ export function DeleteProvider({ children }: { children: ReactNode }) {
             actions.restore(item.id).then(
                 (result) => {
                     restoringToasts.current.delete(toastId);
-                    if (result.status === "nameTaken") {
+                    if (
+                        result.status === "nameTaken" ||
+                        result.status === "projectDeleted"
+                    ) {
                         // Nothing changed, so `version` and `restored` stay the
                         // same. Undo is removed, because trying again cannot
                         // succeed.
+                        const shownName = actions.displayName(item.name);
                         update(toastId, {
-                            title: actions.nameTakenText(
-                                actions.displayName(item.name),
-                            ),
+                            title:
+                                result.status === "nameTaken"
+                                    ? actions.nameTakenText(shownName)
+                                    : actions.projectDeletedText(shownName),
                             timeout: TOAST_TIMEOUT,
                             actionProps: undefined,
                         });

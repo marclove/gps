@@ -430,6 +430,32 @@ describe("DeleteProvider", () => {
         expect(harness.version()).toBe(1);
     });
 
+    it("says that the project is deleted, without Undo, when the project of the initiative is deleted", async () => {
+        invoke.mockImplementation((command: string) =>
+            command === "restore_initiative"
+                ? Promise.resolve({ status: "projectDeleted" })
+                : succeed(command),
+        );
+        const harness = renderHarness();
+        await act(() =>
+            harness.deleteItem({ kind: "initiative", id: 1, name: "Launch" }),
+        );
+
+        await act(() => fireEvent.click(undoButton()));
+
+        const toasts = notifications();
+        expect(
+            await within(toasts).findByText(
+                'Couldn\'t restore "Launch" because its project is deleted.',
+            ),
+        ).toBeInTheDocument();
+        expect(
+            within(toasts).queryByRole("button", { name: "Undo" }),
+        ).not.toBeInTheDocument();
+        expect(harness.restoredId()).toBe("none");
+        expect(harness.version()).toBe(1);
+    });
+
     it("gives the kind with a restored item, so a page for meetings ignores an initiative with the same identifier", async () => {
         const handled: RestoredItem[] = [];
         const harness = renderHarness(

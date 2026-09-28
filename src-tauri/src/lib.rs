@@ -11,7 +11,7 @@ use rusqlite::Connection;
 use tauri::{Manager, State};
 
 use crate::initiatives::{
-    CreateOutcome, Initiative, InitiativeSummary, RenameOutcome, RestoreOutcome,
+    CreateOutcome, Initiative, InitiativeSummary, MoveOutcome, RenameOutcome, RestoreOutcome,
 };
 use crate::meetings::{Meeting, MeetingSummary};
 use crate::projects::Project;
@@ -200,6 +200,19 @@ fn set_meeting_initiative(
     clippy::needless_pass_by_value,
     reason = "Tauri gives managed state to commands by value"
 )]
+fn set_meeting_project(
+    database: State<'_, Database>,
+    id: i64,
+    project_id: Option<i64>,
+) -> Result<Meeting, String> {
+    database.run(|connection| meetings::set_project(connection, id, project_id))
+}
+
+#[tauri::command]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Tauri gives managed state to commands by value"
+)]
 fn list_initiatives(
     database: State<'_, Database>,
     include_deleted: bool,
@@ -214,12 +227,20 @@ fn list_initiatives(
 )]
 fn create_initiative(
     database: State<'_, Database>,
+    project_id: i64,
     name: &str,
     description: &str,
     raci_role: Option<String>,
 ) -> Result<CreateOutcome, String> {
-    database
-        .run(|connection| initiatives::create(connection, name, description, raci_role.as_deref()))
+    database.run(|connection| {
+        initiatives::create(
+            connection,
+            project_id,
+            name,
+            description,
+            raci_role.as_deref(),
+        )
+    })
 }
 
 #[tauri::command]
@@ -257,6 +278,19 @@ fn update_initiative(
 ) -> Result<Initiative, String> {
     database
         .run(|connection| initiatives::update(connection, id, description, raci_role.as_deref()))
+}
+
+#[tauri::command]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Tauri gives managed state to commands by value"
+)]
+fn set_initiative_project(
+    database: State<'_, Database>,
+    id: i64,
+    project_id: i64,
+) -> Result<MoveOutcome, String> {
+    database.run(|connection| initiatives::set_project(connection, id, project_id))
 }
 
 #[tauri::command]
@@ -370,11 +404,13 @@ pub fn run() {
             delete_meeting,
             restore_meeting,
             set_meeting_initiative,
+            set_meeting_project,
             list_initiatives,
             create_initiative,
             get_initiative,
             rename_initiative,
             update_initiative,
+            set_initiative_project,
             move_initiative,
             delete_initiative,
             restore_initiative,

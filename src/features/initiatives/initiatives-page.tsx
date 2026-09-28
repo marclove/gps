@@ -229,6 +229,7 @@ export function InitiativesPage() {
             )}
             <InitiativeSheet
                 id={openId}
+                draftProjectId={null}
                 name={openName}
                 onClose={() => setOpenId(null)}
                 onSaved={showSaved}

@@ -64,6 +64,9 @@ pub enum RenameOutcome {
 pub enum DeleteOutcome {
     /// The project is deleted now.
     Deleted,
+    /// The project has initiatives that are not deleted, also completed ones. Nothing was
+    /// changed.
+    HasInitiatives,
 }
 
 /// The result of a restore of a deleted project.
@@ -202,15 +205,30 @@ pub fn update(connection: &Connection, id: i64, description: &str) -> Result<Pro
 
 /// Marks a project as deleted. The row stays in the database. Records the current time as the
 /// time the project was deleted. Deleting a project that is already deleted keeps the time that
-/// was recorded first. Does not change `updated_at`.
+/// was recorded first. Does not change `updated_at` or the meetings of the project.
+///
+/// If the project has an initiative that is not deleted, also a completed one, returns
+/// `DeleteOutcome::HasInitiatives` and changes nothing.
 pub fn delete(connection: &Connection, id: i64) -> Result<DeleteOutcome, Error> {
-    let changed = connection.execute(
+    let transaction = connection.unchecked_transaction()?;
+    let has_initiatives: bool = transaction.query_row(
+        "SELECT EXISTS(
+             SELECT 1 FROM initiatives WHERE project_id = ?1 AND deleted_at IS NULL
+         )",
+        params![id],
+        |row| row.get(0),
+    )?;
+    if has_initiatives {
+        return Ok(DeleteOutcome::HasInitiatives);
+    }
+    let changed = transaction.execute(
         &format!("UPDATE projects SET deleted_at = coalesce(deleted_at, {NOW}) WHERE id = ?1"),
         params![id],
     )?;
     if changed == 0 {
         return Err(Error::NotFound(id));
     }
+    transaction.commit()?;
     Ok(DeleteOutcome::Deleted)
 }
 
@@ -235,20 +253,21 @@ pub fn restore(connection: &Connection, id: i64) -> Result<RestoreOutcome, Error
 }
 
 /// Returns true if a project with the identifier `id` exists and is not deleted.
-#[cfg_attr(
-    not(test),
-    expect(
-        dead_code,
-        reason = "the rules that put each initiative in a project will use this check"
-    )
-)]
-pub(crate) fn project_is_active(connection: &Connection, id: i64) -> Result<bool, Error> {
-    let active = connection.query_row(
+pub(crate) fn project_is_active(connection: &Connection, id: i64) -> rusqlite::Result<bool> {
+    connection.query_row(
         "SELECT EXISTS(SELECT 1 FROM projects WHERE id = ?1 AND deleted_at IS NULL)",
         params![id],
         |row| row.get(0),
-    )?;
-    Ok(active)
+    )
+}
+
+/// Returns true if a project with the identifier `id` exists, also a deleted one.
+pub(crate) fn project_exists(connection: &Connection, id: i64) -> rusqlite::Result<bool> {
+    connection.query_row(
+        "SELECT EXISTS(SELECT 1 FROM projects WHERE id = ?1)",
+        params![id],
+        |row| row.get(0),
+    )
 }
 
 /// Returns true if a project that is not deleted has `name`, without regard to uppercase and
@@ -542,5 +561,35 @@ mod tests {
             Err(Error::NotFound(999))
         ));
         assert_eq!(Error::NotFound(7).to_string(), "project 7 not found");
+    }
+
+    #[test]
+    fn delete_returns_has_initiatives_for_a_project_with_initiatives_that_are_not_deleted() {
+        let connection = open_in_memory();
+        let project = created(&connection, "Checkout", "");
+        let create =
+            |name: &str| match crate::initiatives::create(&connection, project.id, name, "", None)
+                .unwrap()
+            {
+                crate::initiatives::CreateOutcome::Created { initiative } => initiative.id,
+                crate::initiatives::CreateOutcome::NameTaken => panic!("the create should succeed"),
+            };
+        let completed = create("Completed");
+        crate::initiatives::move_to(&connection, completed, "done", 0).unwrap();
+        let deleted = create("Deleted");
+        crate::initiatives::delete(&connection, deleted).unwrap();
+
+        assert!(matches!(
+            delete(&connection, project.id).unwrap(),
+            DeleteOutcome::HasInitiatives
+        ));
+        assert_eq!(fetch(&connection, project.id), project);
+
+        crate::initiatives::delete(&connection, completed).unwrap();
+        assert!(matches!(
+            delete(&connection, project.id).unwrap(),
+            DeleteOutcome::Deleted
+        ));
+        assert!(fetch(&connection, project.id).deleted_at.is_some());
     }
 }
