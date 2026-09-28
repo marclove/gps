@@ -107,7 +107,7 @@ export function MeetingInitiativesPicker({
                     covered.length > 0 && (
                         <ul
                             aria-label="Meeting initiatives"
-                            className="flex flex-col gap-1 text-sm"
+                            className="list-disc space-y-1 pl-5 text-sm"
                         >
                             {covered.map((choice) => (
                                 <li
