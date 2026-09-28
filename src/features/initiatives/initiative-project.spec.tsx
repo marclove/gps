@@ -421,6 +421,32 @@ describe("Creating an initiative", () => {
         expect(backend.initiatives).toHaveLength(0);
     });
 
+    it("asks for a project when the draft has a name and no project, and keeps the sheet open on Save", async () => {
+        backend.seedProject("Checkout");
+        backend.seedProject("Billing");
+        const user = await openInitiativesPage();
+        const { sheet, name } = await openDraft(user);
+        await waitFor(() => expect(projectSelect(sheet)).toBeEnabled());
+
+        await user.type(name, "Launch");
+
+        const message = within(sheet).getByText(
+            "Choose a project to save this initiative.",
+        );
+        expect(projectSelect(sheet)).toHaveAttribute("aria-invalid", "true");
+        expect(projectSelect(sheet)).toHaveAccessibleDescription(
+            message.textContent ?? "",
+        );
+
+        await user.click(within(sheet).getByRole("button", { name: "Save" }));
+
+        expect(sheet).toBeInTheDocument();
+        expect(screen.getByRole("dialog")).toBe(sheet);
+        expect(projectSelect(sheet)).toHaveFocus();
+        await new Promise((resolve) => setTimeout(resolve, 800));
+        expect(backend.initiatives).toHaveLength(0);
+    });
+
     it("starts the draft in the only project when exactly one exists", async () => {
         const checkout = backend.seedProject("Checkout");
         const user = await openInitiativesPage();

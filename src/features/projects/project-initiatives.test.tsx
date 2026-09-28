@@ -210,6 +210,36 @@ describe("ProjectInitiatives", () => {
         expect(within(list()).getByText("No initiatives")).toBeInTheDocument();
     });
 
+    it("keeps the name of the open initiative after it moves to another project", async () => {
+        const launch = backend.seedInitiative({
+            name: "Launch",
+            project: checkout,
+            horizon: "now",
+        });
+        const user = userEvent.setup();
+        renderList(checkout.id);
+        await user.click(
+            await within(list()).findByRole("button", { name: /^Launch/ }),
+        );
+
+        act(() =>
+            currentSheet().onSaved(
+                summaryOf(launch, { projectId: billing.id }),
+            ),
+        );
+        expect(currentSheet().name).toBe("Launch");
+
+        act(() =>
+            currentSheet().onSaved(
+                summaryOf(launch, {
+                    projectId: billing.id,
+                    name: "Launch v2",
+                }),
+            ),
+        );
+        expect(currentSheet().name).toBe("Launch v2");
+    });
+
     it("removes a deleted initiative, and loads the list again when Undo restores it", async () => {
         const launch = backend.seedInitiative({
             name: "Launch",

@@ -120,13 +120,15 @@ export const FIELD_LABEL_CLASSES = "pl-[calc(--spacing(2.5)+1px)] text-xs";
  * `draftProjectId`. If `draftProjectId` is `null`, it starts in the only project when exactly
  * one project exists, and otherwise on the empty choice. The form creates the initiative at
  * the first save of a draft that has a project and is not empty, and then saves later changes
- * as for any other initiative. When no project exists, the "Project" select box is disabled,
- * and a text with a link to the Projects page tells the user to create a project first. The
- * form must be in a router. If the name of the draft is taken, the name field shows a
- * message, and the form creates the initiative with an empty name when the draft has a
- * description or a role. After the create, `onSaved` receives the summary, also when the
- * create finishes after the form unmounts, and `onCreated` receives the identifier while the
- * form is mounted.
+ * as for any other initiative. While the draft has a name, a role, or a description but no
+ * project, the "Project" select box is marked as invalid with the message "Choose a project to
+ * save this initiative.", and "Save" moves the focus to the select box and does not call
+ * `onSave`. When no project exists, the "Project" select box is disabled, and a text with a
+ * link to the Projects page tells the user to create a project first. The form must be in a
+ * router. If the name of the draft is taken, the name field shows a message, and the form
+ * creates the initiative with an empty name when the draft has a description or a role.
+ * After the create, `onSaved` receives the summary, also when the create finishes after the
+ * form unmounts, and `onCreated` receives the identifier while the form is mounted.
  *
  * The "Project" select box offers the projects that are not deleted, sorted by the shown
  * name. For a saved initiative, it has no empty choice, and a change moves the initiative to
@@ -202,6 +204,7 @@ export function InitiativeForm({
     const nameId = useId();
     const roleId = useId();
     const messageId = useId();
+    const draftProjectRef = useRef<HTMLSelectElement>(null);
 
     useEffect(() => {
         onSavedRef.current = onSaved;
@@ -335,6 +338,23 @@ export function InitiativeForm({
 
     const completedAt = initiative?.completedAt ?? null;
 
+    // A draft with content but no project cannot be saved, so the form asks for a project.
+    // When no project exists, the "Project" field tells the user to create one instead.
+    const projectMissing =
+        id === null &&
+        draft.projectId === null &&
+        !isEmptyDraft(draft) &&
+        projectsLoad.kind === "loaded" &&
+        projectsLoad.projects.length > 0;
+
+    function clickSave() {
+        if (projectMissing) {
+            draftProjectRef.current?.focus();
+            return;
+        }
+        onSave();
+    }
+
     const changeDescription = useCallback(
         (description: string) =>
             setDraft((current) => ({ ...current, description })),
@@ -422,11 +442,16 @@ export function InitiativeForm({
                 </div>
                 {id === null ? (
                     <ProjectField
+                        selectRef={draftProjectRef}
                         load={projectsLoad}
                         onRetry={retryProjects}
                         value={toValue(draft.projectId)}
                         allowEmpty
-                        message={null}
+                        message={
+                            projectMissing
+                                ? "Choose a project to save this initiative."
+                                : null
+                        }
                         onChange={(value) => {
                             const projectId =
                                 value === "" ? null : Number(value);
@@ -472,7 +497,7 @@ export function InitiativeForm({
                     // Keeps "Save" at the right.
                     <span />
                 )}
-                <Button size="sm" onClick={onSave}>
+                <Button size="sm" onClick={clickSave}>
                     Save
                 </Button>
             </div>
@@ -486,9 +511,11 @@ export function InitiativeForm({
  * the projects load and when no project exists. When no project exists, a text tells the user
  * to create a project first and links to the Projects page. When the projects cannot be
  * loaded, the field shows a message and a "Retry" button, which calls `onRetry`, in place of
- * the select box. `message` shows below the select box and describes it.
+ * the select box. `message` shows below the select box and describes it. `selectRef` receives
+ * the select box.
  */
 function ProjectField({
+    selectRef,
     load,
     onRetry,
     value,
@@ -496,6 +523,7 @@ function ProjectField({
     message,
     onChange,
 }: {
+    selectRef?: Ref<HTMLSelectElement>;
     load: ProjectsLoad;
     onRetry: () => void;
     value: string;
@@ -527,6 +555,7 @@ function ProjectField({
             <NativeSelect
                 // A long name must not make the select box wider than the sheet.
                 className="min-w-0"
+                ref={selectRef}
                 id={selectId}
                 value={value}
                 disabled={projects === null || projects.length === 0}

@@ -150,8 +150,8 @@ pub fn get(connection: &Connection, id: i64) -> Result<Option<Meeting>, Error> {
 }
 
 /// Replaces the name, date, and notes of a meeting, and sets the time it was last changed.
-/// Does not change the initiative or the project of the meeting. Returns the meeting as it is stored after
-/// the change.
+/// Does not change the initiative or the project of the meeting. Returns the meeting as it is
+/// stored after the change.
 pub fn update(
     connection: &Connection,
     id: i64,

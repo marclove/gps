@@ -807,9 +807,66 @@ describe("InitiativeForm", () => {
             expect(callsOf("list_projects")).toHaveLength(2);
         });
 
+        it("asks for a project while the draft has content and no project", async () => {
+            projects = [CHECKOUT, BILLING];
+            const user = userEvent.setup();
+            await renderForm(null);
+            expect(
+                screen.queryByText("Choose a project to save this initiative."),
+            ).not.toBeInTheDocument();
+            expect(projectSelect()).not.toHaveAttribute("aria-invalid");
+
+            await user.selectOptions(
+                screen.getByRole("combobox", { name: "RACI role" }),
+                "Informed",
+            );
+
+            expect(projectSelect()).toHaveAttribute("aria-invalid", "true");
+            expect(projectSelect()).toHaveAccessibleDescription(
+                "Choose a project to save this initiative.",
+            );
+
+            await user.selectOptions(projectSelect(), "Billing");
+
+            expect(
+                screen.queryByText("Choose a project to save this initiative."),
+            ).not.toBeInTheDocument();
+            expect(projectSelect()).not.toHaveAttribute("aria-invalid");
+        });
+
+        it("keeps the sheet open on Save and focuses the project while the draft has content and no project", async () => {
+            projects = [CHECKOUT, BILLING];
+            const user = userEvent.setup();
+            const { name, onSave } = await renderForm(null);
+            await user.type(name, "Launch");
+
+            await user.click(screen.getByRole("button", { name: "Save" }));
+
+            expect(onSave).not.toHaveBeenCalled();
+            expect(projectSelect()).toHaveFocus();
+
+            await user.selectOptions(projectSelect(), "Billing");
+            mockBackend(() => new Promise(() => {}));
+            await user.click(screen.getByRole("button", { name: "Save" }));
+
+            expect(onSave).toHaveBeenCalledTimes(1);
+        });
+
+        it("calls onSave for an empty draft without a project", async () => {
+            projects = [CHECKOUT, BILLING];
+            const user = userEvent.setup();
+            const { onSave } = await renderForm(null);
+
+            await user.click(screen.getByRole("button", { name: "Save" }));
+
+            expect(onSave).toHaveBeenCalledTimes(1);
+        });
+
         it("says to create a project first when no project exists", async () => {
             projects = [];
-            await renderForm(null);
+            const user = userEvent.setup();
+            const { name } = await renderForm(null);
+            await user.type(name, "Launch");
 
             expect(projectSelect()).toBeDisabled();
             expect(
@@ -818,6 +875,9 @@ describe("InitiativeForm", () => {
             expect(
                 screen.getByRole("link", { name: "Projects" }),
             ).toHaveAttribute("href", "/projects");
+            expect(
+                screen.queryByText("Choose a project to save this initiative."),
+            ).not.toBeInTheDocument();
         });
     });
 });

@@ -69,6 +69,12 @@ export function ProjectInitiatives({
                 ),
         });
     const headingId = useId();
+    // The initiative of the last save, with its name. The open sheet keeps this name after its
+    // initiative moves to another project and leaves the list.
+    const [lastSaved, setLastSaved] = useState<{
+        id: number;
+        name: string;
+    } | null>(null);
 
     useEffect(() => {
         if (projectId === null) return;
@@ -96,6 +102,7 @@ export function ProjectInitiatives({
 
     function showSaved(summary: InitiativeSummary) {
         if (projectId === null) return;
+        setLastSaved({ id: summary.id, name: summary.name });
         setList((current) =>
             current.kind === "loaded"
                 ? {
@@ -124,10 +131,12 @@ export function ProjectInitiatives({
                       columnTitle: column.title,
                   })),
               );
-    const openName =
+    const listedName =
         typeof openId === "number" && shown.kind === "loaded"
-            ? (shown.initiatives.find((item) => item.id === openId)?.name ?? "")
-            : "";
+            ? shown.initiatives.find((item) => item.id === openId)?.name
+            : undefined;
+    const openName =
+        listedName ?? (lastSaved?.id === openId ? lastSaved.name : "");
 
     return (
         // The heading row stays in place, and the rows scroll.

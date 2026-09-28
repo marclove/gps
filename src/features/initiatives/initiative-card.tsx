@@ -129,8 +129,8 @@ export function InitiativeCard({
 
 /**
  * A copy of a card that the board shows below the pointer while the card is dragged. It
- * looks like the card in the column `column`, with the name of its project `projectName`. Screen readers and the keyboard ignore it,
- * because the card itself stays in its list.
+ * looks like the card in the column `column`, with the name of its project `projectName`.
+ * Screen readers and the keyboard ignore it, because the card itself stays in its list.
  */
 export function InitiativeCardCopy({
     initiative,

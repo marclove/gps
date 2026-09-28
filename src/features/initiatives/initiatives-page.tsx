@@ -38,7 +38,8 @@ import { useInitiativeSheet } from "./use-initiative-sheet";
 
 type BoardState =
     | { kind: "loading" }
-    | { kind: "error" }
+    /** `failed` is the list that could not be loaded. */
+    | { kind: "error"; failed: "initiatives" | "projects" }
     | { kind: "loaded"; board: Board; projects: Project[] };
 
 /** Returns the saved name of the initiative with the identifier on the board, or `null`. */
@@ -99,30 +100,35 @@ export function InitiativesPage() {
     useEffect(() => {
         let current = true;
         const movesBefore = startedMoves.current;
-        Promise.all([
+        void Promise.allSettled([
             listInitiatives({ includeDeleted: false }),
             listProjects({ includeDeleted: false }),
-        ]).then(
-            ([summaries, projects]) => {
-                if (!current) return;
-                if (startedMoves.current !== movesBefore) {
-                    // The list can be older than a move that the board shows. Load it again
-                    // after the moves.
-                    if (pendingMoves.current > 0) {
-                        reloadAfterMoves.current = true;
-                    } else {
-                        setAttempt((value) => value + 1);
-                    }
-                    return;
+        ]).then(([summaries, projects]) => {
+            if (!current) return;
+            if (summaries.status === "rejected") {
+                setState({ kind: "error", failed: "initiatives" });
+                return;
+            }
+            if (projects.status === "rejected") {
+                setState({ kind: "error", failed: "projects" });
+                return;
+            }
+            if (startedMoves.current !== movesBefore) {
+                // The list can be older than a move that the board shows. Load it again
+                // after the moves.
+                if (pendingMoves.current > 0) {
+                    reloadAfterMoves.current = true;
+                } else {
+                    setAttempt((value) => value + 1);
                 }
-                setState({
-                    kind: "loaded",
-                    board: buildBoard(summaries),
-                    projects: sortProjects(projects),
-                });
-            },
-            () => current && setState({ kind: "error" }),
-        );
+                return;
+            }
+            setState({
+                kind: "loaded",
+                board: buildBoard(summaries.value),
+                projects: sortProjects(projects.value),
+            });
+        });
         return () => {
             current = false;
         };
@@ -250,7 +256,7 @@ export function InitiativesPage() {
             </PageHeader>
             {state.kind === "error" ? (
                 <div className="flex items-start gap-2 px-6 text-sm">
-                    <p>Couldn't load initiatives</p>
+                    <p>Couldn't load {state.failed}</p>
                     <Button variant="outline" size="sm" onClick={retry}>
                         Retry
                     </Button>
