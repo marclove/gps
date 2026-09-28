@@ -5,8 +5,9 @@ import App from "@/App";
 import { FakeRoadmapBackend } from "@/test/fake-roadmap-backend";
 
 // Feature spec for the project of an initiative, creating an initiative, and the roadmap in
-// docs/specs/0008-projects.md. Dragging on a filtered roadmap is checked in
-// filtered-roadmap.browser.spec.tsx.
+// docs/specs/0008-projects.md, with the changes of
+// docs/specs/0009-meetings-cover-several-initiatives.md. Dragging on a filtered roadmap is
+// checked in filtered-roadmap.browser.spec.tsx.
 // The Tauri backend is replaced by an in-memory fake of the project, meeting, and initiative
 // commands.
 
@@ -238,7 +239,7 @@ describe("The project of an initiative", () => {
             horizon: "now",
             project: checkout,
         });
-        const meeting = backend.seedMeeting("Kickoff", launch.id);
+        const meeting = backend.seedMeeting("Kickoff", [launch.id]);
         const user = await openInitiativesPage();
         const sheet = await openSheet(user, /^Launch/, "Launch");
 

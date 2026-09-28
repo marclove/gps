@@ -356,19 +356,19 @@ describe("The initiatives of a project", () => {
 
 describe("The meetings of a project", () => {
     it("lists the meetings about the project that are not deleted, newest first, with their dates", async () => {
-        backend.seedMeeting("Kickoff", null, {
+        backend.seedMeeting("Kickoff", [], {
             project: checkout,
             date: "2026-09-20",
         });
-        backend.seedMeeting("Review", null, {
+        backend.seedMeeting("Review", [], {
             project: checkout,
             date: "2026-09-24",
         });
-        backend.seedMeeting("Gone", null, {
+        backend.seedMeeting("Gone", [], {
             project: checkout,
             deleted: true,
         });
-        backend.seedMeeting("Billing sync", null, { project: billing });
+        backend.seedMeeting("Billing sync", [], { project: billing });
         backend.seedMeeting("1:1");
         await openProject("Checkout");
 
@@ -388,7 +388,7 @@ describe("The meetings of a project", () => {
     });
 
     it("opens the editor page of a meeting", async () => {
-        backend.seedMeeting("Kickoff", null, { project: checkout });
+        backend.seedMeeting("Kickoff", [], { project: checkout });
         const user = await openProject("Checkout");
 
         await user.click(

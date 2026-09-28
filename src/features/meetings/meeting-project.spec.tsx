@@ -4,7 +4,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "@/App";
 import { FakeRoadmapBackend } from "@/test/fake-roadmap-backend";
 
-// Feature spec for the project of a meeting in docs/specs/0008-projects.md.
+// Feature spec for the project of a meeting in docs/specs/0008-projects.md, with the changes of
+// docs/specs/0009-meetings-cover-several-initiatives.md. The initiatives of a meeting whose
+// project changes are checked in meeting-initiatives.spec.tsx.
 // The Tauri backend is replaced by an in-memory fake of the project, meeting, and initiative
 // commands.
 
@@ -38,9 +40,9 @@ function projectSelect() {
     });
 }
 
-function initiativeSelect() {
-    return within(meetingDetails()).getByRole<HTMLSelectElement>("combobox", {
-        name: "Meeting initiative",
+function chooseButton() {
+    return within(meetingDetails()).getByRole("button", {
+        name: "Choose initiatives",
     });
 }
 
@@ -66,7 +68,7 @@ function follows(first: Element, second: Element) {
 }
 
 describe("The project of a meeting", () => {
-    it("shows a Project row between the Date row and the Initiative row", async () => {
+    it("shows a Project row between the Date row and the Initiatives row", async () => {
         backend.seedMeeting("Weekly sync");
         const user = renderApp();
 
@@ -78,7 +80,7 @@ describe("The project of a meeting", () => {
         ).toHaveAttribute("for", projectSelect().id);
         const date = within(sidebar).getByLabelText("Meeting date");
         expect(follows(date, projectSelect())).toBe(true);
-        expect(follows(projectSelect(), initiativeSelect())).toBe(true);
+        expect(follows(projectSelect(), chooseButton())).toBe(true);
     });
 
     it("offers no project and the projects that are not deleted, by name without regard to case", async () => {
@@ -125,7 +127,7 @@ describe("The project of a meeting", () => {
     it("goes back to the saved choice and shows a failure toast when the project cannot be saved", async () => {
         const checkout = backend.seedProject("Checkout");
         backend.seedProject("Billing");
-        backend.seedMeeting("Weekly sync", null, { project: checkout });
+        backend.seedMeeting("Weekly sync", [], { project: checkout });
         backend.failing.add("set_meeting_project");
         const user = renderApp();
         await openMeeting(user, /Weekly sync/);
@@ -145,7 +147,7 @@ describe("The project of a meeting", () => {
     it("shows the meeting's deleted project as the last choice until another one is chosen", async () => {
         backend.seedProject("Checkout");
         const old = backend.seedProject("Old", { deleted: true });
-        const meeting = backend.seedMeeting("Weekly sync", null, {
+        const meeting = backend.seedMeeting("Weekly sync", [], {
             project: old,
         });
         const user = renderApp();
@@ -158,88 +160,5 @@ describe("The project of a meeting", () => {
 
         await waitFor(() => expect(meeting.projectId).toBeNull());
         expect(optionTexts(projectSelect())).toEqual(["", "Checkout"]);
-    });
-});
-
-describe("The initiative of a meeting with a project", () => {
-    it("offers only the initiatives of the meeting's project", async () => {
-        const checkout = backend.seedProject("Checkout");
-        const billing = backend.seedProject("Billing");
-        backend.seedInitiative({
-            name: "Launch",
-            horizon: "now",
-            project: checkout,
-        });
-        backend.seedInitiative({
-            name: "Invoices",
-            horizon: "now",
-            project: billing,
-        });
-        backend.seedMeeting("Weekly sync", null, { project: checkout });
-        const user = renderApp();
-
-        await openMeeting(user, /Weekly sync/);
-
-        await waitFor(() => expect(initiativeSelect()).toBeEnabled());
-        expect(optionTexts(initiativeSelect())).toEqual(["", "Launch"]);
-    });
-
-    it("offers no initiative and is disabled when the meeting has no project", async () => {
-        backend.seedInitiative({ name: "Launch", horizon: "now" });
-        backend.seedMeeting("Weekly sync");
-        const user = renderApp();
-
-        await openMeeting(user, /Weekly sync/);
-
-        await waitFor(() =>
-            expect(optionTexts(initiativeSelect())).toEqual([""]),
-        );
-        expect(initiativeSelect()).toBeDisabled();
-    });
-
-    it("clears the initiative when the project changes, and offers the initiatives of the new project", async () => {
-        const checkout = backend.seedProject("Checkout");
-        const billing = backend.seedProject("Billing");
-        const launch = backend.seedInitiative({
-            name: "Launch",
-            horizon: "now",
-            project: checkout,
-        });
-        backend.seedInitiative({
-            name: "Invoices",
-            horizon: "now",
-            project: billing,
-        });
-        const meeting = backend.seedMeeting("Weekly sync", launch.id);
-        const user = renderApp();
-        await openMeeting(user, /Weekly sync/);
-        await waitFor(() =>
-            expect(initiativeSelect()).toHaveValue(String(launch.id)),
-        );
-
-        await user.selectOptions(projectSelect(), "Billing");
-
-        await waitFor(() => expect(meeting.initiativeId).toBeNull());
-        expect(meeting.projectId).toBe(billing.id);
-        await waitFor(() =>
-            expect(optionTexts(initiativeSelect())).toEqual(["", "Invoices"]),
-        );
-        expect(initiativeSelect()).toHaveValue("");
-    });
-
-    it("shows the project of the initiative for a meeting that is assigned to one", async () => {
-        const checkout = backend.seedProject("Checkout");
-        backend.seedProject("Billing");
-        const launch = backend.seedInitiative({
-            name: "Launch",
-            horizon: "now",
-            project: checkout,
-        });
-        backend.seedMeeting("Weekly sync", launch.id);
-        const user = renderApp();
-
-        await openMeeting(user, /Weekly sync/);
-
-        expect(projectSelect()).toHaveValue(String(checkout.id));
     });
 });
