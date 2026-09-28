@@ -135,16 +135,29 @@ function byLabel(a: { label: string }, b: { label: string }): number {
     return a.label.localeCompare(b.label, undefined, { sensitivity: "base" });
 }
 
+/** Returns the initiatives of the project. When `projectId` is `null`, returns no initiatives. */
+function ofProject(
+    all: InitiativeSummary[],
+    projectId: number | null,
+): InitiativeSummary[] {
+    return projectId === null
+        ? []
+        : all.filter((i) => i.projectId === projectId);
+}
+
 /**
  * Returns the groups of initiative choices for the select box of a meeting, without the empty
- * choice. The groups are "Now", "Next", and "Later", sorted by rank and then by
+ * choice. Only the initiatives of the project `projectId` are included, and no initiatives when
+ * `projectId` is `null`. The groups are "Now", "Next", and "Later", sorted by rank and then by
  * identifier, then "Completed", sorted by the shown name without regard to case. Deleted
  * initiatives are not included. Empty groups are not included.
  */
 export function initiativeChoiceGroups(
     all: InitiativeSummary[],
+    projectId: number | null,
 ): ChoiceGroup[] {
-    const open = all
+    const initiatives = ofProject(all, projectId);
+    const open = initiatives
         .filter((i) => i.deletedAt === null && i.completedAt === null)
         .sort((a, b) => compareRanks(a.rank, b.rank) || a.id - b.id);
     const groups: ChoiceGroup[] = COLUMNS.filter(
@@ -155,7 +168,7 @@ export function initiativeChoiceGroups(
     }));
     groups.push({
         label: "Completed",
-        choices: all
+        choices: initiatives
             .filter((i) => i.deletedAt === null && i.completedAt !== null)
             .map(choice)
             .sort(byLabel),
@@ -164,13 +177,17 @@ export function initiativeChoiceGroups(
 }
 
 /**
- * Returns the choices for the deleted initiatives, also the completed ones. The select box of
- * a meeting shows one of them only while it is the initiative that the meeting is assigned to.
+ * Returns the choices for the deleted initiatives of the project `projectId`, also the
+ * completed ones. Returns no choices when `projectId` is `null`. The select box of a meeting
+ * shows one of them only while it is the initiative that the meeting is assigned to.
  */
 export function deletedInitiativeChoices(
     all: InitiativeSummary[],
+    projectId: number | null,
 ): InitiativeChoice[] {
-    return all.filter((i) => i.deletedAt !== null).map(choice);
+    return ofProject(all, projectId)
+        .filter((i) => i.deletedAt !== null)
+        .map(choice);
 }
 
 /** Returns summaries of initiatives. Deleted initiatives are included only when asked. */

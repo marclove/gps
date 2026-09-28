@@ -68,6 +68,7 @@ describe("App", () => {
                     return meetings.find((m) => m.id === args?.id) ?? null;
                 case "list_meeting_tasks":
                     return [];
+                case "list_projects":
                 case "list_initiatives":
                     return [];
                 case "delete_meeting":
