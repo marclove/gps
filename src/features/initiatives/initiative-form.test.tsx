@@ -879,5 +879,37 @@ describe("InitiativeForm", () => {
                 screen.queryByText("Choose a project to save this initiative."),
             ).not.toBeInTheDocument();
         });
+
+        it("keeps the sheet open on Save and focuses the Projects link when no project exists", async () => {
+            projects = [];
+            const user = userEvent.setup();
+            const { name, onSave } = await renderForm(null);
+            await user.type(name, "Launch");
+
+            await user.click(screen.getByRole("button", { name: "Save" }));
+
+            expect(onSave).not.toHaveBeenCalled();
+            expect(
+                screen.getByRole("link", { name: "Projects" }),
+            ).toHaveFocus();
+        });
+
+        it("keeps the sheet open on Save and focuses Retry when the projects cannot be loaded", async () => {
+            mockBackend(() => Promise.reject(new Error("Unexpected")));
+            const others = invoke.getMockImplementation()!;
+            invoke.mockImplementation((command: string, args) =>
+                command === "list_projects"
+                    ? Promise.reject(new Error("disk full"))
+                    : others(command, args),
+            );
+            const user = userEvent.setup();
+            const { name, onSave } = await renderForm(null);
+            await user.type(name, "Launch");
+
+            await user.click(screen.getByRole("button", { name: "Save" }));
+
+            expect(onSave).not.toHaveBeenCalled();
+            expect(screen.getByRole("button", { name: "Retry" })).toHaveFocus();
+        });
     });
 });

@@ -97,7 +97,7 @@ The rules of Spec 0006 for drafts still apply, with these changes:
   - otherwise, the only project, when exactly one project exists,
   - otherwise, the empty choice.
 - The draft is saved only when it has a project, and also a name, a role, or text in the description. Choosing a project alone does not save the draft.
-- While the draft has a name, a role, or text in the description, but no project, the "Project" select box is marked as invalid, and a message below it, which describes it, says "Choose a project to save this initiative." Clicking "Save" then keeps the sheet open and moves the focus to the "Project" select box. The close button, Escape, and a click outside the sheet still close the sheet, and the draft is not saved. When no project exists, this message is not shown.
+- While the draft has a name, a role, or text in the description, but no project, clicking "Save" keeps the sheet open and moves the focus to the "Project" select box. When no project exists, the focus goes to the "Projects" link instead, and when the projects cannot be loaded, to the "Retry" button. When projects exist, the select box is also marked as invalid, and a message below it, which describes it, says "Choose a project to save this initiative." The close button, Escape, and a click outside the sheet still close the sheet, and the draft is not saved.
 - When no project exists, the select box is disabled, and a text below it says "Create a project first." with a link named "Projects" that opens the Projects page.
 
 ### The roadmap

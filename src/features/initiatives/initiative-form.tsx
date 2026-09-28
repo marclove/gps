@@ -204,7 +204,9 @@ export function InitiativeForm({
     const nameId = useId();
     const roleId = useId();
     const messageId = useId();
-    const draftProjectRef = useRef<HTMLSelectElement>(null);
+    // The control of the Project field that needs the user: the select box, the link to the
+    // Projects page when no project exists, or "Retry" when the projects cannot be loaded.
+    const draftProjectRef = useRef<HTMLElement>(null);
 
     useEffect(() => {
         onSavedRef.current = onSaved;
@@ -338,17 +340,18 @@ export function InitiativeForm({
 
     const completedAt = initiative?.completedAt ?? null;
 
-    // A draft with content but no project cannot be saved, so the form asks for a project.
-    // When no project exists, the "Project" field tells the user to create one instead.
+    // A draft with content but no project cannot be saved, so "Save" does not close the sheet.
+    const unsaveable =
+        id === null && draft.projectId === null && !isEmptyDraft(draft);
+    // The form asks for a project when the user can choose one. When no project exists, the
+    // "Project" field tells the user to create one instead.
     const projectMissing =
-        id === null &&
-        draft.projectId === null &&
-        !isEmptyDraft(draft) &&
+        unsaveable &&
         projectsLoad.kind === "loaded" &&
         projectsLoad.projects.length > 0;
 
     function clickSave() {
-        if (projectMissing) {
+        if (unsaveable) {
             draftProjectRef.current?.focus();
             return;
         }
@@ -442,7 +445,7 @@ export function InitiativeForm({
                 </div>
                 {id === null ? (
                     <ProjectField
-                        selectRef={draftProjectRef}
+                        focusRef={draftProjectRef}
                         load={projectsLoad}
                         onRetry={retryProjects}
                         value={toValue(draft.projectId)}
@@ -511,11 +514,12 @@ export function InitiativeForm({
  * the projects load and when no project exists. When no project exists, a text tells the user
  * to create a project first and links to the Projects page. When the projects cannot be
  * loaded, the field shows a message and a "Retry" button, which calls `onRetry`, in place of
- * the select box. `message` shows below the select box and describes it. `selectRef` receives
- * the select box.
+ * the select box. `message` shows below the select box and describes it. `focusRef` receives
+ * the control that the user must use next: the select box when projects exist, the link to
+ * the Projects page when no project exists, or "Retry" when the projects cannot be loaded.
  */
 function ProjectField({
-    selectRef,
+    focusRef,
     load,
     onRetry,
     value,
@@ -523,7 +527,7 @@ function ProjectField({
     message,
     onChange,
 }: {
-    selectRef?: Ref<HTMLSelectElement>;
+    focusRef?: RefObject<HTMLElement | null>;
     load: ProjectsLoad;
     onRetry: () => void;
     value: string;
@@ -533,13 +537,21 @@ function ProjectField({
 }) {
     const selectId = useId();
     const messageId = useId();
+    const setFocusTarget = (element: HTMLElement | null) => {
+        if (focusRef) focusRef.current = element;
+    };
     if (load.kind === "error") {
         return (
             <div className="flex min-w-0 flex-col items-start gap-1.5">
                 <span className={FIELD_LABEL_CLASSES}>Project</span>
                 <div className="flex items-center gap-2 text-sm">
                     <p>Couldn't load projects</p>
-                    <Button variant="outline" size="sm" onClick={onRetry}>
+                    <Button
+                        ref={setFocusTarget}
+                        variant="outline"
+                        size="sm"
+                        onClick={onRetry}
+                    >
                         Retry
                     </Button>
                 </div>
@@ -547,6 +559,7 @@ function ProjectField({
         );
     }
     const projects = load.kind === "loaded" ? load.projects : null;
+    const noProjects = projects?.length === 0;
     return (
         <div className="flex min-w-0 flex-col items-start gap-1.5">
             <label htmlFor={selectId} className={FIELD_LABEL_CLASSES}>
@@ -555,7 +568,8 @@ function ProjectField({
             <NativeSelect
                 // A long name must not make the select box wider than the sheet.
                 className="min-w-0"
-                ref={selectRef}
+                // A disabled select box cannot take the focus.
+                ref={noProjects ? undefined : setFocusTarget}
                 id={selectId}
                 value={value}
                 disabled={projects === null || projects.length === 0}
@@ -573,10 +587,14 @@ function ProjectField({
                     </NativeSelectOption>
                 ))}
             </NativeSelect>
-            {projects?.length === 0 && (
+            {noProjects && (
                 <p className="text-sm text-muted-foreground">
                     Create a project first.{" "}
-                    <Link to="/projects" className="underline">
+                    <Link
+                        ref={setFocusTarget}
+                        to="/projects"
+                        className="underline"
+                    >
                         Projects
                     </Link>
                 </p>
