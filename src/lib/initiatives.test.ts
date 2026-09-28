@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
-    archiveInitiative,
+    deleteInitiative,
     COLUMNS,
     createInitiative,
     deletedInitiativeChoices,
@@ -11,7 +11,7 @@ import {
     moveInitiative,
     raciRoleLabel,
     renameInitiative,
-    unarchiveInitiative,
+    restoreInitiative,
     updateInitiative,
     type InitiativeSummary,
 } from "./initiatives";
@@ -27,7 +27,7 @@ beforeEach(() => {
 
 describe("initiative commands", () => {
     it("calls the backend commands with their arguments", async () => {
-        await listInitiatives({ includeArchived: true });
+        await listInitiatives({ includeDeleted: true });
         await createInitiative({
             name: " Launch ",
             description: "- Ship it",
@@ -41,11 +41,11 @@ describe("initiative commands", () => {
         });
         await updateInitiative(3, { description: "", raciRole: null });
         await moveInitiative(3, "done", 0);
-        await archiveInitiative(3);
-        await unarchiveInitiative(3);
+        await deleteInitiative(3);
+        await restoreInitiative(3);
 
         expect(invoke.mock.calls).toEqual([
-            ["list_initiatives", { includeArchived: true }],
+            ["list_initiatives", { includeDeleted: true }],
             [
                 "create_initiative",
                 {
@@ -62,8 +62,8 @@ describe("initiative commands", () => {
             ],
             ["update_initiative", { id: 3, description: "", raciRole: null }],
             ["move_initiative", { id: 3, destination: "done", index: 0 }],
-            ["archive_initiative", { id: 3 }],
-            ["unarchive_initiative", { id: 3 }],
+            ["delete_initiative", { id: 3 }],
+            ["restore_initiative", { id: 3 }],
         ]);
     });
 
@@ -74,7 +74,7 @@ describe("initiative commands", () => {
         });
 
         invoke.mockResolvedValueOnce({ status: "restored" });
-        await expect(unarchiveInitiative(3)).resolves.toEqual({
+        await expect(restoreInitiative(3)).resolves.toEqual({
             status: "restored",
         });
     });
@@ -119,7 +119,7 @@ function summary(
         createdAt: "2026-09-01T00:00:00Z",
         updatedAt: "2026-09-01T00:00:00Z",
         completedAt: null,
-        archivedAt: null,
+        deletedAt: null,
         ...fields,
     };
 }
@@ -159,10 +159,10 @@ describe("initiativeChoiceGroups", () => {
                 id: 3,
                 name: "beta",
                 completedAt: COMPLETED,
-                archivedAt: DELETED,
+                deletedAt: DELETED,
             }),
-            summary({ id: 4, name: "Gamma", archivedAt: DELETED }),
-            summary({ id: 5, name: "", archivedAt: DELETED }),
+            summary({ id: 4, name: "Gamma", deletedAt: DELETED }),
+            summary({ id: 5, name: "", deletedAt: DELETED }),
         ]);
 
         expect(groups).toEqual([
@@ -184,9 +184,9 @@ describe("initiativeChoiceGroups", () => {
                 id: 3,
                 name: "beta",
                 completedAt: COMPLETED,
-                archivedAt: DELETED,
+                deletedAt: DELETED,
             }),
-            summary({ id: 5, name: "", archivedAt: DELETED }),
+            summary({ id: 5, name: "", deletedAt: DELETED }),
         ]);
 
         expect(choices).toEqual([

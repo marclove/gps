@@ -62,14 +62,14 @@ export function setMeetingInitiative(
     return invoke<Meeting>("set_meeting_initiative", { id, initiativeId });
 }
 
-/** Archives a meeting, so it no longer appears in the list of meetings. */
-export function archiveMeeting(id: number): Promise<void> {
-    return invoke<void>("archive_meeting", { id });
+/** Deletes a meeting, so it no longer appears in the list of meetings. */
+export function deleteMeeting(id: number): Promise<void> {
+    return invoke<void>("delete_meeting", { id });
 }
 
-/** Restores an archived meeting, so it appears in the list of meetings again. */
-export function unarchiveMeeting(id: number): Promise<void> {
-    return invoke<void>("unarchive_meeting", { id });
+/** Restores a deleted meeting, so it appears in the list of meetings again. */
+export function restoreMeeting(id: number): Promise<void> {
+    return invoke<void>("restore_meeting", { id });
 }
 
 /** Returns the name to show for a meeting. A meeting with an empty name shows the default name. */

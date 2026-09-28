@@ -38,7 +38,7 @@ describe("App", () => {
         ).toHaveTextContent("Meetings");
     });
 
-    it("closes a failure toast of the editor page when an archive on the Meetings page succeeds", async () => {
+    it("closes a failure toast of the editor page when a delete on the Meetings page succeeds", async () => {
         const meetings = [
             {
                 id: 1,
@@ -59,7 +59,7 @@ describe("App", () => {
                 updatedAt: "2026-09-24T10:00:00.000Z",
             },
         ];
-        let failArchive = true;
+        let failDelete = true;
         invoke.mockImplementation(async (command, args) => {
             switch (command) {
                 case "list_meetings":
@@ -70,8 +70,8 @@ describe("App", () => {
                     return [];
                 case "list_initiatives":
                     return [];
-                case "archive_meeting":
-                    if (failArchive) throw "database is locked";
+                case "delete_meeting":
+                    if (failDelete) throw "database is locked";
                     meetings.splice(
                         meetings.findIndex((m) => m.id === args?.id),
                         1,
@@ -91,7 +91,7 @@ describe("App", () => {
         const failure = "Couldn't archive the meeting. Try again.";
         await within(notifications()).findByText(failure);
 
-        failArchive = false;
+        failDelete = false;
         await user.click(
             within(screen.getByRole("navigation", { name: "Main" })).getByRole(
                 "link",

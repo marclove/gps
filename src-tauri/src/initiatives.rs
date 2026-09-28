@@ -51,7 +51,7 @@ pub struct Initiative {
     pub completed_at: Option<String>,
     /// The time when the initiative was deleted, as an RFC 3339 timestamp in UTC, or `None`
     /// if it is not deleted.
-    pub archived_at: Option<String>,
+    pub deleted_at: Option<String>,
 }
 
 /// The part of an initiative that the roadmap shows. It does not include the description.
@@ -81,7 +81,7 @@ pub struct InitiativeSummary {
     pub completed_at: Option<String>,
     /// The time when the initiative was deleted, as an RFC 3339 timestamp in UTC, or `None`
     /// if it is not deleted.
-    pub archived_at: Option<String>,
+    pub deleted_at: Option<String>,
 }
 
 /// The result of a create.
@@ -139,7 +139,7 @@ pub enum Error {
     /// The destination of a move is not one of `HORIZONS` or `DONE`.
     InvalidDestination(String),
     /// The initiative is deleted, so the operation cannot change it.
-    Archived(i64),
+    Deleted(i64),
     /// The name is empty, the description is empty, and there is no role, so the user did not
     /// change the new initiative. Such an initiative is never saved.
     Unchanged,
@@ -159,7 +159,7 @@ impl fmt::Display for Error {
                 f,
                 "invalid destination \"{destination}\": use now, next, later, or done"
             ),
-            Error::Archived(id) => write!(f, "initiative {id} is deleted"),
+            Error::Deleted(id) => write!(f, "initiative {id} is deleted"),
             Error::Unchanged => write!(f, "an initiative needs a name, a description, or a role"),
             Error::Database(error) => write!(f, "database error: {error}"),
         }
@@ -175,24 +175,24 @@ impl From<rusqlite::Error> for Error {
 }
 
 /// The SQL condition for an initiative that is on the board.
-const ON_BOARD: &str = "completed_at IS NULL AND archived_at IS NULL";
+const ON_BOARD: &str = "completed_at IS NULL AND deleted_at IS NULL";
 
-/// Returns summaries of the initiatives. When `include_archived` is false, leaves out the
+/// Returns summaries of the initiatives. When `include_deleted` is false, leaves out the
 /// deleted initiatives. The order is by column and position, but callers must not depend on
 /// it.
 pub fn list(
     connection: &Connection,
-    include_archived: bool,
+    include_deleted: bool,
 ) -> Result<Vec<InitiativeSummary>, Error> {
     let mut statement = connection.prepare(
         "SELECT id, name, raci_role, horizon, position, created_at, updated_at, completed_at,
-                archived_at
+                deleted_at
          FROM initiatives
-         WHERE ?1 OR archived_at IS NULL
+         WHERE ?1 OR deleted_at IS NULL
          ORDER BY horizon, position, id",
     )?;
     let summaries = statement
-        .query_map(params![include_archived], |row| {
+        .query_map(params![include_deleted], |row| {
             Ok(InitiativeSummary {
                 id: row.get(0)?,
                 name: row.get(1)?,
@@ -202,7 +202,7 @@ pub fn list(
                 created_at: row.get(5)?,
                 updated_at: row.get(6)?,
                 completed_at: row.get(7)?,
-                archived_at: row.get(8)?,
+                deleted_at: row.get(8)?,
             })
         })?
         .collect::<Result<Vec<_>, _>>()?;
@@ -252,7 +252,7 @@ pub fn get(connection: &Connection, id: i64) -> Result<Option<Initiative>, Error
     let initiative = connection
         .query_row(
             "SELECT id, name, description, raci_role, horizon, position, created_at, updated_at,
-                    completed_at, archived_at
+                    completed_at, deleted_at
              FROM initiatives WHERE id = ?1",
             params![id],
             initiative_from_row,
@@ -325,8 +325,8 @@ pub fn move_to(
         return Err(Error::InvalidDestination(destination.to_owned()));
     }
     let initiative = get(connection, id)?.ok_or(Error::NotFound(id))?;
-    if initiative.archived_at.is_some() {
-        return Err(Error::Archived(id));
+    if initiative.deleted_at.is_some() {
+        return Err(Error::Deleted(id));
     }
     let transaction = connection.unchecked_transaction()?;
     if initiative.completed_at.is_none() {
@@ -347,14 +347,14 @@ pub fn move_to(
     Ok(())
 }
 
-/// Removes an initiative from the roadmap without deleting its data. Records the current time
-/// as the time the initiative was deleted. The initiatives after it in its column move up by
+/// Marks an initiative as deleted and removes it from the roadmap. The row stays in the
+/// database. Records the current time as the time the initiative was deleted. The initiatives after it in its column move up by
 /// one. Deleting an initiative that is already deleted keeps the time that was recorded first
 /// and changes nothing else. Does not change `updated_at` or the meetings that are assigned to
 /// the initiative.
-pub fn archive(connection: &Connection, id: i64) -> Result<(), Error> {
+pub fn delete(connection: &Connection, id: i64) -> Result<(), Error> {
     let initiative = get(connection, id)?.ok_or(Error::NotFound(id))?;
-    if initiative.archived_at.is_some() {
+    if initiative.deleted_at.is_some() {
         return Ok(());
     }
     let transaction = connection.unchecked_transaction()?;
@@ -362,7 +362,7 @@ pub fn archive(connection: &Connection, id: i64) -> Result<(), Error> {
         close_gap(&transaction, &initiative.horizon, initiative.position)?;
     }
     transaction.execute(
-        &format!("UPDATE initiatives SET archived_at = {NOW} WHERE id = ?1"),
+        &format!("UPDATE initiatives SET deleted_at = {NOW} WHERE id = ?1"),
         params![id],
     )?;
     transaction.commit()?;
@@ -374,9 +374,9 @@ pub fn archive(connection: &Connection, id: i64) -> Result<(), Error> {
 /// initiative goes back to the completed initiatives. If another initiative that is not
 /// deleted has the same name, returns `RestoreOutcome::NameTaken` and changes nothing.
 /// Restoring an initiative that is not deleted changes nothing.
-pub fn unarchive(connection: &Connection, id: i64) -> Result<RestoreOutcome, Error> {
+pub fn restore(connection: &Connection, id: i64) -> Result<RestoreOutcome, Error> {
     let initiative = get(connection, id)?.ok_or(Error::NotFound(id))?;
-    if initiative.archived_at.is_none() {
+    if initiative.deleted_at.is_none() {
         return Ok(RestoreOutcome::Restored);
     }
     if name_is_taken(connection, Some(id), &initiative.name)? {
@@ -384,7 +384,7 @@ pub fn unarchive(connection: &Connection, id: i64) -> Result<RestoreOutcome, Err
     }
     let transaction = connection.unchecked_transaction()?;
     transaction.execute(
-        "UPDATE initiatives SET archived_at = NULL WHERE id = ?1",
+        "UPDATE initiatives SET deleted_at = NULL WHERE id = ?1",
         params![id],
     )?;
     if initiative.completed_at.is_none() {
@@ -412,7 +412,7 @@ fn name_is_taken(connection: &Connection, except: Option<i64>, name: &str) -> Re
     let taken = connection.query_row(
         "SELECT EXISTS(
              SELECT 1 FROM initiatives
-             WHERE id IS NOT ?1 AND archived_at IS NULL AND name = ?2 COLLATE NOCASE
+             WHERE id IS NOT ?1 AND deleted_at IS NULL AND name = ?2 COLLATE NOCASE
          )",
         params![except, name],
         |row| row.get(0),
@@ -475,7 +475,7 @@ fn initiative_from_row(row: &Row<'_>) -> rusqlite::Result<Initiative> {
         created_at: row.get(6)?,
         updated_at: row.get(7)?,
         completed_at: row.get(8)?,
-        archived_at: row.get(9)?,
+        deleted_at: row.get(9)?,
     })
 }
 
@@ -492,7 +492,7 @@ mod tests {
         let mut statement = connection
             .prepare(
                 "SELECT name, position FROM initiatives
-                 WHERE horizon = ?1 AND completed_at IS NULL AND archived_at IS NULL
+                 WHERE horizon = ?1 AND completed_at IS NULL AND deleted_at IS NULL
                  ORDER BY position, id",
             )
             .unwrap();
@@ -586,7 +586,7 @@ mod tests {
         assert_eq!(second.horizon, "later");
         assert_eq!(second.position, 0);
         assert_eq!(second.completed_at, None);
-        assert_eq!(second.archived_at, None);
+        assert_eq!(second.deleted_at, None);
         assert_eq!(second.created_at, second.updated_at);
         assert!(second.created_at.ends_with('Z'));
         assert_eq!(fetch(&connection, second.id), second);
@@ -650,7 +650,7 @@ mod tests {
     fn create_accepts_the_name_of_a_deleted_initiative() {
         let connection = open_in_memory();
         let old = add(&connection, "Launch", "now");
-        archive(&connection, old).unwrap();
+        delete(&connection, old).unwrap();
 
         assert_eq!(created(&connection, "launch", "", None).name, "launch");
     }
@@ -776,7 +776,7 @@ mod tests {
         let a = add(&connection, "A", "now");
         let b = add(&connection, "B", "now");
 
-        for destination in ["Now", "later ", "archived", ""] {
+        for destination in ["Now", "later ", "deleted", ""] {
             assert!(
                 matches!(
                     move_to(&connection, a, destination, 0),
@@ -786,14 +786,14 @@ mod tests {
             );
         }
 
-        archive(&connection, b).unwrap();
+        delete(&connection, b).unwrap();
         assert!(matches!(
             move_to(&connection, b, "next", 0),
-            Err(Error::Archived(id)) if id == b
+            Err(Error::Deleted(id)) if id == b
         ));
         assert!(matches!(
             move_to(&connection, b, "done", 0),
-            Err(Error::Archived(id)) if id == b
+            Err(Error::Deleted(id)) if id == b
         ));
         let stored = fetch(&connection, b);
         assert_eq!(stored.horizon, "now");
@@ -804,51 +804,51 @@ mod tests {
     }
 
     #[test]
-    fn archive_closes_the_gap_and_unarchive_puts_it_back() {
+    fn delete_closes_the_gap_and_restore_puts_it_back() {
         let connection = open_in_memory();
         add(&connection, "A", "next");
         let b = add(&connection, "B", "next");
         add(&connection, "C", "next");
         set_updated_at(&connection, b, OLD_TIME);
 
-        archive(&connection, b).unwrap();
-        let archived = fetch(&connection, b);
-        assert!(archived.archived_at.is_some());
-        assert_eq!(archived.updated_at, OLD_TIME);
+        delete(&connection, b).unwrap();
+        let deleted = fetch(&connection, b);
+        assert!(deleted.deleted_at.is_some());
+        assert_eq!(deleted.updated_at, OLD_TIME);
         assert_eq!(names(&connection, "next"), ["A", "C"]);
         assert_dense(&connection);
 
         assert!(matches!(
-            unarchive(&connection, b).unwrap(),
+            restore(&connection, b).unwrap(),
             RestoreOutcome::Restored
         ));
         let restored = fetch(&connection, b);
-        assert_eq!(restored.archived_at, None);
+        assert_eq!(restored.deleted_at, None);
         assert_eq!(restored.updated_at, OLD_TIME);
         assert_eq!(names(&connection, "next"), ["A", "B", "C"]);
         assert_dense(&connection);
     }
 
     #[test]
-    fn unarchive_into_a_shorter_column_puts_it_last() {
+    fn restore_into_a_shorter_column_puts_it_last() {
         let connection = open_in_memory();
         let a = add(&connection, "A", "now");
         let b = add(&connection, "B", "now");
         let c = add(&connection, "C", "now");
 
-        archive(&connection, c).unwrap();
+        delete(&connection, c).unwrap();
         move_to(&connection, a, "next", 0).unwrap();
         move_to(&connection, b, "done", 0).unwrap();
         add(&connection, "D", "now");
 
-        unarchive(&connection, c).unwrap();
+        restore(&connection, c).unwrap();
 
         assert_eq!(names(&connection, "now"), ["D", "C"]);
         assert_dense(&connection);
     }
 
     #[test]
-    fn archive_of_a_completed_initiative_changes_no_column() {
+    fn delete_of_a_completed_initiative_changes_no_column() {
         let connection = open_in_memory();
         add(&connection, "A", "now");
         let b = add(&connection, "B", "now");
@@ -856,17 +856,17 @@ mod tests {
         move_to(&connection, b, "done", 0).unwrap();
         let before = fetch(&connection, b);
 
-        archive(&connection, b).unwrap();
+        delete(&connection, b).unwrap();
         assert_eq!(names(&connection, "now"), ["A", "C"]);
         assert_dense(&connection);
 
         assert!(matches!(
-            unarchive(&connection, b).unwrap(),
+            restore(&connection, b).unwrap(),
             RestoreOutcome::Restored
         ));
         let restored = fetch(&connection, b);
         assert_eq!(restored.completed_at, before.completed_at);
-        assert_eq!(restored.archived_at, None);
+        assert_eq!(restored.deleted_at, None);
         assert_eq!(names(&connection, "now"), ["A", "C"]);
         assert_dense(&connection);
     }
@@ -920,7 +920,7 @@ mod tests {
     fn names_of_deleted_initiatives_can_be_used_again() {
         let connection = open_in_memory();
         let old = add(&connection, "Launch", "now");
-        archive(&connection, old).unwrap();
+        delete(&connection, old).unwrap();
         let new = add(&connection, "Other", "now");
 
         assert!(matches!(
@@ -958,17 +958,17 @@ mod tests {
     }
 
     #[test]
-    fn unarchive_returns_name_taken_when_the_name_is_used() {
+    fn restore_returns_name_taken_when_the_name_is_used() {
         let connection = open_in_memory();
         add(&connection, "A", "now");
         let old = add(&connection, "Launch", "now");
-        archive(&connection, old).unwrap();
+        delete(&connection, old).unwrap();
         add(&connection, "LAUNCH", "now");
         let before = fetch(&connection, old);
         let now_before = column(&connection, "now");
 
         assert!(matches!(
-            unarchive(&connection, old).unwrap(),
+            restore(&connection, old).unwrap(),
             RestoreOutcome::NameTaken
         ));
 
@@ -983,7 +983,7 @@ mod tests {
         add(&connection, "Launch", "now");
         let other = add(&connection, "Other", "now");
         let deleted = add(&connection, "Deleted", "now");
-        archive(&connection, deleted).unwrap();
+        delete(&connection, deleted).unwrap();
 
         let result = connection.execute(
             "UPDATE initiatives SET name = 'launch' WHERE id = ?1",
@@ -998,7 +998,7 @@ mod tests {
             )
             .unwrap();
         let result = connection.execute(
-            "UPDATE initiatives SET archived_at = NULL WHERE id = ?1",
+            "UPDATE initiatives SET deleted_at = NULL WHERE id = ?1",
             params![deleted],
         );
         assert!(result.is_err());
@@ -1068,7 +1068,7 @@ mod tests {
         let done = add(&connection, "Done", "now");
         move_to(&connection, done, "done", 0).unwrap();
         let deleted = add(&connection, "Deleted", "next");
-        archive(&connection, deleted).unwrap();
+        delete(&connection, deleted).unwrap();
 
         let mut visible: Vec<i64> = list(&connection, false)
             .unwrap()
@@ -1085,7 +1085,7 @@ mod tests {
         assert_eq!(summary.name, stored.name);
         assert_eq!(summary.horizon, stored.horizon);
         assert_eq!(summary.position, stored.position);
-        assert_eq!(summary.archived_at, stored.archived_at);
+        assert_eq!(summary.deleted_at, stored.deleted_at);
         assert_eq!(summary.completed_at, None);
     }
 
@@ -1106,11 +1106,11 @@ mod tests {
             Err(Error::NotFound(999))
         ));
         assert!(matches!(
-            archive(&connection, 999),
+            delete(&connection, 999),
             Err(Error::NotFound(999))
         ));
         assert!(matches!(
-            unarchive(&connection, 999),
+            restore(&connection, 999),
             Err(Error::NotFound(999))
         ));
     }
@@ -1126,6 +1126,6 @@ mod tests {
             Error::InvalidDestination("up".to_owned()).to_string(),
             "invalid destination \"up\": use now, next, later, or done"
         );
-        assert_eq!(Error::Archived(7).to_string(), "initiative 7 is deleted");
+        assert_eq!(Error::Deleted(7).to_string(), "initiative 7 is deleted");
     }
 }

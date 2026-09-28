@@ -7,23 +7,23 @@ import { FailureToastProvider } from "@/components/failure-toast-provider";
 import { Toaster } from "@/components/toaster";
 import { toast } from "@/components/ui/toast";
 import { formatMeetingDate } from "@/lib/dates";
-import { ArchiveProvider } from "@/components/archive-provider";
+import { DeleteProvider } from "@/components/delete-provider";
 import { MeetingsPage } from "./meetings-page";
-import { useArchive, type ArchiveApi } from "@/components/use-archive";
+import { useDelete, type DeleteApi } from "@/components/use-delete";
 
 const invoke = vi.hoisted(() => vi.fn());
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke }));
 
-/** Calls `onReady` with the archive action, so a test can archive a meeting without a
+/** Calls `onReady` with the delete action, so a test can delete a meeting without a
  *  rendered row, for example while the Meetings page's own list is still loading. */
-function ArchiveHarness({
+function DeleteHarness({
     onReady,
 }: {
-    onReady: (archive: ArchiveApi["archive"]) => void;
+    onReady: (deleteItem: DeleteApi["deleteItem"]) => void;
 }) {
-    const { archive } = useArchive();
-    onReady(archive);
+    const { deleteItem } = useDelete();
+    onReady(deleteItem);
     return null;
 }
 
@@ -32,10 +32,10 @@ function renderPage(extra?: ReactNode) {
         <MemoryRouter>
             <Toaster toastManager={toast}>
                 <FailureToastProvider>
-                    <ArchiveProvider>
+                    <DeleteProvider>
                         {extra}
                         <MeetingsPage />
-                    </ArchiveProvider>
+                    </DeleteProvider>
                 </FailureToastProvider>
             </Toaster>
         </MemoryRouter>,
@@ -155,7 +155,7 @@ describe("MeetingsPage", () => {
         ).toHaveLength(1);
     });
 
-    it("closes the failure toast after a failed archive when the next archive succeeds", async () => {
+    it("closes the failure toast after a failed delete when the next delete succeeds", async () => {
         invoke.mockImplementation((command: string) => {
             if (command === "list_meetings") {
                 return Promise.resolve([
@@ -163,18 +163,18 @@ describe("MeetingsPage", () => {
                     summary(1, "Kickoff", "2026-09-18"),
                 ]);
             }
-            if (command === "archive_meeting") {
+            if (command === "delete_meeting") {
                 return Promise.reject("database is locked");
             }
             return Promise.resolve(null);
         });
         const user = userEvent.setup();
         renderPage();
-        const archiveButton = await screen.findByRole("button", {
+        const deleteButton = await screen.findByRole("button", {
             name: 'Archive "Weekly sync"',
         });
 
-        await user.click(archiveButton);
+        await user.click(deleteButton);
 
         expect(
             await within(notifications()).findByText(
@@ -189,7 +189,7 @@ describe("MeetingsPage", () => {
                     summary(1, "Kickoff", "2026-09-18"),
                 ]);
             }
-            if (command === "archive_meeting") {
+            if (command === "delete_meeting") {
                 return Promise.resolve(null);
             }
             return Promise.resolve(null);
@@ -209,19 +209,19 @@ describe("MeetingsPage", () => {
         );
     });
 
-    it("archives once when a row's Archive button is clicked twice quickly", async () => {
-        let resolveArchive: (() => void) | undefined;
-        let archived = false;
+    it("deletes once when a row's Archive button is clicked twice quickly", async () => {
+        let resolveDelete: (() => void) | undefined;
+        let deleted = false;
         invoke.mockImplementation((command: string) => {
             if (command === "list_meetings") {
                 return Promise.resolve(
-                    archived ? [] : [summary(1, "Kickoff", "2026-09-18")],
+                    deleted ? [] : [summary(1, "Kickoff", "2026-09-18")],
                 );
             }
-            if (command === "archive_meeting") {
+            if (command === "delete_meeting") {
                 return new Promise<void>((resolve) => {
-                    resolveArchive = () => {
-                        archived = true;
+                    resolveDelete = () => {
+                        deleted = true;
                         resolve();
                     };
                 });
@@ -230,21 +230,21 @@ describe("MeetingsPage", () => {
         });
         const user = userEvent.setup();
         renderPage();
-        const archiveButton = await screen.findByRole("button", {
+        const deleteButton = await screen.findByRole("button", {
             name: 'Archive "Kickoff"',
         });
 
-        await user.click(archiveButton);
-        await user.click(archiveButton);
+        await user.click(deleteButton);
+        await user.click(deleteButton);
 
         expect(
             invoke.mock.calls.filter(
-                ([command]) => command === "archive_meeting",
+                ([command]) => command === "delete_meeting",
             ),
         ).toHaveLength(1);
 
         await act(async () => {
-            resolveArchive?.();
+            resolveDelete?.();
             await Promise.resolve();
         });
 
@@ -253,12 +253,12 @@ describe("MeetingsPage", () => {
         );
     });
 
-    it("moves focus to the meeting that outlives two archives started at once", async () => {
-        // Archiving A and B while both are still in flight, with B finishing first,
+    it("moves focus to the meeting that outlives two deletes started at once", async () => {
+        // Deleting A and B while both are still in flight, with B finishing first,
         // must still end with focus on C: the meeting that was after both of them.
-        let resolveArchiveA: (() => void) | undefined;
-        let resolveArchiveB: (() => void) | undefined;
-        const archivedIds = new Set<number>();
+        let resolveDeleteA: (() => void) | undefined;
+        let resolveDeleteB: (() => void) | undefined;
+        const deletedIds = new Set<number>();
         invoke.mockImplementation(
             (command: string, args?: Record<string, unknown>) => {
                 if (command === "list_meetings") {
@@ -267,18 +267,18 @@ describe("MeetingsPage", () => {
                             summary(1, "A", "2026-09-18"),
                             summary(2, "B", "2026-09-22"),
                             summary(3, "C", "2026-09-24"),
-                        ].filter((meeting) => !archivedIds.has(meeting.id)),
+                        ].filter((meeting) => !deletedIds.has(meeting.id)),
                     );
                 }
-                if (command === "archive_meeting") {
+                if (command === "delete_meeting") {
                     const id = (args as { id: number }).id;
                     return new Promise<void>((resolve) => {
                         const resolveAndMark = () => {
-                            archivedIds.add(id);
+                            deletedIds.add(id);
                             resolve();
                         };
-                        if (id === 1) resolveArchiveA = resolveAndMark;
-                        if (id === 2) resolveArchiveB = resolveAndMark;
+                        if (id === 1) resolveDeleteA = resolveAndMark;
+                        if (id === 2) resolveDeleteB = resolveAndMark;
                     });
                 }
                 return Promise.resolve(null);
@@ -293,7 +293,7 @@ describe("MeetingsPage", () => {
         await user.click(screen.getByRole("button", { name: 'Archive "B"' }));
 
         await act(async () => {
-            resolveArchiveB?.();
+            resolveDeleteB?.();
             await Promise.resolve();
         });
         await waitFor(() =>
@@ -301,13 +301,13 @@ describe("MeetingsPage", () => {
                 screen.queryByRole("button", { name: 'Archive "B"' }),
             ).toBeNull(),
         );
-        // Moves focus away from where B's own archive left it, so the final check
-        // below only passes if resolving A's archive moves focus itself, rather than
+        // Moves focus away from where B's own delete left it, so the final check
+        // below only passes if resolving A's delete moves focus itself, rather than
         // by coincidence leaving B's now-stale target in place.
         screen.getByRole("button", { name: "New note" }).focus();
 
         await act(async () => {
-            resolveArchiveA?.();
+            resolveDeleteA?.();
             await Promise.resolve();
         });
 
@@ -318,7 +318,7 @@ describe("MeetingsPage", () => {
         );
     });
 
-    it("moves focus to the archive button of the next meeting after an archive", async () => {
+    it("moves focus to the delete button of the next meeting after a delete", async () => {
         invoke.mockImplementation((command: string) => {
             if (command === "list_meetings") {
                 return Promise.resolve([
@@ -327,7 +327,7 @@ describe("MeetingsPage", () => {
                     summary(1, "Kickoff", "2026-09-18"),
                 ]);
             }
-            if (command === "archive_meeting") return Promise.resolve(null);
+            if (command === "delete_meeting") return Promise.resolve(null);
             return Promise.resolve(null);
         });
         const user = userEvent.setup();
@@ -346,7 +346,7 @@ describe("MeetingsPage", () => {
         );
     });
 
-    it("moves focus to the meeting before it when the last meeting is archived", async () => {
+    it("moves focus to the meeting before it when the last meeting is deleted", async () => {
         invoke.mockImplementation((command: string) => {
             if (command === "list_meetings") {
                 return Promise.resolve([
@@ -355,7 +355,7 @@ describe("MeetingsPage", () => {
                     summary(1, "Kickoff", "2026-09-18"),
                 ]);
             }
-            if (command === "archive_meeting") return Promise.resolve(null);
+            if (command === "delete_meeting") return Promise.resolve(null);
             return Promise.resolve(null);
         });
         const user = userEvent.setup();
@@ -381,7 +381,7 @@ describe("MeetingsPage", () => {
                     summary(1, "Weekly sync", "2026-09-24"),
                 ]);
             }
-            if (command === "archive_meeting") return Promise.resolve(null);
+            if (command === "delete_meeting") return Promise.resolve(null);
             return Promise.resolve(null);
         });
         const user = userEvent.setup();
@@ -405,8 +405,8 @@ describe("MeetingsPage", () => {
             if (command === "list_meetings") {
                 return Promise.resolve([summary(1, "Kickoff", "2026-09-18")]);
             }
-            if (command === "archive_meeting") return Promise.resolve(null);
-            if (command === "unarchive_meeting") return Promise.resolve(null);
+            if (command === "delete_meeting") return Promise.resolve(null);
+            if (command === "restore_meeting") return Promise.resolve(null);
             return Promise.resolve(null);
         });
         const user = userEvent.setup();
@@ -424,7 +424,7 @@ describe("MeetingsPage", () => {
         ).toHaveFocus();
     });
 
-    it("ignores a list response that was in flight when a meeting was archived", async () => {
+    it("ignores a list response that was in flight when a meeting was deleted", async () => {
         let resolveFirstList: ((meetings: unknown[]) => void) | undefined;
         let listCalls = 0;
         invoke.mockImplementation((command: string) => {
@@ -437,22 +437,20 @@ describe("MeetingsPage", () => {
                 }
                 return Promise.resolve([]);
             }
-            if (command === "archive_meeting") return Promise.resolve(null);
+            if (command === "delete_meeting") return Promise.resolve(null);
             return Promise.resolve(null);
         });
-        let archiveFn: ArchiveApi["archive"] | undefined;
+        let deleteFn: DeleteApi["deleteItem"] | undefined;
         renderPage(
-            <ArchiveHarness
-                onReady={(archive) => {
-                    archiveFn = archive;
+            <DeleteHarness
+                onReady={(deleteItem) => {
+                    deleteFn = deleteItem;
                 }}
             />,
         );
         expect(screen.getByText("Loading…")).toBeInTheDocument();
 
-        await act(() =>
-            archiveFn!({ kind: "meeting", id: 1, name: "Kickoff" }),
-        );
+        await act(() => deleteFn!({ kind: "meeting", id: 1, name: "Kickoff" }));
         resolveFirstList?.([summary(1, "Kickoff", "2026-09-18")]);
 
         await waitFor(() =>

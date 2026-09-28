@@ -295,12 +295,12 @@ mod tests {
     }
 
     #[test]
-    fn archiving_a_meeting_keeps_its_tasks() {
+    fn deleting_a_meeting_keeps_its_tasks() {
         let connection = open_in_memory();
         let meeting = meetings::create(&connection, "2026-09-24").unwrap();
         let task = create(&connection, meeting.id, "Send the deck").unwrap();
 
-        meetings::archive(&connection, meeting.id).unwrap();
+        meetings::delete(&connection, meeting.id).unwrap();
 
         assert_eq!(
             list_for_meeting(&connection, meeting.id).unwrap(),

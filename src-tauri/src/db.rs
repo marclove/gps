@@ -49,6 +49,10 @@ const MIGRATIONS: &[M<'static>] = &[
     ALTER TABLE meetings ADD COLUMN initiative_id INTEGER REFERENCES initiatives(id);
     CREATE INDEX meetings_initiative_id ON meetings(initiative_id);",
     ),
+    M::up(
+        "ALTER TABLE meetings RENAME COLUMN archived_at TO deleted_at;
+    ALTER TABLE initiatives RENAME COLUMN archived_at TO deleted_at;",
+    ),
 ];
 
 /// Opens the database file at `path`, and creates it if it does not exist.
@@ -166,5 +170,31 @@ mod tests {
         let tasks = crate::tasks::list_for_meeting(&connection, 1).unwrap();
         assert_eq!(tasks.len(), 1);
         assert_eq!(tasks[0].description, "Send the deck");
+    }
+
+    /// Checks that the meetings and initiatives tables use `deleted_at` and not `archived_at`,
+    /// and that the unique index of initiative names ignores deleted rows.
+    #[test]
+    fn deleted_at_replaces_archived_at() {
+        let connection = open_in_memory();
+        for table in ["meetings", "initiatives"] {
+            let columns: Vec<String> = connection
+                .prepare(&format!("SELECT name FROM pragma_table_info('{table}')"))
+                .unwrap()
+                .query_map([], |row| row.get(0))
+                .unwrap()
+                .collect::<Result<_, _>>()
+                .unwrap();
+            assert!(columns.contains(&"deleted_at".to_owned()), "{table}");
+            assert!(!columns.contains(&"archived_at".to_owned()), "{table}");
+        }
+        let index: String = connection
+            .query_row(
+                "SELECT sql FROM sqlite_master WHERE name = 'initiatives_name'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(index.contains("deleted_at IS NULL"));
     }
 }

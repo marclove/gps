@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
-    archiveMeeting,
+    deleteMeeting,
     createMeeting,
     displayName,
     getMeeting,
     listMeetings,
     setMeetingInitiative,
-    unarchiveMeeting,
+    restoreMeeting,
     updateMeeting,
 } from "./meetings";
 
@@ -29,8 +29,8 @@ describe("meeting commands", () => {
             date: "2026-09-25",
             notes: "- [ ] Send notes",
         });
-        await archiveMeeting(3);
-        await unarchiveMeeting(3);
+        await deleteMeeting(3);
+        await restoreMeeting(3);
         await setMeetingInitiative(3, 7);
         await setMeetingInitiative(3, null);
 
@@ -47,8 +47,8 @@ describe("meeting commands", () => {
                     notes: "- [ ] Send notes",
                 },
             ],
-            ["archive_meeting", { id: 3 }],
-            ["unarchive_meeting", { id: 3 }],
+            ["delete_meeting", { id: 3 }],
+            ["restore_meeting", { id: 3 }],
             ["set_meeting_initiative", { id: 3, initiativeId: 7 }],
             ["set_meeting_initiative", { id: 3, initiativeId: null }],
         ]);

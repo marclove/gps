@@ -23,7 +23,7 @@ function summary(
         createdAt: "2026-09-01T00:00:00Z",
         updatedAt: "2026-09-01T00:00:00Z",
         completedAt: null,
-        archivedAt: null,
+        deletedAt: null,
         ...fields,
     };
 }

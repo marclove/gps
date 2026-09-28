@@ -2,7 +2,7 @@ import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MemoryRouter } from "react-router";
-import { ArchiveProvider } from "@/components/archive-provider";
+import { DeleteProvider } from "@/components/delete-provider";
 import { FailureToastProvider } from "@/components/failure-toast-provider";
 import { Toaster } from "@/components/toaster";
 import { toast } from "@/components/ui/toast";
@@ -78,9 +78,9 @@ function renderPage() {
         <MemoryRouter>
             <Toaster toastManager={toast}>
                 <FailureToastProvider>
-                    <ArchiveProvider>
+                    <DeleteProvider>
                         <InitiativesPage />
-                    </ArchiveProvider>
+                    </DeleteProvider>
                 </FailureToastProvider>
             </Toaster>
         </MemoryRouter>,

@@ -82,8 +82,8 @@ fn update_meeting(
     clippy::needless_pass_by_value,
     reason = "Tauri gives managed state to commands by value"
 )]
-fn archive_meeting(database: State<'_, Database>, id: i64) -> Result<(), String> {
-    database.run(|connection| meetings::archive(connection, id))
+fn delete_meeting(database: State<'_, Database>, id: i64) -> Result<(), String> {
+    database.run(|connection| meetings::delete(connection, id))
 }
 
 #[tauri::command]
@@ -91,8 +91,8 @@ fn archive_meeting(database: State<'_, Database>, id: i64) -> Result<(), String>
     clippy::needless_pass_by_value,
     reason = "Tauri gives managed state to commands by value"
 )]
-fn unarchive_meeting(database: State<'_, Database>, id: i64) -> Result<(), String> {
-    database.run(|connection| meetings::unarchive(connection, id))
+fn restore_meeting(database: State<'_, Database>, id: i64) -> Result<(), String> {
+    database.run(|connection| meetings::restore(connection, id))
 }
 
 #[tauri::command]
@@ -115,9 +115,9 @@ fn set_meeting_initiative(
 )]
 fn list_initiatives(
     database: State<'_, Database>,
-    include_archived: bool,
+    include_deleted: bool,
 ) -> Result<Vec<InitiativeSummary>, String> {
-    database.run(|connection| initiatives::list(connection, include_archived))
+    database.run(|connection| initiatives::list(connection, include_deleted))
 }
 
 #[tauri::command]
@@ -191,8 +191,8 @@ fn move_initiative(
     clippy::needless_pass_by_value,
     reason = "Tauri gives managed state to commands by value"
 )]
-fn archive_initiative(database: State<'_, Database>, id: i64) -> Result<(), String> {
-    database.run(|connection| initiatives::archive(connection, id))
+fn delete_initiative(database: State<'_, Database>, id: i64) -> Result<(), String> {
+    database.run(|connection| initiatives::delete(connection, id))
 }
 
 #[tauri::command]
@@ -200,8 +200,8 @@ fn archive_initiative(database: State<'_, Database>, id: i64) -> Result<(), Stri
     clippy::needless_pass_by_value,
     reason = "Tauri gives managed state to commands by value"
 )]
-fn unarchive_initiative(database: State<'_, Database>, id: i64) -> Result<RestoreOutcome, String> {
-    database.run(|connection| initiatives::unarchive(connection, id))
+fn restore_initiative(database: State<'_, Database>, id: i64) -> Result<RestoreOutcome, String> {
+    database.run(|connection| initiatives::restore(connection, id))
 }
 
 #[tauri::command]
@@ -277,8 +277,8 @@ pub fn run() {
             create_meeting,
             get_meeting,
             update_meeting,
-            archive_meeting,
-            unarchive_meeting,
+            delete_meeting,
+            restore_meeting,
             set_meeting_initiative,
             list_initiatives,
             create_initiative,
@@ -286,8 +286,8 @@ pub fn run() {
             rename_initiative,
             update_initiative,
             move_initiative,
-            archive_initiative,
-            unarchive_initiative,
+            delete_initiative,
+            restore_initiative,
             list_meeting_tasks,
             create_task,
             update_task_description,

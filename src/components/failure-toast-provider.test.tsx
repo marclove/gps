@@ -111,7 +111,7 @@ describe("FailureToastProvider", () => {
         );
     });
 
-    it("keeps an archive toast open when a failure toast opens", async () => {
+    it("keeps a delete toast open when a failure toast opens", async () => {
         const api = renderHarness();
 
         act(() => {

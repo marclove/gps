@@ -39,7 +39,7 @@ export type Initiative = {
     /** The time when the initiative was completed, as an RFC 3339 timestamp in UTC, or `null` if it is not completed. */
     completedAt: string | null;
     /** The time when the initiative was deleted, as an RFC 3339 timestamp in UTC, or `null` if it is not deleted. */
-    archivedAt: string | null;
+    deletedAt: string | null;
 };
 
 /** The part of an initiative that the roadmap shows. */
@@ -120,7 +120,7 @@ export function initiativeChoiceGroups(
     all: InitiativeSummary[],
 ): ChoiceGroup[] {
     const open = all
-        .filter((i) => i.archivedAt === null && i.completedAt === null)
+        .filter((i) => i.deletedAt === null && i.completedAt === null)
         .sort((a, b) => a.position - b.position || a.id - b.id);
     const groups: ChoiceGroup[] = COLUMNS.filter(
         (column) => column.id !== "done",
@@ -131,7 +131,7 @@ export function initiativeChoiceGroups(
     groups.push({
         label: "Completed",
         choices: all
-            .filter((i) => i.archivedAt === null && i.completedAt !== null)
+            .filter((i) => i.deletedAt === null && i.completedAt !== null)
             .map(choice)
             .sort(byLabel),
     });
@@ -145,15 +145,15 @@ export function initiativeChoiceGroups(
 export function deletedInitiativeChoices(
     all: InitiativeSummary[],
 ): InitiativeChoice[] {
-    return all.filter((i) => i.archivedAt !== null).map(choice);
+    return all.filter((i) => i.deletedAt !== null).map(choice);
 }
 
 /** Returns summaries of initiatives. Deleted initiatives are included only when asked. */
 export function listInitiatives(options: {
-    includeArchived: boolean;
+    includeDeleted: boolean;
 }): Promise<InitiativeSummary[]> {
     return invoke<InitiativeSummary[]>("list_initiatives", {
-        includeArchived: options.includeArchived,
+        includeDeleted: options.includeDeleted,
     });
 }
 
@@ -209,14 +209,14 @@ export function moveInitiative(
 }
 
 /** Deletes an initiative, so it no longer appears on the roadmap. The user can restore it. */
-export function archiveInitiative(id: number): Promise<void> {
-    return invoke<void>("archive_initiative", { id });
+export function deleteInitiative(id: number): Promise<void> {
+    return invoke<void>("delete_initiative", { id });
 }
 
 /**
  * Restores a deleted initiative, so it appears on the roadmap again. The result is
  * "nameTaken" if another initiative that is not deleted has the same name.
  */
-export function unarchiveInitiative(id: number): Promise<RestoreResult> {
-    return invoke<RestoreResult>("unarchive_initiative", { id });
+export function restoreInitiative(id: number): Promise<RestoreResult> {
+    return invoke<RestoreResult>("restore_initiative", { id });
 }

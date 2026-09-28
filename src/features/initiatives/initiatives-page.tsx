@@ -1,7 +1,7 @@
 import { PlusIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { PageHeader } from "@/components/page-header";
-import { useArchive, type RestoredItem } from "@/components/use-archive";
+import { useDelete, type RestoredItem } from "@/components/use-delete";
 import { useFailureToast } from "@/components/use-failure-toast";
 import { Button } from "@/components/ui/button";
 import {
@@ -39,8 +39,8 @@ function nameOnBoard(board: Board, id: number): string | null {
  * opens the sheet of its initiative. "New initiative" opens the sheet for a draft, which is
  * saved only after the user changes it. When the draft is saved, its card appears at the top
  * of Later, and the sheet goes on to edit the new initiative. "Delete" in the sheet deletes
- * the initiative, and the archive toast can restore it. The page loads the board again after
- * each archive and restore, and focuses the card of a restored initiative. A dragged card
+ * the initiative, and the delete toast can restore it. The page loads the board again after
+ * each delete and restore, and focuses the card of a restored initiative. A dragged card
  * moves on the board at once. If the backend cannot save the move, the page shows a failure
  * toast and loads the board again when no other move is waiting for the backend, so that the
  * board shows what the backend has.
@@ -54,7 +54,7 @@ export function InitiativesPage() {
     // "New initiative", because the card that opened the sheet is gone.
     const [focusNewOnClose, setFocusNewOnClose] = useState(false);
     const failureToast = useFailureToast();
-    const { archive, version, restored } = useArchive();
+    const { deleteItem, version, restored } = useDelete();
     const newButton = useRef<HTMLButtonElement>(null);
     const boardArea = useRef<HTMLDivElement>(null);
     // The restored item that the page already focused, or that was restored before the page
@@ -72,7 +72,7 @@ export function InitiativesPage() {
     useEffect(() => {
         let current = true;
         const movesBefore = startedMoves.current;
-        listInitiatives({ includeArchived: false }).then(
+        listInitiatives({ includeDeleted: false }).then(
             (summaries) => {
                 if (!current) return;
                 if (startedMoves.current !== movesBefore) {
@@ -125,7 +125,7 @@ export function InitiativesPage() {
 
     async function deleteInitiative(id: number, savedName: string) {
         try {
-            await archive({ kind: "initiative", id, name: savedName });
+            await deleteItem({ kind: "initiative", id, name: savedName });
         } catch {
             failureToast.show("Couldn't delete the initiative. Try again.");
             return;
@@ -184,7 +184,7 @@ export function InitiativesPage() {
             // a draft that was just created, also after its sheet closed.
             const board =
                 columnOf(current.board, summary.id) === null &&
-                summary.archivedAt === null
+                summary.deletedAt === null
                     ? addCard(current.board, summary)
                     : replaceCard(current.board, summary);
             return { kind: "loaded", board };

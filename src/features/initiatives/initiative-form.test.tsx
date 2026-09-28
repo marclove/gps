@@ -22,7 +22,7 @@ const PILOT: Initiative = {
     createdAt: "2026-09-01T10:00:00Z",
     updatedAt: "2026-09-01T10:00:00Z",
     completedAt: null,
-    archivedAt: null,
+    deletedAt: null,
 };
 
 /** Returns a promise and the function that resolves it. */
