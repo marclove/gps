@@ -4,8 +4,9 @@ import { Separator } from "@/components/ui/separator";
 /**
  * The sidebar at the right side of the project page. It is as tall as the main area. From
  * top to bottom, it shows the actions on the whole project, a separator, and the lists that
- * belong to the project. The actions stay in place. Each list decides which of its areas
- * scroll. When there are no lists, the sidebar shows only the actions.
+ * belong to the project. The actions stay in place. Each list gets a row, and the rows share
+ * the height that is left equally. Each list decides which of its areas scroll. When there
+ * are no lists, the sidebar shows only the actions.
  */
 export function ProjectDetailsSidebar({
     actions,
@@ -13,7 +14,10 @@ export function ProjectDetailsSidebar({
 }: {
     /** The buttons for actions on the whole project, such as Delete. */
     actions?: ReactNode;
-    /** The lists that belong to the project, such as its initiatives and its meetings. */
+    /**
+     * The lists that belong to the project, such as its initiatives and its meetings. Each
+     * top element of `lists` gets a row.
+     */
     lists?: ReactNode;
 }) {
     return (
@@ -26,7 +30,7 @@ export function ProjectDetailsSidebar({
             {lists !== undefined && (
                 <>
                     <Separator />
-                    <div className="grid min-h-0 grid-rows-[minmax(0,1fr)] pt-6">
+                    <div className="grid min-h-0 auto-rows-[minmax(0,1fr)] gap-6 pt-6">
                         {lists}
                     </div>
                 </>

@@ -19,6 +19,8 @@ import {
 } from "@/lib/projects";
 import { cn } from "@/lib/utils";
 import { ProjectDetailsSidebar } from "./project-details-sidebar";
+import { ProjectInitiatives } from "./project-initiatives";
+import { ProjectMeetings } from "./project-meetings";
 import type { ProjectsPageState } from "./projects-page";
 
 /** The fields of a project that the editor edits. */
@@ -55,6 +57,9 @@ function isEmptyDraft(values: Draft): boolean {
  * shows a message, and the description is still saved. When the user clicks "Delete", the
  * editor first saves the changes that are waiting, then deletes the project, and opens the
  * Projects page with the focus on "New project".
+ *
+ * The sidebar shows the initiatives and the meetings of the project. For a draft, both lists
+ * are empty until the draft is saved.
  */
 export function ProjectEditor({
     project,
@@ -272,6 +277,12 @@ export function ProjectEditor({
                             Delete
                         </Button>
                     )
+                }
+                lists={
+                    <>
+                        <ProjectInitiatives projectId={id} />
+                        <ProjectMeetings projectId={id} />
+                    </>
                 }
             />
         </div>

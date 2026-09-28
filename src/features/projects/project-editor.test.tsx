@@ -87,8 +87,14 @@ function renderProjectPage(path: string) {
     );
 }
 
+/** The commands that the editor sent, without the loads of the lists in the sidebar. */
 function commands(): string[] {
-    return invoke.mock.calls.map(([command]) => command as string);
+    return invoke.mock.calls
+        .map(([command]) => command as string)
+        .filter(
+            (command) =>
+                command !== "list_initiatives" && command !== "list_meetings",
+        );
 }
 
 describe("ProjectEditor", () => {
