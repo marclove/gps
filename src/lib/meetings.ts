@@ -72,6 +72,34 @@ export function setMeetingInitiative(
 }
 
 /**
+ * Makes a meeting cover an initiative, in addition to the initiatives that it covers, and
+ * returns the stored meeting. The backend rejects an initiative that is deleted or does not
+ * exist. If the meeting already covers the initiative, nothing changes. If the initiative
+ * belongs to another project than the meeting, or the meeting has no project, the backend sets
+ * the project of the meeting to the project of the initiative when the meeting covers no
+ * initiative. When the meeting covers an initiative, also a deleted one, the backend rejects
+ * the change and changes nothing.
+ */
+export function addMeetingInitiative(
+    id: number,
+    initiativeId: number,
+): Promise<Meeting> {
+    return invoke<Meeting>("add_meeting_initiative", { id, initiativeId });
+}
+
+/**
+ * Makes a meeting stop covering an initiative, and returns the stored meeting. The initiative
+ * can be deleted. If the meeting does not cover the initiative, nothing changes. The project of
+ * the meeting does not change.
+ */
+export function removeMeetingInitiative(
+    id: number,
+    initiativeId: number,
+): Promise<Meeting> {
+    return invoke<Meeting>("remove_meeting_initiative", { id, initiativeId });
+}
+
+/**
  * Sets the project of a meeting, or no project when `projectId` is `null`, and returns the
  * stored meeting. If the project changes, the backend also removes the assignment to an
  * initiative. If the meeting already has the project, nothing changes. The backend rejects a
