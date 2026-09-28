@@ -8,7 +8,8 @@ export type Task = {
     id: number;
     /** The meeting that the task belongs to, or `null` if it belongs to no meeting. */
     meetingId: number | null;
-    description: string;
+    /** The one line of text that tells what to do. */
+    title: string;
     /** The time when the task was created, as an RFC 3339 timestamp in UTC. */
     createdAt: string;
     /** The time when the task was last changed, as an RFC 3339 timestamp in UTC. */
@@ -31,19 +32,13 @@ export function listMeetingTasks(meetingId: number): Promise<Task[]> {
 }
 
 /** Creates a task that is not done in a meeting and returns the stored task. */
-export function createTask(
-    meetingId: number,
-    description: string,
-): Promise<Task> {
-    return invoke<Task>("create_task", { meetingId, description });
+export function createTask(meetingId: number, title: string): Promise<Task> {
+    return invoke<Task>("create_task", { meetingId, title });
 }
 
-/** Replaces the description of a task and returns the stored task. */
-export function updateTaskDescription(
-    id: number,
-    description: string,
-): Promise<Task> {
-    return invoke<Task>("update_task_description", { id, description });
+/** Replaces the title of a task and returns the stored task. */
+export function updateTaskTitle(id: number, title: string): Promise<Task> {
+    return invoke<Task>("update_task_title", { id, title });
 }
 
 /** Marks a task as done or as not done and returns the stored task. */

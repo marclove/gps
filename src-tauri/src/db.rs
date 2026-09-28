@@ -64,6 +64,7 @@ fn migrations() -> Migrations<'static> {
         M::up_with_hook("ALTER TABLE initiatives ADD COLUMN rank TEXT;", fill_ranks)
             .foreign_key_check(),
         M::up(REBUILD_INITIATIVES).foreign_key_check(),
+        M::up("ALTER TABLE tasks RENAME COLUMN description TO title;").foreign_key_check(),
     ])
 }
 
@@ -202,11 +203,18 @@ mod tests {
     fn foreign_keys_are_enforced() {
         let connection = open_in_memory();
         let result = connection.execute(
-            "INSERT INTO tasks (meeting_id, description, created_at, updated_at)
+            "INSERT INTO tasks (meeting_id, title, created_at, updated_at)
              VALUES (999, 'x', 't', 't')",
             [],
         );
-        assert!(result.is_err());
+        assert!(
+            matches!(
+                result,
+                Err(rusqlite::Error::SqliteFailure(ref error, _))
+                    if error.extended_code == rusqlite::ffi::SQLITE_CONSTRAINT_FOREIGNKEY
+            ),
+            "{result:?}"
+        );
     }
 
     #[test]
@@ -251,7 +259,7 @@ mod tests {
         assert_eq!(meeting.initiative_id, None);
         let tasks = crate::tasks::list_for_meeting(&connection, 1).unwrap();
         assert_eq!(tasks.len(), 1);
-        assert_eq!(tasks[0].description, "Send the deck");
+        assert_eq!(tasks[0].title, "Send the deck");
     }
 
     #[test]
@@ -417,5 +425,40 @@ mod tests {
             [],
         );
         assert!(result.is_err());
+    }
+
+    /// The number of migrations before the migration that renames `description` to `title` in
+    /// the table `tasks`.
+    const VERSION_WITH_TASK_DESCRIPTION: usize = 7;
+
+    #[test]
+    fn migration_keeps_the_text_of_every_task_as_its_title() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        migrations()
+            .to_version(&mut connection, VERSION_WITH_TASK_DESCRIPTION)
+            .unwrap();
+        connection
+            .execute_batch(
+                "INSERT INTO meetings (id, name, notes, date, created_at, updated_at)
+                 VALUES (1, 'Kickoff', '', '2026-09-24', 't', 't');
+                 INSERT INTO tasks (id, meeting_id, description, created_at, updated_at)
+                 VALUES (1, 1, 'Send the deck', 't', 't');",
+            )
+            .unwrap();
+
+        apply(&mut connection, &migrations()).unwrap();
+
+        let title: String = connection
+            .query_row("SELECT title FROM tasks WHERE id = 1", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(title, "Send the deck");
+        let columns: Vec<String> = connection
+            .prepare("SELECT name FROM pragma_table_info('tasks')")
+            .unwrap()
+            .query_map([], |row| row.get(0))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert!(!columns.contains(&"description".to_owned()));
     }
 }

@@ -17,7 +17,7 @@ erDiagram
     tasks {
         INTEGER id PK "Identifier that SQLite assigns"
         INTEGER meeting_id FK "Null for a task outside a meeting. Refers to meetings.id"
-        TEXT description "Not null. The text that tells what to do"
+        TEXT title "Not null. One line of text that tells what to do"
         TEXT created_at "Not null. RFC 3339 timestamp in UTC"
         TEXT updated_at "Not null. RFC 3339 timestamp in UTC"
         TEXT completed_at "Null until the task is completed. RFC 3339 timestamp in UTC"
@@ -66,8 +66,10 @@ Each row is one company initiative that the user has a responsibility in, such a
 
 Each row is one task that the user must do, such as an action item from a meeting (see ADR 0010).
 
+- `title` is the one line of text that tells what to do. ADR 0018 gave the column its name.
+
 - `meeting_id` refers to the meeting that the task comes from. It may be empty for a task outside a meeting, but the application does not create such tasks yet. An index on `meeting_id` makes it fast to find the tasks of a meeting.
 - `completed_at` is empty for a task that is not completed. When the user checks the task off, the backend sets it to the current time. If the user checks off a task that is already completed, the backend keeps the time that was recorded first. When the user unchecks the task, the backend clears it again.
-- The backend sets `created_at` and `updated_at`. It changes `updated_at` each time the description changes or the task is checked off or unchecked.
+- The backend sets `created_at` and `updated_at`. It changes `updated_at` each time the title changes or the task is checked off or unchecked.
 - Deleting a meeting does not change its tasks.
 - The database enforces foreign keys, so `meeting_id` must refer to a meeting that exists.

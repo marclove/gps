@@ -16,11 +16,11 @@ pub struct Task {
     /// The identifier of the meeting that the task comes from, or `None` if the task is not
     /// part of a meeting.
     pub meeting_id: Option<i64>,
-    /// The text that tells what to do.
-    pub description: String,
+    /// The one line of text that tells what to do.
+    pub title: String,
     /// The time when the task was created, as an RFC 3339 timestamp in UTC.
     pub created_at: String,
-    /// The time when the description or the completion was last changed, as an RFC 3339
+    /// The time when the title or the completion was last changed, as an RFC 3339
     /// timestamp in UTC.
     pub updated_at: String,
     /// The time when the user first marked the task as completed, as an RFC 3339 timestamp
@@ -60,7 +60,7 @@ impl From<rusqlite::Error> for Error {
 /// Returns the tasks of a meeting. The task that was created first is first.
 pub fn list_for_meeting(connection: &Connection, meeting_id: i64) -> Result<Vec<Task>, Error> {
     let mut statement = connection.prepare(
-        "SELECT id, meeting_id, description, created_at, updated_at, completed_at FROM tasks
+        "SELECT id, meeting_id, title, created_at, updated_at, completed_at FROM tasks
          WHERE meeting_id = ?1
          ORDER BY created_at, id",
     )?;
@@ -70,9 +70,8 @@ pub fn list_for_meeting(connection: &Connection, meeting_id: i64) -> Result<Vec<
     Ok(tasks)
 }
 
-/// Creates a task that is not completed, for the given meeting. Stores the description as
-/// given.
-pub fn create(connection: &Connection, meeting_id: i64, description: &str) -> Result<Task, Error> {
+/// Creates a task that is not completed, for the given meeting. Stores the title as given.
+pub fn create(connection: &Connection, meeting_id: i64, title: &str) -> Result<Task, Error> {
     let meeting_exists: bool = connection.query_row(
         "SELECT EXISTS(SELECT 1 FROM meetings WHERE id = ?1)",
         params![meeting_id],
@@ -83,25 +82,21 @@ pub fn create(connection: &Connection, meeting_id: i64, description: &str) -> Re
     }
     let id = connection.query_row(
         &format!(
-            "INSERT INTO tasks (meeting_id, description, created_at, updated_at)
+            "INSERT INTO tasks (meeting_id, title, created_at, updated_at)
              VALUES (?1, ?2, {NOW}, {NOW}) RETURNING id"
         ),
-        params![meeting_id, description],
+        params![meeting_id, title],
         |row| row.get(0),
     )?;
     get(connection, id)?.ok_or(Error::NotFound(id))
 }
 
-/// Replaces the description of a task, and sets the time it was last changed. Returns the
+/// Replaces the title of a task, and sets the time it was last changed. Returns the
 /// task as it is stored after the change.
-pub fn update_description(
-    connection: &Connection,
-    id: i64,
-    description: &str,
-) -> Result<Task, Error> {
+pub fn update_title(connection: &Connection, id: i64, title: &str) -> Result<Task, Error> {
     let changed = connection.execute(
-        &format!("UPDATE tasks SET description = ?2, updated_at = {NOW} WHERE id = ?1"),
-        params![id, description],
+        &format!("UPDATE tasks SET title = ?2, updated_at = {NOW} WHERE id = ?1"),
+        params![id, title],
     )?;
     if changed == 0 {
         return Err(Error::NotFound(id));
@@ -143,7 +138,7 @@ pub fn delete(connection: &Connection, id: i64) -> Result<(), Error> {
 fn get(connection: &Connection, id: i64) -> Result<Option<Task>, Error> {
     let task = connection
         .query_row(
-            "SELECT id, meeting_id, description, created_at, updated_at, completed_at FROM tasks
+            "SELECT id, meeting_id, title, created_at, updated_at, completed_at FROM tasks
              WHERE id = ?1",
             params![id],
             task_from_row,
@@ -156,7 +151,7 @@ fn task_from_row(row: &Row<'_>) -> rusqlite::Result<Task> {
     Ok(Task {
         id: row.get(0)?,
         meeting_id: row.get(1)?,
-        description: row.get(2)?,
+        title: row.get(2)?,
         created_at: row.get(3)?,
         updated_at: row.get(4)?,
         completed_at: row.get(5)?,
@@ -189,12 +184,12 @@ mod tests {
         create(&connection, second.id, "X").unwrap();
         create(&connection, first.id, "B").unwrap();
 
-        let descriptions: Vec<String> = list_for_meeting(&connection, first.id)
+        let titles: Vec<String> = list_for_meeting(&connection, first.id)
             .unwrap()
             .into_iter()
-            .map(|task| task.description)
+            .map(|task| task.title)
             .collect();
-        assert_eq!(descriptions, vec!["A", "B"]);
+        assert_eq!(titles, vec!["A", "B"]);
     }
 
     #[test]
@@ -205,7 +200,7 @@ mod tests {
         let task = create(&connection, meeting.id, "Send the deck").unwrap();
 
         assert_eq!(task.meeting_id, Some(meeting.id));
-        assert_eq!(task.description, "Send the deck");
+        assert_eq!(task.title, "Send the deck");
         assert_eq!(task.completed_at, None);
         assert_eq!(task.created_at, task.updated_at);
     }
@@ -220,15 +215,15 @@ mod tests {
     }
 
     #[test]
-    fn update_description_changes_the_text_and_updated_at() {
+    fn update_title_changes_the_text_and_updated_at() {
         let connection = open_in_memory();
         let meeting = meetings::create(&connection, "2026-09-24").unwrap();
         let created = create(&connection, meeting.id, "Send the deck").unwrap();
         set_updated_at(&connection, created.id, OLD_TIME);
 
-        let updated = update_description(&connection, created.id, "Send the final deck").unwrap();
+        let updated = update_title(&connection, created.id, "Send the final deck").unwrap();
 
-        assert_eq!(updated.description, "Send the final deck");
+        assert_eq!(updated.title, "Send the final deck");
         assert_eq!(updated.created_at, created.created_at);
         assert_ne!(updated.updated_at, OLD_TIME);
         assert_eq!(
@@ -238,10 +233,10 @@ mod tests {
     }
 
     #[test]
-    fn update_description_fails_for_an_unknown_task() {
+    fn update_title_fails_for_an_unknown_task() {
         let connection = open_in_memory();
         assert!(matches!(
-            update_description(&connection, 999, "x"),
+            update_title(&connection, 999, "x"),
             Err(Error::NotFound(999))
         ));
     }

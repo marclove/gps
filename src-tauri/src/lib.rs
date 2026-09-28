@@ -222,9 +222,9 @@ fn list_meeting_tasks(database: State<'_, Database>, meeting_id: i64) -> Result<
 fn create_task(
     database: State<'_, Database>,
     meeting_id: i64,
-    description: &str,
+    title: &str,
 ) -> Result<Task, String> {
-    database.run(|connection| tasks::create(connection, meeting_id, description))
+    database.run(|connection| tasks::create(connection, meeting_id, title))
 }
 
 #[tauri::command]
@@ -232,12 +232,8 @@ fn create_task(
     clippy::needless_pass_by_value,
     reason = "Tauri gives managed state to commands by value"
 )]
-fn update_task_description(
-    database: State<'_, Database>,
-    id: i64,
-    description: &str,
-) -> Result<Task, String> {
-    database.run(|connection| tasks::update_description(connection, id, description))
+fn update_task_title(database: State<'_, Database>, id: i64, title: &str) -> Result<Task, String> {
+    database.run(|connection| tasks::update_title(connection, id, title))
 }
 
 #[tauri::command]
@@ -291,7 +287,7 @@ pub fn run() {
             restore_initiative,
             list_meeting_tasks,
             create_task,
-            update_task_description,
+            update_task_title,
             set_task_completed,
             delete_task
         ])
