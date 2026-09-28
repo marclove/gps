@@ -1,6 +1,7 @@
 mod db;
 mod initiatives;
 mod meetings;
+mod projects;
 mod rank;
 mod tasks;
 
@@ -13,6 +14,7 @@ use crate::initiatives::{
     CreateOutcome, Initiative, InitiativeSummary, RenameOutcome, RestoreOutcome,
 };
 use crate::meetings::{Meeting, MeetingSummary};
+use crate::projects::Project;
 use crate::tasks::Task;
 
 /// The name of the database file in the application data directory.
@@ -34,6 +36,90 @@ impl Database {
             .map_err(|_| "the database is not available".to_owned())?;
         operation(&connection).map_err(|error| error.to_string())
     }
+}
+
+#[tauri::command]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Tauri gives managed state to commands by value"
+)]
+fn list_projects(
+    database: State<'_, Database>,
+    include_deleted: bool,
+) -> Result<Vec<Project>, String> {
+    database.run(|connection| projects::list(connection, include_deleted))
+}
+
+#[tauri::command]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Tauri gives managed state to commands by value"
+)]
+fn create_project(
+    database: State<'_, Database>,
+    name: &str,
+    description: &str,
+) -> Result<projects::CreateOutcome, String> {
+    database.run(|connection| projects::create(connection, name, description))
+}
+
+#[tauri::command]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Tauri gives managed state to commands by value"
+)]
+fn get_project(database: State<'_, Database>, id: i64) -> Result<Option<Project>, String> {
+    database.run(|connection| projects::get(connection, id))
+}
+
+#[tauri::command]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Tauri gives managed state to commands by value"
+)]
+fn rename_project(
+    database: State<'_, Database>,
+    id: i64,
+    name: &str,
+) -> Result<projects::RenameOutcome, String> {
+    database.run(|connection| projects::rename(connection, id, name))
+}
+
+#[tauri::command]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Tauri gives managed state to commands by value"
+)]
+fn update_project(
+    database: State<'_, Database>,
+    id: i64,
+    description: &str,
+) -> Result<Project, String> {
+    database.run(|connection| projects::update(connection, id, description))
+}
+
+#[tauri::command]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Tauri gives managed state to commands by value"
+)]
+fn delete_project(
+    database: State<'_, Database>,
+    id: i64,
+) -> Result<projects::DeleteOutcome, String> {
+    database.run(|connection| projects::delete(connection, id))
+}
+
+#[tauri::command]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Tauri gives managed state to commands by value"
+)]
+fn restore_project(
+    database: State<'_, Database>,
+    id: i64,
+) -> Result<projects::RestoreOutcome, String> {
+    database.run(|connection| projects::restore(connection, id))
 }
 
 #[tauri::command]
@@ -270,6 +356,13 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            list_projects,
+            create_project,
+            get_project,
+            rename_project,
+            update_project,
+            delete_project,
+            restore_project,
             list_meetings,
             create_meeting,
             get_meeting,

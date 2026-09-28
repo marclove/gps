@@ -34,6 +34,14 @@ erDiagram
         TEXT completed_at "Null until the initiative is completed. RFC 3339 timestamp in UTC"
         TEXT deleted_at "Null until the initiative is deleted. RFC 3339 timestamp in UTC"
     }
+    projects {
+        INTEGER id PK "Identifier that SQLite assigns"
+        TEXT name "Not null, default empty. Trimmed. Unique without regard to case among projects that are not deleted"
+        TEXT description "Not null, default empty. Markdown"
+        TEXT created_at "Not null. RFC 3339 timestamp in UTC"
+        TEXT updated_at "Not null. RFC 3339 timestamp in UTC"
+        TEXT deleted_at "Null until the project is deleted. RFC 3339 timestamp in UTC"
+    }
     meetings |o--o{ tasks : "has action items"
     initiatives |o--o{ meetings : "has meetings"
 ```
@@ -61,6 +69,15 @@ Each row is one company initiative that the user has a responsibility in, such a
 - `completed_at` is empty for an initiative that is not completed. When the user moves the initiative to Done, the backend sets it to the current time, and keeps the time that was recorded first if the initiative is already completed. When the user moves the initiative out of Done, the backend clears it again.
 - `deleted_at` is empty for an initiative that is not deleted. When the user deletes an initiative, the backend sets it to the current time. The row stays in the database, so that the delete can be undone and assigned meetings keep their link. When the user restores the initiative, the backend clears `deleted_at`, unless another initiative that is not deleted now has the same name. ADR 0017 gave the column its name.
 - The backend sets `created_at` and `updated_at`. It changes `updated_at` each time the name, the description, or the role changes. Moving, completing, deleting, and restoring do not change `updated_at`.
+
+### `projects`
+
+Each row is one project, a long lived effort of the company, such as a product area (see ADR 0019). The table does not refer to other tables yet.
+
+- `name` is stored without spaces at the start or the end. A project can have an empty name, when the user saved a draft that has a description but no name. The user interface shows "Untitled project" for it. The unique index `projects_name` on `name COLLATE NOCASE`, limited to rows where `deleted_at` is empty and `name` is not empty, makes sure that no two projects that are not deleted have the same name. Uppercase and lowercase letters A to Z do not count, so "Checkout" and "checkout" are the same name. Any number of projects can have an empty name, and a deleted project gives its name free.
+- `description` holds the description as Markdown, like the notes of a meeting.
+- `deleted_at` is empty for a project that is not deleted. When the user deletes a project, the backend sets it to the current time, and keeps the time that was recorded first if the project is already deleted. The row stays in the database, so that the delete can be undone. When the user restores the project, the backend clears `deleted_at`, unless another project that is not deleted now has the same name.
+- The backend sets `created_at` and `updated_at`. It changes `updated_at` each time the name or the description changes. Deleting and restoring do not change `updated_at`.
 
 ### `tasks`
 

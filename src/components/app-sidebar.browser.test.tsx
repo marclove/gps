@@ -19,11 +19,15 @@ beforeEach(() => {
     });
 });
 
-function meetingsLink() {
+function sectionLink(name: string) {
     return within(screen.getByRole("navigation", { name: "Main" })).getByRole(
         "link",
-        { name: "Meetings" },
+        { name },
     );
+}
+
+function meetingsLink() {
+    return sectionLink("Meetings");
 }
 
 async function renderApp() {
@@ -32,11 +36,13 @@ async function renderApp() {
 }
 
 describe("AppSidebar", () => {
-    it("reaches the Meetings link first with the Tab key", async () => {
+    it("reaches the Projects link first and the Meetings link next with the Tab key", async () => {
         await renderApp();
 
         await userEvent.tab();
+        expect(document.activeElement).toBe(sectionLink("Projects"));
 
+        await userEvent.tab();
         expect(document.activeElement).toBe(meetingsLink());
     });
 

@@ -65,6 +65,7 @@ fn migrations() -> Migrations<'static> {
             .foreign_key_check(),
         M::up(REBUILD_INITIATIVES).foreign_key_check(),
         M::up("ALTER TABLE tasks RENAME COLUMN description TO title;").foreign_key_check(),
+        M::up(CREATE_PROJECTS).foreign_key_check(),
     ])
 }
 
@@ -123,6 +124,22 @@ CREATE UNIQUE INDEX initiatives_name ON initiatives(name COLLATE NOCASE)
     WHERE deleted_at IS NULL AND name <> '';
 CREATE UNIQUE INDEX initiatives_horizon_rank ON initiatives(horizon, rank)
     WHERE completed_at IS NULL AND deleted_at IS NULL;
+";
+
+/// Creates the table `projects` and the unique index of project names. The index ignores
+/// deleted projects and empty names, and does not count the difference between uppercase and
+/// lowercase letters.
+const CREATE_PROJECTS: &str = "
+CREATE TABLE projects (
+    id          INTEGER PRIMARY KEY,
+    name        TEXT NOT NULL DEFAULT '',
+    description TEXT NOT NULL DEFAULT '',
+    created_at  TEXT NOT NULL,
+    updated_at  TEXT NOT NULL,
+    deleted_at  TEXT
+);
+CREATE UNIQUE INDEX projects_name ON projects(name COLLATE NOCASE)
+    WHERE deleted_at IS NULL AND name <> '';
 ";
 
 /// Opens the database file at `path`, and creates it if it does not exist.
@@ -460,5 +477,19 @@ mod tests {
             .collect::<Result<_, _>>()
             .unwrap();
         assert!(!columns.contains(&"description".to_owned()));
+    }
+
+    #[test]
+    fn projects_table_exists_with_its_index() {
+        let connection = open_in_memory();
+        let index: String = connection
+            .query_row(
+                "SELECT sql FROM sqlite_master WHERE name = 'projects_name'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert!(index.contains("COLLATE NOCASE"), "{index}");
+        assert!(index.contains("deleted_at IS NULL"), "{index}");
     }
 }
