@@ -65,7 +65,8 @@ const findTarget: CollisionDetection = (args) => {
 /**
  * The roadmap: four columns of equal width, Now, Next, Later, and Done, from left to right.
  * The board fills the height that it gets, and each column scrolls its own list of cards.
- * While `loading` is true, the columns show their headings and no cards.
+ * While `loading` is true, the columns show their headings and no cards. Each card shows the
+ * name that `projectName` gives for its project.
  *
  * The user drags a card with the pointer, or with the keyboard: Space picks the card up and
  * drops it, the arrow keys move it, and Escape puts it back. While a card is dragged over
@@ -78,11 +79,13 @@ const findTarget: CollisionDetection = (args) => {
  */
 export function RoadmapBoard({
     board,
+    projectName,
     onOpen,
     onMove,
     loading = false,
 }: {
     board: Board;
+    projectName: (projectId: number) => string;
     onOpen: (id: number) => void;
     onMove: (id: number, to: Column, index: number) => void;
     loading?: boolean;
@@ -172,6 +175,7 @@ export function RoadmapBoard({
                         key={column.id}
                         column={column}
                         cards={shown[column.id]}
+                        projectName={projectName}
                         onOpen={onOpen}
                         loading={loading}
                     />
@@ -184,6 +188,10 @@ export function RoadmapBoard({
                             initiative={
                                 shown[activePlace.column][activePlace.index]
                             }
+                            projectName={projectName(
+                                shown[activePlace.column][activePlace.index]
+                                    .projectId,
+                            )}
                             column={activePlace.column}
                         />
                     )}

@@ -40,6 +40,46 @@ export function buildBoard(summaries: InitiativeSummary[]): Board {
     return board;
 }
 
+/**
+ * Returns a board with only the cards of the project with the identifier `projectId`. The
+ * cards keep their order. If `projectId` is `null`, the board has all cards.
+ */
+export function filterBoard(board: Board, projectId: number | null): Board {
+    if (projectId === null) return board;
+    const next = emptyBoard();
+    for (const column of COLUMNS) {
+        next[column.id] = board[column.id].filter(
+            (card) => card.projectId === projectId,
+        );
+    }
+    return next;
+}
+
+/**
+ * Turns the place of a drop among the shown cards of a column into the index among all
+ * cards of the column. `column` has all cards of the column, and `shown` has the cards that
+ * the user sees, in the same order. `index` is the place of the drop among `shown`, counted
+ * without the card `id`. The result is counted without the card `id` too. The card goes
+ * directly after the shown card above the drop, if there is one. Otherwise it goes directly
+ * before the shown card below the drop, if there is one. Otherwise it goes to the end of the
+ * column.
+ */
+export function fullIndex(
+    column: InitiativeSummary[],
+    shown: InitiativeSummary[],
+    id: number,
+    index: number,
+): number {
+    const all = column.filter((card) => card.id !== id);
+    const visible = shown.filter((card) => card.id !== id);
+    const position = (card: InitiativeSummary) =>
+        all.findIndex((candidate) => candidate.id === card.id);
+    const place = Math.min(index, visible.length);
+    if (place > 0) return position(visible[place - 1]) + 1;
+    if (visible.length > 0) return position(visible[0]);
+    return all.length;
+}
+
 /** Returns the column that holds the card with the identifier, or `null` if no column holds it. */
 export function columnOf(board: Board, id: number): Column | null {
     return (

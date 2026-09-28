@@ -15,17 +15,19 @@ const keepInPlace: SortingStrategy = () => null;
  * A column of the roadmap. It is a region named after the column, with a heading that shows
  * the title and the number of cards, and a list of cards below the heading. Only the list
  * scrolls. The whole list area, also when it is empty, is a place to drop a card. The column
- * must be in a `DndContext`. While `loading` is true, the column shows no cards and no text
+ * must be in a `DndContext`. Each card shows the name that `projectName` gives for its project. While `loading` is true, the column shows no cards and no text
  * about empty columns.
  */
 export function RoadmapColumn({
     column,
     cards,
+    projectName,
     onOpen,
     loading = false,
 }: {
     column: { id: Column; title: string };
     cards: InitiativeSummary[];
+    projectName: (projectId: number) => string;
     onOpen: (id: number) => void;
     loading?: boolean;
 }) {
@@ -67,6 +69,9 @@ export function RoadmapColumn({
                                     <li key={card.id}>
                                         <InitiativeCard
                                             initiative={card}
+                                            projectName={projectName(
+                                                card.projectId,
+                                            )}
                                             column={column.id}
                                             onOpen={onOpen}
                                         />

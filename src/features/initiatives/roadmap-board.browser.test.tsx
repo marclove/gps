@@ -46,7 +46,7 @@ function column(name: ColumnName) {
 function cardTexts(name: ColumnName): string[] {
     return within(column(name))
         .queryAllByRole("button")
-        .map((card) => card.textContent ?? "");
+        .map((card) => backend.cardText(card));
 }
 
 function card(name: string) {
@@ -98,7 +98,7 @@ describe("Dragging cards", () => {
         // still has exactly one button.
         const copies = [
             ...document.querySelectorAll<HTMLElement>('[aria-hidden="true"]'),
-        ].filter((element) => element.textContent === "A");
+        ].filter((element) => backend.cardText(element) === "A");
         expect(copies).toHaveLength(1);
         const copy = copies[0].getBoundingClientRect();
         const later = column("Later").getBoundingClientRect();

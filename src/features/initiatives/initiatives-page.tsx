@@ -5,16 +5,28 @@ import { useDelete, type RestoredItem } from "@/components/use-delete";
 import { useFailureToast } from "@/components/use-failure-toast";
 import { Button } from "@/components/ui/button";
 import {
+    NativeSelect,
+    NativeSelectOption,
+} from "@/components/ui/native-select";
+import {
     listInitiatives,
     moveInitiative,
     type Column,
     type InitiativeSummary,
 } from "@/lib/initiatives";
 import {
+    listProjects,
+    projectDisplayName,
+    sortProjects,
+    type Project,
+} from "@/lib/projects";
+import {
     addCard,
     buildBoard,
     columnOf,
     emptyBoard,
+    filterBoard,
+    fullIndex,
     moveCard,
     removeCard,
     replaceCard,
@@ -24,7 +36,9 @@ import { InitiativeSheet, type SheetTarget } from "./initiative-sheet";
 import { RoadmapBoard } from "./roadmap-board";
 
 type BoardState =
-    { kind: "loading" } | { kind: "error" } | { kind: "loaded"; board: Board };
+    | { kind: "loading" }
+    | { kind: "error" }
+    | { kind: "loaded"; board: Board; projects: Project[] };
 
 /** Returns the saved name of the initiative with the identifier on the board, or `null`. */
 function nameOnBoard(board: Board, id: number): string | null {
@@ -44,10 +58,19 @@ function nameOnBoard(board: Board, id: number): string | null {
  * moves on the board at once. If the backend cannot save the move, the page shows a failure
  * toast and loads the board again when no other move is waiting for the backend, so that the
  * board shows what the backend has.
+ *
+ * Each card shows the name of its project. The "Project" select box in the header filters the
+ * roadmap to the cards of one project. The filter is state of the page, so it starts on "All
+ * projects" each time the page opens. A card dropped on a filtered roadmap lands next to the
+ * cards that the user sees, and the cards of other projects keep their places. A draft starts
+ * in the project of the filter. A card whose initiative moves to another project leaves a
+ * filtered roadmap.
  */
 export function InitiativesPage() {
     const [state, setState] = useState<BoardState>({ kind: "loading" });
     const [attempt, setAttempt] = useState(0);
+    // The project whose cards the roadmap shows, or `null` for all cards.
+    const [filter, setFilter] = useState<number | null>(null);
     // The initiative whose sheet is open, "new" for a draft, or `null`.
     const [openId, setOpenId] = useState<SheetTarget | null>(null);
     // True when the sheet closes because its initiative was deleted. Then the focus goes to
@@ -72,8 +95,11 @@ export function InitiativesPage() {
     useEffect(() => {
         let current = true;
         const movesBefore = startedMoves.current;
-        listInitiatives({ includeDeleted: false }).then(
-            (summaries) => {
+        Promise.all([
+            listInitiatives({ includeDeleted: false }),
+            listProjects({ includeDeleted: false }),
+        ]).then(
+            ([summaries, projects]) => {
                 if (!current) return;
                 if (startedMoves.current !== movesBefore) {
                     // The list can be older than a move that the board shows. Load it again
@@ -85,7 +111,11 @@ export function InitiativesPage() {
                     }
                     return;
                 }
-                setState({ kind: "loaded", board: buildBoard(summaries) });
+                setState({
+                    kind: "loaded",
+                    board: buildBoard(summaries),
+                    projects: sortProjects(projects),
+                });
             },
             () => current && setState({ kind: "error" }),
         );
@@ -135,7 +165,7 @@ export function InitiativesPage() {
         setOpenId((current) => (current === id ? null : current));
         setState((current) =>
             current.kind === "loaded"
-                ? { kind: "loaded", board: removeCard(current.board, id) }
+                ? { ...current, board: removeCard(current.board, id) }
                 : current,
         );
     }
@@ -150,13 +180,17 @@ export function InitiativesPage() {
         setOpenId((current) => (current === "new" ? id : current));
     }
 
-    async function move(id: number, to: Column, index: number) {
+    async function move(id: number, to: Column, shownIndex: number) {
+        if (state.kind !== "loaded") return;
+        // The board gives the place among the shown cards. The backend and the board of the
+        // page count all cards of the column. The index has no effect in Done.
+        const index =
+            to === "done"
+                ? shownIndex
+                : fullIndex(state.board[to], shownBoard[to], id, shownIndex);
         setState((current) =>
             current.kind === "loaded"
-                ? {
-                      kind: "loaded",
-                      board: moveCard(current.board, id, to, index),
-                  }
+                ? { ...current, board: moveCard(current.board, id, to, index) }
                 : current,
         );
         pendingMoves.current += 1;
@@ -187,9 +221,22 @@ export function InitiativesPage() {
                 summary.deletedAt === null
                     ? addCard(current.board, summary)
                     : replaceCard(current.board, summary);
-            return { kind: "loaded", board };
+            return { ...current, board };
         });
     }
+
+    const shownBoard =
+        state.kind === "loaded"
+            ? filterBoard(state.board, filter)
+            : emptyBoard();
+    const projectNames = new Map(
+        state.kind === "loaded"
+            ? state.projects.map((project) => [
+                  project.id,
+                  projectDisplayName(project.name),
+              ])
+            : [],
+    );
 
     const openName =
         typeof openId === "number" && state.kind === "loaded"
@@ -200,6 +247,30 @@ export function InitiativesPage() {
         // The header stays in place, and the board gets the remaining height.
         <div className="grid min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)]">
             <PageHeader crumbs={[{ label: "Initiatives" }]}>
+                <NativeSelect
+                    aria-label="Project"
+                    value={filter === null ? "" : String(filter)}
+                    onChange={(event) =>
+                        setFilter(
+                            event.target.value === ""
+                                ? null
+                                : Number(event.target.value),
+                        )
+                    }
+                >
+                    <NativeSelectOption value="">
+                        All projects
+                    </NativeSelectOption>
+                    {state.kind === "loaded" &&
+                        state.projects.map((project) => (
+                            <NativeSelectOption
+                                key={project.id}
+                                value={String(project.id)}
+                            >
+                                {projectDisplayName(project.name)}
+                            </NativeSelectOption>
+                        ))}
+                </NativeSelect>
                 <Button ref={newButton} onClick={openDraft}>
                     <PlusIcon />
                     New initiative
@@ -218,8 +289,9 @@ export function InitiativesPage() {
                     className="grid min-h-0 grid-rows-[minmax(0,1fr)]"
                 >
                     <RoadmapBoard
-                        board={
-                            state.kind === "loaded" ? state.board : emptyBoard()
+                        board={shownBoard}
+                        projectName={(projectId) =>
+                            projectNames.get(projectId) ?? ""
                         }
                         onOpen={openInitiative}
                         onMove={move}
@@ -229,7 +301,7 @@ export function InitiativesPage() {
             )}
             <InitiativeSheet
                 id={openId}
-                draftProjectId={null}
+                draftProjectId={filter}
                 name={openName}
                 onClose={() => setOpenId(null)}
                 onSaved={showSaved}
