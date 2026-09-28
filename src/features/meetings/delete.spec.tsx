@@ -10,7 +10,8 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "@/App";
 
-// Feature spec for docs/specs/0004-archive-meeting-notes.md.
+// Feature spec for docs/specs/0004-archive-meeting-notes.md, with the words and command
+// names of docs/specs/0007-deleted-rows-and-ranked-order.md.
 // The Tauri backend is replaced by an in-memory fake of the meeting commands.
 
 const invoke = vi.hoisted(() => vi.fn());
@@ -27,10 +28,10 @@ type Meeting = {
     updatedAt: string;
 };
 
-type StoredMeeting = Meeting & { archivedAt: string | null };
+type StoredMeeting = Meeting & { deletedAt: string | null };
 
-/** Returns the meeting as the commands return it, without the time it was archived. */
-function withoutArchiveTime(stored: StoredMeeting): Meeting {
+/** Returns the meeting as the commands return it, without the time it was deleted. */
+function withoutDeleteTime(stored: StoredMeeting): Meeting {
     const { id, name, date, notes, initiativeId, createdAt, updatedAt } =
         stored;
     return { id, name, date, notes, initiativeId, createdAt, updatedAt };
@@ -40,8 +41,8 @@ type UpdateArgs = Pick<Meeting, "id" | "name" | "date" | "notes">;
 
 class FakeBackend {
     meetings: StoredMeeting[] = [];
-    failArchive = false;
-    failUnarchive = false;
+    failDelete = false;
+    failRestore = false;
     private nextId = 1;
 
     seed(fields: Partial<Meeting> & Pick<Meeting, "name" | "date">): Meeting {
@@ -52,7 +53,7 @@ class FakeBackend {
             initiativeId: null,
             createdAt: now,
             updatedAt: now,
-            archivedAt: null,
+            deletedAt: null,
             ...fields,
         };
         this.meetings.push(meeting);
@@ -83,7 +84,7 @@ class FakeBackend {
         switch (command) {
             case "list_meetings":
                 return this.meetings
-                    .filter((m) => m.archivedAt === null)
+                    .filter((m) => m.deletedAt === null)
                     .sort(
                         (a, b) =>
                             b.date.localeCompare(a.date) ||
@@ -107,7 +108,7 @@ class FakeBackend {
                 return [];
             case "get_meeting": {
                 const meeting = this.find(args.id as number);
-                return meeting ? withoutArchiveTime(meeting) : null;
+                return meeting ? withoutDeleteTime(meeting) : null;
             }
             case "update_meeting": {
                 const meeting = this.stored(args.id);
@@ -117,17 +118,17 @@ class FakeBackend {
                     notes: args.notes,
                     updatedAt: new Date().toISOString(),
                 });
-                return withoutArchiveTime(meeting);
+                return withoutDeleteTime(meeting);
             }
-            case "archive_meeting": {
-                if (this.failArchive) throw "database is locked";
+            case "delete_meeting": {
+                if (this.failDelete) throw "database is locked";
                 const meeting = this.stored(args.id);
-                meeting.archivedAt ??= new Date().toISOString();
+                meeting.deletedAt ??= new Date().toISOString();
                 return null;
             }
-            case "unarchive_meeting": {
-                if (this.failUnarchive) throw "database is locked";
-                this.stored(args.id).archivedAt = null;
+            case "restore_meeting": {
+                if (this.failRestore) throw "database is locked";
+                this.stored(args.id).deletedAt = null;
                 return null;
             }
             default:
@@ -162,12 +163,12 @@ function sidebarNavigation() {
     return screen.getByRole("navigation", { name: "Main" });
 }
 
-/** The names of the meetings in the list, in the order shown, read from their archive buttons. */
+/** The names of the meetings in the list, in the order shown, read from their delete buttons. */
 function listedMeetingNames(): string[] {
     const names: string[] = [];
     screen.queryAllByRole("button", {
         name: (name) => {
-            const match = /^Archive "(.*)"$/.exec(name);
+            const match = /^Delete "(.*)"$/.exec(name);
             if (match) names.push(match[1]);
             return match !== null;
         },
@@ -187,7 +188,7 @@ function notifications() {
     return screen.getByRole("region", { name: "Notifications" });
 }
 
-/** The Undo button of the archive toast. */
+/** The Undo button of the delete toast. */
 function undoButton() {
     return within(notifications()).getByRole("button", { name: "Undo" });
 }
@@ -198,11 +199,11 @@ async function advance(milliseconds: number) {
 }
 
 /**
- * Waits until the archive failure is reported in a toast, and checks that the page does
+ * Waits until the delete failure is reported in a toast, and checks that the page does
  * not also show it (spec 0005, which changes spec 0004).
  */
-async function expectArchiveFailureToast() {
-    const message = "Couldn't archive the meeting. Try again.";
+async function expectDeleteFailureToast() {
+    const message = "Couldn't delete the meeting. Try again.";
     expect(
         await within(notifications()).findByText(message),
     ).toBeInTheDocument();
@@ -215,7 +216,7 @@ async function openMeetingsPage(user: ReturnType<typeof userEvent.setup>) {
     );
 }
 
-describe("Archive meetings", () => {
+describe("Delete meetings", () => {
     describe("from the Meetings page", () => {
         it("removes the meeting from the list and shows a toast with Undo", async () => {
             const { standup } = seedThreeMeetings();
@@ -223,11 +224,11 @@ describe("Archive meetings", () => {
 
             await user.click(
                 await screen.findByRole("button", {
-                    name: 'Archive "Standup"',
+                    name: 'Delete "Standup"',
                 }),
             );
 
-            expect(invoke).toHaveBeenCalledWith("archive_meeting", {
+            expect(invoke).toHaveBeenCalledWith("delete_meeting", {
                 id: standup.id,
             });
             await waitFor(() =>
@@ -238,7 +239,7 @@ describe("Archive meetings", () => {
             );
             const toasts = notifications();
             expect(
-                await within(toasts).findByText('Archived "Standup".'),
+                await within(toasts).findByText('Deleted "Standup".'),
             ).toBeInTheDocument();
             expect(
                 within(toasts).getByRole("button", { name: "Undo" }),
@@ -254,24 +255,24 @@ describe("Archive meetings", () => {
 
             await user.click(
                 await screen.findByRole("button", {
-                    name: 'Archive "Untitled meeting"',
+                    name: 'Delete "Untitled meeting"',
                 }),
             );
 
             expect(
                 await within(notifications()).findByText(
-                    'Archived "Untitled meeting".',
+                    'Deleted "Untitled meeting".',
                 ),
             ).toBeInTheDocument();
         });
 
-        it("says there are no meetings after the only meeting is archived", async () => {
+        it("says there are no meetings after the only meeting is deleted", async () => {
             backend.seed({ name: "Weekly sync", date: "2026-09-24" });
             const user = renderApp();
 
             await user.click(
                 await screen.findByRole("button", {
-                    name: 'Archive "Weekly sync"',
+                    name: 'Delete "Weekly sync"',
                 }),
             );
 
@@ -279,11 +280,11 @@ describe("Archive meetings", () => {
                 await screen.findByText("No meetings yet"),
             ).toBeInTheDocument();
             expect(
-                within(notifications()).getByText('Archived "Weekly sync".'),
+                within(notifications()).getByText('Deleted "Weekly sync".'),
             ).toBeInTheDocument();
         });
 
-        it("reaches the archive button with Tab from the meeting's link", async () => {
+        it("reaches the delete button with Tab from the meeting's link", async () => {
             backend.seed({ name: "Weekly sync", date: "2026-09-24" });
             const user = renderApp();
 
@@ -294,40 +295,40 @@ describe("Archive meetings", () => {
             await user.tab();
 
             expect(
-                screen.getByRole("button", { name: 'Archive "Weekly sync"' }),
+                screen.getByRole("button", { name: 'Delete "Weekly sync"' }),
             ).toHaveFocus();
         });
 
-        it("moves focus to the archive button of the next meeting", async () => {
+        it("moves focus to the delete button of the next meeting", async () => {
             seedThreeMeetings();
             const user = renderApp();
 
             await user.click(
                 await screen.findByRole("button", {
-                    name: 'Archive "Standup"',
+                    name: 'Delete "Standup"',
                 }),
             );
 
             await waitFor(() =>
                 expect(
-                    screen.getByRole("button", { name: 'Archive "Kickoff"' }),
+                    screen.getByRole("button", { name: 'Delete "Kickoff"' }),
                 ).toHaveFocus(),
             );
         });
 
-        it("moves focus to the meeting before when the last meeting is archived", async () => {
+        it("moves focus to the meeting before when the last meeting is deleted", async () => {
             seedThreeMeetings();
             const user = renderApp();
 
             await user.click(
                 await screen.findByRole("button", {
-                    name: 'Archive "Kickoff"',
+                    name: 'Delete "Kickoff"',
                 }),
             );
 
             await waitFor(() =>
                 expect(
-                    screen.getByRole("button", { name: 'Archive "Standup"' }),
+                    screen.getByRole("button", { name: 'Delete "Standup"' }),
                 ).toHaveFocus(),
             );
         });
@@ -338,7 +339,7 @@ describe("Archive meetings", () => {
 
             await user.click(
                 await screen.findByRole("button", {
-                    name: 'Archive "Weekly sync"',
+                    name: 'Delete "Weekly sync"',
                 }),
             );
 
@@ -349,18 +350,18 @@ describe("Archive meetings", () => {
             );
         });
 
-        it("keeps the meeting and reports the problem when archiving fails", async () => {
+        it("keeps the meeting and reports the problem when deleting fails", async () => {
             seedThreeMeetings();
-            backend.failArchive = true;
+            backend.failDelete = true;
             const user = renderApp();
 
             await user.click(
                 await screen.findByRole("button", {
-                    name: 'Archive "Standup"',
+                    name: 'Delete "Standup"',
                 }),
             );
 
-            await expectArchiveFailureToast();
+            await expectDeleteFailureToast();
             expect(
                 screen.getByRole("link", { name: /Standup/ }),
             ).toBeInTheDocument();
@@ -369,29 +370,29 @@ describe("Archive meetings", () => {
             ).not.toBeInTheDocument();
         });
 
-        it("closes the failure toast and shows the archive toast when a retry succeeds", async () => {
+        it("closes the failure toast and shows the delete toast when a retry succeeds", async () => {
             seedThreeMeetings();
-            backend.failArchive = true;
+            backend.failDelete = true;
             const user = renderApp();
             await user.click(
                 await screen.findByRole("button", {
-                    name: 'Archive "Standup"',
+                    name: 'Delete "Standup"',
                 }),
             );
-            await expectArchiveFailureToast();
+            await expectDeleteFailureToast();
 
-            backend.failArchive = false;
+            backend.failDelete = false;
             await user.click(
-                screen.getByRole("button", { name: 'Archive "Standup"' }),
+                screen.getByRole("button", { name: 'Delete "Standup"' }),
             );
 
             expect(
-                await within(notifications()).findByText('Archived "Standup".'),
+                await within(notifications()).findByText('Deleted "Standup".'),
             ).toBeInTheDocument();
             await waitFor(() =>
                 expect(
                     within(notifications()).queryByText(
-                        "Couldn't archive the meeting. Try again.",
+                        "Couldn't delete the meeting. Try again.",
                     ),
                 ).not.toBeInTheDocument(),
             );
@@ -399,7 +400,7 @@ describe("Archive meetings", () => {
     });
 
     describe("from the editor page", () => {
-        it("archives the meeting, opens the Meetings page, and shows the toast", async () => {
+        it("deletes the meeting, opens the Meetings page, and shows the toast", async () => {
             const { standup } = seedThreeMeetings();
             const user = renderApp();
 
@@ -407,9 +408,9 @@ describe("Archive meetings", () => {
                 await screen.findByRole("link", { name: /Standup/ }),
             );
             await screen.findByRole("textbox", { name: "Notes" });
-            await user.click(screen.getByRole("button", { name: "Archive" }));
+            await user.click(screen.getByRole("button", { name: "Delete" }));
 
-            expect(invoke).toHaveBeenCalledWith("archive_meeting", {
+            expect(invoke).toHaveBeenCalledWith("delete_meeting", {
                 id: standup.id,
             });
             expect(
@@ -425,7 +426,7 @@ describe("Archive meetings", () => {
                 ]),
             );
             expect(
-                within(notifications()).getByText('Archived "Standup".'),
+                within(notifications()).getByText('Deleted "Standup".'),
             ).toBeInTheDocument();
             expect(undoButton()).toBeInTheDocument();
         });
@@ -438,9 +439,9 @@ describe("Archive meetings", () => {
                 await screen.findByRole("link", { name: /Standup/ }),
             );
             await screen.findByRole("textbox", { name: "Notes" });
-            await user.click(screen.getByRole("button", { name: "Archive" }));
+            await user.click(screen.getByRole("button", { name: "Delete" }));
 
-            await within(notifications()).findByText('Archived "Standup".');
+            await within(notifications()).findByText('Deleted "Standup".');
             await waitFor(() =>
                 expect(
                     screen.getByRole("button", { name: "New note" }),
@@ -460,10 +461,10 @@ describe("Archive meetings", () => {
             });
             await user.clear(name);
             await user.type(name, "Retro");
-            await user.click(screen.getByRole("button", { name: "Archive" }));
+            await user.click(screen.getByRole("button", { name: "Delete" }));
 
             expect(
-                await within(notifications()).findByText('Archived "Retro".'),
+                await within(notifications()).findByText('Deleted "Retro".'),
             ).toBeInTheDocument();
         });
 
@@ -475,19 +476,19 @@ describe("Archive meetings", () => {
             const notes = await screen.findByRole("textbox", { name: "Notes" });
 
             await user.type(notes, "Oops");
-            await user.click(screen.getByRole("button", { name: "Archive" }));
+            await user.click(screen.getByRole("button", { name: "Delete" }));
 
             await waitFor(
                 () => expect(backend.lastUpdate()?.notes.trim()).toBe("Oops"),
                 SAVE_TIMEOUT,
             );
             expect(backend.meetings[0].notes.trim()).toBe("Oops");
-            expect(backend.meetings[0].archivedAt).not.toBeNull();
+            expect(backend.meetings[0].deletedAt).not.toBeNull();
         });
 
-        it("stays on the editor page and reports the problem when archiving fails", async () => {
+        it("stays on the editor page and reports the problem when deleting fails", async () => {
             backend.seed({ name: "Weekly sync", date: "2026-09-24" });
-            backend.failArchive = true;
+            backend.failDelete = true;
             const user = renderApp();
 
             await user.click(
@@ -495,9 +496,9 @@ describe("Archive meetings", () => {
             );
             const notes = await screen.findByRole("textbox", { name: "Notes" });
             await user.type(notes, "Keep me");
-            await user.click(screen.getByRole("button", { name: "Archive" }));
+            await user.click(screen.getByRole("button", { name: "Delete" }));
 
-            await expectArchiveFailureToast();
+            await expectDeleteFailureToast();
             expect(
                 screen.getByRole("textbox", { name: "Notes" }),
             ).toHaveTextContent("Keep me");
@@ -507,20 +508,20 @@ describe("Archive meetings", () => {
         });
     });
 
-    describe("the archive toast", () => {
+    describe("the delete toast", () => {
         it("restores the meeting to its place in the list and focuses its link", async () => {
             const { standup } = seedThreeMeetings();
             const user = renderApp();
 
             await user.click(
                 await screen.findByRole("button", {
-                    name: 'Archive "Standup"',
+                    name: 'Delete "Standup"',
                 }),
             );
-            await within(notifications()).findByText('Archived "Standup".');
+            await within(notifications()).findByText('Deleted "Standup".');
             await user.click(undoButton());
 
-            expect(invoke).toHaveBeenCalledWith("unarchive_meeting", {
+            expect(invoke).toHaveBeenCalledWith("restore_meeting", {
                 id: standup.id,
             });
             await waitFor(() =>
@@ -537,7 +538,7 @@ describe("Archive meetings", () => {
             );
             await waitFor(() =>
                 expect(
-                    within(notifications()).queryByText('Archived "Standup".'),
+                    within(notifications()).queryByText('Deleted "Standup".'),
                 ).not.toBeInTheDocument(),
             );
         });
@@ -548,24 +549,24 @@ describe("Archive meetings", () => {
 
             await user.click(
                 await screen.findByRole("button", {
-                    name: 'Archive "Standup"',
+                    name: 'Delete "Standup"',
                 }),
             );
-            await within(notifications()).findByText('Archived "Standup".');
+            await within(notifications()).findByText('Deleted "Standup".');
             await user.click(screen.getByRole("link", { name: /Kickoff/ }));
             await screen.findByRole("textbox", { name: "Notes" });
 
             expect(
-                within(notifications()).getByText('Archived "Standup".'),
+                within(notifications()).getByText('Deleted "Standup".'),
             ).toBeInTheDocument();
             await user.click(undoButton());
 
             await waitFor(() =>
-                expect(backend.find(standup.id)?.archivedAt).toBeNull(),
+                expect(backend.find(standup.id)?.deletedAt).toBeNull(),
             );
             await waitFor(() =>
                 expect(
-                    within(notifications()).queryByText('Archived "Standup".'),
+                    within(notifications()).queryByText('Deleted "Standup".'),
                 ).not.toBeInTheDocument(),
             );
             await openMeetingsPage(user);
@@ -578,35 +579,35 @@ describe("Archive meetings", () => {
             );
         });
 
-        it("closes with Close and leaves the meeting archived", async () => {
+        it("closes with Close and leaves the meeting deleted", async () => {
             const { standup } = seedThreeMeetings();
             const user = renderApp();
 
             await user.click(
                 await screen.findByRole("button", {
-                    name: 'Archive "Standup"',
+                    name: 'Delete "Standup"',
                 }),
             );
             const toasts = notifications();
-            await within(toasts).findByText('Archived "Standup".');
+            await within(toasts).findByText('Deleted "Standup".');
             await user.click(
                 within(toasts).getByRole("button", { name: "Close" }),
             );
 
             await waitFor(() =>
                 expect(
-                    within(toasts).queryByText('Archived "Standup".'),
+                    within(toasts).queryByText('Deleted "Standup".'),
                 ).not.toBeInTheDocument(),
             );
-            expect(backend.find(standup.id)?.archivedAt).not.toBeNull();
+            expect(backend.find(standup.id)?.deletedAt).not.toBeNull();
             expect(
                 invoke.mock.calls.some(
-                    ([command]) => command === "unarchive_meeting",
+                    ([command]) => command === "restore_meeting",
                 ),
             ).toBe(false);
         });
 
-        it("closes by itself after 8 seconds and leaves the meeting archived", async () => {
+        it("closes by itself after 8 seconds and leaves the meeting deleted", async () => {
             vi.useFakeTimers({
                 toFake: [
                     "Date",
@@ -621,37 +622,37 @@ describe("Archive meetings", () => {
             await advance(0);
 
             fireEvent.click(
-                screen.getByRole("button", { name: 'Archive "Standup"' }),
+                screen.getByRole("button", { name: 'Delete "Standup"' }),
             );
             await advance(0);
             expect(
-                within(notifications()).getByText('Archived "Standup".'),
+                within(notifications()).getByText('Deleted "Standup".'),
             ).toBeInTheDocument();
 
             await advance(7000);
             expect(
-                within(notifications()).getByText('Archived "Standup".'),
+                within(notifications()).getByText('Deleted "Standup".'),
             ).toBeInTheDocument();
 
             await advance(2000);
             expect(
-                within(notifications()).queryByText('Archived "Standup".'),
+                within(notifications()).queryByText('Deleted "Standup".'),
             ).not.toBeInTheDocument();
-            expect(backend.find(standup.id)?.archivedAt).not.toBeNull();
+            expect(backend.find(standup.id)?.deletedAt).not.toBeNull();
         });
 
         it("changes to an error and keeps Undo when restoring fails", async () => {
             seedThreeMeetings();
-            backend.failUnarchive = true;
+            backend.failRestore = true;
             const user = renderApp();
 
             await user.click(
                 await screen.findByRole("button", {
-                    name: 'Archive "Standup"',
+                    name: 'Delete "Standup"',
                 }),
             );
             const toasts = notifications();
-            await within(toasts).findByText('Archived "Standup".');
+            await within(toasts).findByText('Deleted "Standup".');
             await user.click(undoButton());
 
             expect(
@@ -660,11 +661,11 @@ describe("Archive meetings", () => {
                 ),
             ).toBeInTheDocument();
             expect(
-                within(toasts).queryByText('Archived "Standup".'),
+                within(toasts).queryByText('Deleted "Standup".'),
             ).not.toBeInTheDocument();
             expect(listedMeetingNames()).toEqual(["Weekly sync", "Kickoff"]);
 
-            backend.failUnarchive = false;
+            backend.failRestore = false;
             await user.click(undoButton());
 
             await waitFor(() =>
@@ -676,27 +677,27 @@ describe("Archive meetings", () => {
             );
         });
 
-        it("shows only the meeting that was archived last, and Undo restores only it", async () => {
+        it("shows only the meeting that was deleted last, and Undo restores only it", async () => {
             seedThreeMeetings();
             const user = renderApp();
 
             await user.click(
                 await screen.findByRole("button", {
-                    name: 'Archive "Standup"',
+                    name: 'Delete "Standup"',
                 }),
             );
-            await within(notifications()).findByText('Archived "Standup".');
+            await within(notifications()).findByText('Deleted "Standup".');
             await user.click(
-                screen.getByRole("button", { name: 'Archive "Kickoff"' }),
+                screen.getByRole("button", { name: 'Delete "Kickoff"' }),
             );
 
             const toasts = notifications();
             expect(
-                await within(toasts).findByText('Archived "Kickoff".'),
+                await within(toasts).findByText('Deleted "Kickoff".'),
             ).toBeInTheDocument();
             await waitFor(() =>
                 expect(
-                    within(toasts).queryByText('Archived "Standup".'),
+                    within(toasts).queryByText('Deleted "Standup".'),
                 ).not.toBeInTheDocument(),
             );
             expect(
@@ -714,17 +715,17 @@ describe("Archive meetings", () => {
         });
     });
 
-    describe("archived meetings", () => {
+    describe("deleted meetings", () => {
         it("stay hidden when the Meetings page opens again", async () => {
             seedThreeMeetings();
             const user = renderApp();
 
             await user.click(
                 await screen.findByRole("button", {
-                    name: 'Archive "Standup"',
+                    name: 'Delete "Standup"',
                 }),
             );
-            await within(notifications()).findByText('Archived "Standup".');
+            await within(notifications()).findByText('Deleted "Standup".');
             await user.click(screen.getByRole("button", { name: "New note" }));
             await screen.findByRole("textbox", { name: "Notes" });
             await openMeetingsPage(user);
@@ -748,10 +749,10 @@ describe("Archive meetings", () => {
 
             await user.click(
                 await screen.findByRole("button", {
-                    name: 'Archive "Standup"',
+                    name: 'Delete "Standup"',
                 }),
             );
-            await within(notifications()).findByText('Archived "Standup".');
+            await within(notifications()).findByText('Deleted "Standup".');
 
             expect(backend.find(standup.id)).toMatchObject({
                 name: "Standup",

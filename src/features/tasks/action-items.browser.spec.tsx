@@ -3,7 +3,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import App from "@/App";
 
-// Feature spec for docs/specs/0005-meeting-action-items.md.
+// Feature spec for docs/specs/0005-meeting-action-items.md, with the words of
+// docs/specs/0007-deleted-rows-and-ranked-order.md.
 // It runs in WebKit with the application's CSS, at the default window size of
 // 1200 by 800 pixels. The Tauri backend is replaced by an in-memory fake.
 
@@ -241,21 +242,23 @@ describe("Action items panel", () => {
         }
     });
 
-    it("shows the date, then the Archive button, then the action items, from top to bottom", async () => {
+    it("shows the date, then the Delete button, then the action items, from top to bottom", async () => {
         const panel = await openMeeting();
         const aside = screen.getByRole("complementary", {
             name: "Meeting details",
         });
         const date = within(aside).getByLabelText("Meeting date");
-        const archive = within(aside).getByRole("button", { name: "Archive" });
+        const deleteButton = within(aside).getByRole("button", {
+            name: "Delete",
+        });
         const heading = within(panel).getByRole("heading", {
             name: "Action items",
         });
 
         expect(date.getBoundingClientRect().bottom).toBeLessThanOrEqual(
-            archive.getBoundingClientRect().top,
+            deleteButton.getBoundingClientRect().top,
         );
-        expect(archive.getBoundingClientRect().bottom).toBeLessThanOrEqual(
+        expect(deleteButton.getBoundingClientRect().bottom).toBeLessThanOrEqual(
             heading.getBoundingClientRect().top,
         );
     });
@@ -288,14 +291,14 @@ describe("Action items panel", () => {
         await expect.poll(() => getComputedStyle(deck).color).toBe(normal);
     });
 
-    it("scrolls a long list while the date, Archive, the heading, the Add action item field, and the notes stay in place", async () => {
+    it("scrolls a long list while the date, Delete, the heading, the Add action item field, and the notes stay in place", async () => {
         for (let i = 1; i <= 60; i++) seedTask(`Item ${i}`);
         const panel = await openMeeting();
         const first = await findItemField(panel, "Item 1");
         const last = await findItemField(panel, "Item 60");
         const fixed = [
             screen.getByLabelText("Meeting date"),
-            screen.getByRole("button", { name: "Archive" }),
+            screen.getByRole("button", { name: "Delete" }),
             within(panel).getByRole("heading", { name: "Action items" }),
             within(panel).getByRole("textbox", { name: "Add action item" }),
             screen.getByRole("toolbar", { name: "Formatting" }),

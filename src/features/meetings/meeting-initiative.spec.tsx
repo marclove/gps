@@ -5,7 +5,8 @@ import App from "@/App";
 import { FakeRoadmapBackend } from "@/test/fake-roadmap-backend";
 
 // Feature spec for the assignment of a meeting to an initiative in
-// docs/specs/0006-managing-initiatives.md.
+// docs/specs/0006-managing-initiatives.md, with the changes of
+// docs/specs/0007-deleted-rows-and-ranked-order.md.
 // The Tauri backend is replaced by an in-memory fake of the meeting and initiative commands.
 
 const invoke = vi.hoisted(() => vi.fn());
@@ -70,7 +71,7 @@ function selectedText() {
 }
 
 describe("Assigning a meeting to an initiative", () => {
-    it("shows an Initiative row between the Date row and the Archive button", async () => {
+    it("shows an Initiative row between the Date row and the Delete button", async () => {
         backend.seedMeeting("Weekly sync");
         const user = renderApp();
 
@@ -79,8 +80,8 @@ describe("Assigning a meeting to an initiative", () => {
         const sidebar = meetingDetails();
         const date = within(sidebar).getByLabelText("Meeting date");
         const initiative = initiativeSelect();
-        const archive = within(sidebar).getByRole("button", {
-            name: "Archive",
+        const deleteButton = within(sidebar).getByRole("button", {
+            name: "Delete",
         });
         expect(within(sidebar).getByText("Initiative")).toBeInTheDocument();
         expect(
@@ -88,23 +89,23 @@ describe("Assigning a meeting to an initiative", () => {
                 Node.DOCUMENT_POSITION_FOLLOWING,
         ).toBeTruthy();
         expect(
-            initiative.compareDocumentPosition(archive) &
+            initiative.compareDocumentPosition(deleteButton) &
                 Node.DOCUMENT_POSITION_FOLLOWING,
         ).toBeTruthy();
     });
 
     it("groups the choices by column in roadmap order, then Completed alphabetically, and leaves out deleted initiatives", async () => {
-        backend.seedInitiative({ name: "zeta pilot", archived: true });
+        backend.seedInitiative({ name: "zeta pilot", deleted: true });
         backend.seedInitiative({ name: "Launch", horizon: "now" });
         backend.seedInitiative({ name: "Checkout", horizon: "later" });
         backend.seedInitiative({ name: "", horizon: "later" });
         backend.seedInitiative({ name: "beta win", completed: true });
         backend.seedInitiative({ name: "Alpha win", completed: true });
-        backend.seedInitiative({ name: "Alpha program", archived: true });
+        backend.seedInitiative({ name: "Alpha program", deleted: true });
         backend.seedInitiative({
             name: "Old win",
             completed: true,
-            archived: true,
+            deleted: true,
         });
         backend.seedMeeting("Weekly sync");
         const user = renderApp();
@@ -119,14 +120,14 @@ describe("Assigning a meeting to an initiative", () => {
         ]);
         expect(initiativeSelect()).toHaveValue("");
         expect(invoke).toHaveBeenCalledWith("list_initiatives", {
-            includeArchived: true,
+            includeDeleted: true,
         });
     });
 
     it("shows the meeting's own deleted initiative as the last choice, and no other deleted one", async () => {
         backend.seedInitiative({ name: "Launch", horizon: "now" });
-        backend.seedInitiative({ name: "Gone", archived: true });
-        const pilot = backend.seedInitiative({ name: "Pilot", archived: true });
+        backend.seedInitiative({ name: "Gone", deleted: true });
+        const pilot = backend.seedInitiative({ name: "Pilot", deleted: true });
         backend.seedMeeting("Weekly sync", pilot.id);
         const user = renderApp();
 
@@ -142,7 +143,7 @@ describe("Assigning a meeting to an initiative", () => {
             name: "Launch",
             horizon: "now",
         });
-        const pilot = backend.seedInitiative({ name: "Pilot", archived: true });
+        const pilot = backend.seedInitiative({ name: "Pilot", deleted: true });
         const meeting = backend.seedMeeting("Weekly sync", pilot.id);
         const user = renderApp();
         await openMeeting(user, /Weekly sync/);
@@ -158,7 +159,7 @@ describe("Assigning a meeting to an initiative", () => {
             name: "Launch",
             horizon: "now",
         });
-        const pilot = backend.seedInitiative({ name: "Pilot", archived: true });
+        const pilot = backend.seedInitiative({ name: "Pilot", deleted: true });
         backend.seedMeeting("Weekly sync", pilot.id);
         backend.failing.add("set_meeting_initiative");
         const user = renderApp();

@@ -5,7 +5,8 @@ import App from "@/App";
 import { FakeRoadmapBackend } from "@/test/fake-roadmap-backend";
 
 // Feature spec for the sheet, saving, and deleting an initiative in
-// docs/specs/0006-managing-initiatives.md.
+// docs/specs/0006-managing-initiatives.md, with the changes of
+// docs/specs/0007-deleted-rows-and-ranked-order.md.
 // The Tauri backend is replaced by an in-memory fake of the meeting and initiative commands.
 
 const invoke = vi.hoisted(() => vi.fn());
@@ -387,7 +388,7 @@ describe("Unique names", () => {
 
     it("counts completed initiatives, but not deleted ones", async () => {
         backend.seedInitiative({ name: "Won", completed: true });
-        backend.seedInitiative({ name: "Gone", archived: true });
+        backend.seedInitiative({ name: "Gone", deleted: true });
         backend.seedInitiative({ name: "Pilot", horizon: "next" });
         const user = await openInitiativesPage();
         const sheet = await openSheet(user, /^Pilot/, "Pilot");
@@ -465,7 +466,7 @@ describe("Deleting an initiative", () => {
         const toast = within(notifications());
         expect(toast.getByText('Deleted "Launch".')).toBeInTheDocument();
         expect(toast.getByRole("button", { name: "Undo" })).toBeInTheDocument();
-        expect(backend.find("Launch").archivedAt).not.toBeNull();
+        expect(backend.find("Launch").deletedAt).not.toBeNull();
     });
 
     it("saves a pending change before deleting, and names the initiative by its latest name", async () => {
@@ -479,7 +480,7 @@ describe("Deleting an initiative", () => {
         expect(
             await within(notifications()).findByText('Deleted "Launch v2".'),
         ).toBeInTheDocument();
-        expect(backend.find("Launch v2").archivedAt).not.toBeNull();
+        expect(backend.find("Launch v2").deletedAt).not.toBeNull();
     });
 
     it("restores the initiative to its place on Undo and focuses its card", async () => {
@@ -503,6 +504,30 @@ describe("Deleting an initiative", () => {
         expect(backend.column("next")).toEqual(["A", "Launch", "C"]);
     });
 
+    it("restores the initiative directly after a card that took its place (spec 0007)", async () => {
+        backend.seedInitiative({ name: "A", horizon: "next", rank: "4" });
+        backend.seedInitiative({ name: "Launch", horizon: "next", rank: "8" });
+        backend.seedInitiative({ name: "C", horizon: "next", rank: "c" });
+        const user = await openInitiativesPage();
+        const sheet = await openSheet(user, /^Launch/, "Launch");
+        await user.click(within(sheet).getByRole("button", { name: "Delete" }));
+        await waitFor(() => expect(cardTexts("Next")).toEqual(["A", "C"]));
+        // As if the user had dropped C into the place of Launch, and the backend had given
+        // C the rank that Launch still keeps.
+        backend.find("C").rank = "8";
+
+        await user.click(
+            await within(notifications()).findByRole("button", {
+                name: "Undo",
+            }),
+        );
+
+        await waitFor(() =>
+            expect(cardTexts("Next")).toEqual(["A", "C", "Launch"]),
+        );
+        expect(backend.column("next")).toEqual(["A", "C", "Launch"]);
+    });
+
     it("restores a completed initiative to Done", async () => {
         backend.seedInitiative({ name: "Launch", completed: true });
         const user = await openInitiativesPage();
@@ -521,7 +546,7 @@ describe("Deleting an initiative", () => {
 
     it("keeps the sheet open and shows a failure toast when the delete fails", async () => {
         backend.seedInitiative({ name: "Launch", horizon: "now" });
-        backend.failing.add("archive_initiative");
+        backend.failing.add("delete_initiative");
         const user = await openInitiativesPage();
         const sheet = await openSheet(user, /^Launch/, "Launch");
 
@@ -543,7 +568,7 @@ describe("Deleting an initiative", () => {
         const user = await openInitiativesPage();
         const sheet = await openSheet(user, /^Launch/, "Launch");
         await user.click(within(sheet).getByRole("button", { name: "Delete" }));
-        backend.failingOnce.add("unarchive_initiative");
+        backend.failingOnce.add("restore_initiative");
 
         await user.click(
             await within(notifications()).findByRole("button", {
@@ -591,11 +616,11 @@ describe("Deleting an initiative", () => {
         ).not.toBeInTheDocument();
         expect(cardTexts("Now")).toEqual([]);
         expect(
-            backend.initiatives.filter((i) => i.archivedAt !== null),
+            backend.initiatives.filter((i) => i.deletedAt !== null),
         ).toHaveLength(1);
     });
 
-    it("shares one archive toast with meetings", async () => {
+    it("shares one delete toast with meetings", async () => {
         backend.seedMeeting("Weekly sync");
         backend.seedInitiative({ name: "Launch", horizon: "now" });
         const user = userEvent.setup();
@@ -603,11 +628,9 @@ describe("Deleting an initiative", () => {
         await user.click(
             await screen.findByRole("link", { name: /Weekly sync/ }),
         );
-        await user.click(
-            await screen.findByRole("button", { name: "Archive" }),
-        );
+        await user.click(await screen.findByRole("button", { name: "Delete" }));
         expect(
-            await within(notifications()).findByText('Archived "Weekly sync".'),
+            await within(notifications()).findByText('Deleted "Weekly sync".'),
         ).toBeInTheDocument();
 
         await user.click(
@@ -624,7 +647,7 @@ describe("Deleting an initiative", () => {
         ).toBeInTheDocument();
         await waitFor(() =>
             expect(
-                within(notifications()).queryByText('Archived "Weekly sync".'),
+                within(notifications()).queryByText('Deleted "Weekly sync".'),
             ).not.toBeInTheDocument(),
         );
         await act(async () => {});
