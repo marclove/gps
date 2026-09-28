@@ -1,13 +1,22 @@
 //! Makes the rank keys that put rows in order.
 //!
-//! This module is the only place that makes rank keys. A rank key is lowercase
-//! hexadecimal text. Compare two keys byte by byte, as `SQLite` and Rust compare
-//! text, to get their order. There is always a new key between two different
-//! keys, so a row can move without a change to the keys of other rows.
+//! This module is the only place that makes rank keys. A rank key is text made
+//! only of the lowercase hexadecimal digits `0123456789abcdef`. It is never
+//! empty, and its last digit is never `0`. Compare two keys byte by byte, as
+//! `SQLite` and Rust compare text, to get their order. Read a key as the digits
+//! of a fraction after the point: a new key between two keys is a value
+//! between the two fractions.
+//!
+//! The last digit is never `0` so that there is always room before a key. If
+//! `40` were a key, no key could sort between `4` and `40`.
 
 use std::fmt;
 
-use fractional_index::FractionalIndex;
+/// The digits of a key, in sort order.
+const DIGITS: &[u8; 16] = b"0123456789abcdef";
+
+/// The key that [`between`] gives without bounds.
+const FIRST: &str = "8";
 
 /// Tells why [`between`] cannot make a key.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -39,7 +48,7 @@ impl std::error::Error for Error {}
 /// Makes a rank key that sorts after `before` and before `after`.
 ///
 /// `None` means that there is no bound on that side. Without bounds, the
-/// result is the default key.
+/// result is `"8"`.
 ///
 /// Returns [`Error::Invalid`] when a bound is not a valid rank key, and
 /// [`Error::OutOfOrder`] when the bounds are equal or reversed.
@@ -48,26 +57,82 @@ impl std::error::Error for Error {}
     expect(dead_code, reason = "initiatives use it from the rank task on")
 )]
 pub fn between(before: Option<&str>, after: Option<&str>) -> Result<String, Error> {
-    let lower = before.map(parse).transpose()?;
-    let upper = after.map(parse).transpose()?;
-    FractionalIndex::new(lower.as_ref(), upper.as_ref())
-        .map(|key| key.to_string())
-        .ok_or_else(|| Error::OutOfOrder {
-            before: before.unwrap_or_default().to_owned(),
-            after: after.unwrap_or_default().to_owned(),
-        })
+    let lower = before.map(validate).transpose()?;
+    let upper = after.map(validate).transpose()?;
+    let out_of_order = || Error::OutOfOrder {
+        before: before.unwrap_or_default().to_owned(),
+        after: after.unwrap_or_default().to_owned(),
+    };
+    let key = match (lower, upper) {
+        (None, None) => FIRST.to_owned(),
+        (Some(a), Some(b)) if a >= b => return Err(out_of_order()),
+        (a, b) => {
+            let mut key = String::new();
+            midpoint(
+                a.unwrap_or_default().as_bytes(),
+                b.map(str::as_bytes),
+                &mut key,
+            );
+            key
+        }
+    };
+    let above_lower = lower.is_none_or(|a| a < key.as_str());
+    let below_upper = upper.is_none_or(|b| key.as_str() < b);
+    if above_lower && below_upper {
+        Ok(key)
+    } else {
+        Err(out_of_order())
+    }
 }
 
-/// Reads a rank key. The crate ignores a last odd character and can panic on
-/// text that is not ASCII, so the text must first be pairs of lowercase
-/// hexadecimal digits.
-fn parse(key: &str) -> Result<FractionalIndex, Error> {
-    let is_hex_pairs =
-        key.len().is_multiple_of(2) && key.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'));
-    is_hex_pairs
-        .then(|| FractionalIndex::from_string(key).ok())
-        .flatten()
-        .ok_or_else(|| Error::Invalid(key.to_owned()))
+/// Returns the key when it is valid: not empty, only lowercase hexadecimal
+/// digits, and a last digit that is not `0`.
+fn validate(key: &str) -> Result<&str, Error> {
+    let valid =
+        key.bytes().all(|b| DIGITS.contains(&b)) && key.bytes().last().is_some_and(|b| b != b'0');
+    if valid {
+        Ok(key)
+    } else {
+        Err(Error::Invalid(key.to_owned()))
+    }
+}
+
+/// Returns the value of one digit of a key.
+fn value(digit: u8) -> usize {
+    DIGITS
+        .iter()
+        .position(|&d| d == digit)
+        .expect("a validated key has only hexadecimal digits")
+}
+
+/// Adds to `out` the digits of a key that sorts after `a` and before `b`.
+///
+/// `a` is a valid key or empty, which means the start of the range. `b` is a
+/// valid key, or `None`, which means the end of the range. `a` must sort
+/// before `b`.
+fn midpoint(a: &[u8], b: Option<&[u8]>, out: &mut String) {
+    if let Some(b) = b {
+        let shared = b
+            .iter()
+            .enumerate()
+            .take_while(|&(i, &digit)| a.get(i).copied().unwrap_or(b'0') == digit)
+            .count();
+        if shared > 0 {
+            out.extend(b[..shared].iter().map(|&d| char::from(d)));
+            midpoint(a.get(shared..).unwrap_or_default(), Some(&b[shared..]), out);
+            return;
+        }
+    }
+    let low = a.first().map_or(0, |&d| value(d));
+    let high = b.map_or(DIGITS.len(), |b| value(b[0]));
+    if high - low > 1 {
+        out.push(char::from(DIGITS[low.midpoint(high)]));
+    } else if let Some(b) = b.filter(|b| b.len() > 1) {
+        out.push(char::from(b[0]));
+    } else {
+        out.push(char::from(DIGITS[low]));
+        midpoint(a.get(1..).unwrap_or_default(), None, out);
+    }
 }
 
 #[cfg(test)]
@@ -81,7 +146,7 @@ mod tests {
     #[test]
     fn between_without_bounds_gives_a_key() {
         let k = key(None, None);
-        assert!(!k.is_empty());
+        assert_eq!(k, "8");
         assert!(k.chars().all(|c| matches!(c, '0'..='9' | 'a'..='f')), "{k}");
     }
 
@@ -127,7 +192,7 @@ mod tests {
         let invalid = between(Some("xyz"), None).unwrap_err();
         assert!(matches!(invalid, Error::Invalid(_)), "{invalid:?}");
         assert!(invalid.to_string().contains("xyz"), "{invalid}");
-        for bad in ["", "8", "801", "zz", "8A80", "a\u{e9}80"] {
+        for bad in ["", "80", "8a0", "zz", "8A", "a\u{e9}8"] {
             assert!(
                 matches!(between(None, Some(bad)), Err(Error::Invalid(_))),
                 "{bad:?} must be invalid"
@@ -144,5 +209,43 @@ mod tests {
         assert!(matches!(reversed, Error::OutOfOrder { .. }), "{reversed:?}");
         assert!(reversed.to_string().contains(&later), "{reversed}");
         assert!(reversed.to_string().contains(&k), "{reversed}");
+    }
+
+    #[test]
+    fn prepending_200_keys_then_dropping_between_each_adjacent_pair() {
+        let mut keys = vec![key(None, None)];
+        for _ in 0..200 {
+            let first = key(None, Some(&keys[0]));
+            assert!(first < keys[0], "{first} < {}", keys[0]);
+            keys.insert(0, first);
+        }
+        for pair in keys.windows(2) {
+            let (x, y) = (&pair[0], &pair[1]);
+            let middle = key(Some(x), Some(y));
+            assert!(x < &middle && &middle < y, "{x} < {middle} < {y}");
+        }
+    }
+
+    #[test]
+    fn many_random_inserts_stay_sorted_and_unique() {
+        let mut state: u64 = 0x2545_f491_4f6c_dd1d;
+        let mut next = move || {
+            state = state
+                .wrapping_mul(6_364_136_223_846_793_005)
+                .wrapping_add(1_442_695_040_888_963_407);
+            state >> 33
+        };
+        let mut keys: Vec<String> = Vec::new();
+        for _ in 0..3000 {
+            let index = usize::try_from(next()).unwrap() % (keys.len() + 1);
+            let before = index.checked_sub(1).map(|i| keys[i].as_str());
+            let after = keys.get(index).map(String::as_str);
+            let new = key(before, after);
+            keys.insert(index, new);
+        }
+        for pair in keys.windows(2) {
+            assert!(pair[0] < pair[1], "{} < {}", pair[0], pair[1]);
+        }
+        assert!(keys.iter().all(|k| validate(k).is_ok()));
     }
 }
