@@ -1610,6 +1610,48 @@ mod tests {
     }
 
     #[test]
+    fn set_project_moves_one_meeting_and_keeps_another_in_a_single_move() {
+        let connection = open_in_memory();
+        let home = home(&connection);
+        let billing = project(&connection, "Billing");
+        let moved = add(&connection, "Moved", "now");
+        let other = add(&connection, "Other", "now");
+        let alone = meeting_of(&connection, moved);
+        let shared = meeting_of(&connection, moved);
+        cover(&connection, shared, other);
+        let link_created_at = |meeting_id: i64, initiative_id: i64| -> Option<String> {
+            connection
+                .query_row(
+                    "SELECT created_at FROM meeting_initiatives
+                     WHERE meeting_id = ?1 AND initiative_id = ?2",
+                    params![meeting_id, initiative_id],
+                    |row| row.get(0),
+                )
+                .optional()
+                .unwrap()
+        };
+        let alone_link = link_created_at(alone, moved);
+        assert!(alone_link.is_some());
+
+        let MoveOutcome::Moved { .. } = set_project(&connection, moved, billing).unwrap() else {
+            panic!("the move should succeed");
+        };
+
+        let alone_meeting = fetch_meeting(&connection, alone);
+        assert_eq!(alone_meeting.project_id, Some(billing));
+        assert_eq!(alone_meeting.initiative_ids, vec![moved]);
+        assert_ne!(alone_meeting.updated_at, OLD_TIME);
+        assert_eq!(link_created_at(alone, moved), alone_link);
+
+        let shared_meeting = fetch_meeting(&connection, shared);
+        assert_eq!(shared_meeting.project_id, Some(home));
+        assert_eq!(shared_meeting.initiative_ids, vec![other]);
+        assert_ne!(shared_meeting.updated_at, OLD_TIME);
+        assert_eq!(link_created_at(shared, moved), None);
+        assert_eq!(link_created_at(shared, other), Some("t".to_string()));
+    }
+
+    #[test]
     fn set_project_keeps_a_meeting_whose_other_initiative_is_deleted() {
         let connection = open_in_memory();
         let billing = project(&connection, "Billing");

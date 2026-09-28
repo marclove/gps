@@ -753,6 +753,12 @@ mod tests {
             [],
         );
         assert!(missing.is_err());
+        let missing_meeting = connection.execute(
+            "INSERT INTO meeting_initiatives (meeting_id, initiative_id, created_at)
+             VALUES (999, 1, 't')",
+            [],
+        );
+        assert!(missing_meeting.is_err());
         let repeated = connection.execute(
             "INSERT INTO meeting_initiatives (meeting_id, initiative_id, created_at)
              VALUES (1, 1, 't')",
