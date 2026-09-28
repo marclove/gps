@@ -764,6 +764,49 @@ describe("InitiativeForm", () => {
             ]);
         });
 
+        it("says that the projects could not be loaded, and loads them again with Retry", async () => {
+            mockBackend((command, args) =>
+                command === "create_initiative"
+                    ? Promise.resolve({
+                          status: "created",
+                          initiative: {
+                              ...PILOT,
+                              projectId: args.projectId,
+                              name: args.name,
+                          },
+                      })
+                    : Promise.reject(new Error(`Unexpected ${command}`)),
+            );
+            const listProjects = invoke.getMockImplementation()!;
+            invoke.mockImplementation((command: string, args) =>
+                command === "list_projects"
+                    ? Promise.reject(new Error("disk full"))
+                    : listProjects(command, args),
+            );
+            const user = userEvent.setup();
+            const { name, onCreated } = await renderForm(null);
+
+            expect(
+                screen.getByText("Couldn't load projects"),
+            ).toBeInTheDocument();
+            expect(
+                screen.queryByRole("combobox", { name: "Project" }),
+            ).not.toBeInTheDocument();
+
+            invoke.mockImplementation(listProjects);
+            await user.click(screen.getByRole("button", { name: "Retry" }));
+
+            await waitFor(() =>
+                expect(projectSelect()).toHaveValue(String(CHECKOUT.id)),
+            );
+            expect(
+                screen.queryByText("Couldn't load projects"),
+            ).not.toBeInTheDocument();
+            await user.type(name, "Launch");
+            await waitFor(() => expect(onCreated).toHaveBeenCalledWith(7));
+            expect(callsOf("list_projects")).toHaveLength(2);
+        });
+
         it("says to create a project first when no project exists", async () => {
             projects = [];
             await renderForm(null);

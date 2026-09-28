@@ -74,6 +74,13 @@ function toSummary(initiative: Initiative): InitiativeSummary {
     return summary;
 }
 
+/** The state of the list of projects that the "Project" select box offers. */
+type ProjectsLoad =
+    | { kind: "loading" }
+    | { kind: "error" }
+    /** The projects that are not deleted, sorted by the shown name. */
+    | { kind: "loaded"; projects: Project[] };
+
 /** Returns the value of the "Project" select box for a project identifier. The empty value means no project. */
 function toValue(projectId: number | null): string {
     return projectId === null ? "" : String(projectId);
@@ -169,8 +176,10 @@ export function InitiativeForm({
                   projectId: initiative.projectId,
               },
     );
-    // The projects that are not deleted, sorted by the shown name, or `null` while they load.
-    const [projects, setProjects] = useState<Project[] | null>(null);
+    const [projectsLoad, setProjectsLoad] = useState<ProjectsLoad>({
+        kind: "loading",
+    });
+    const [projectsAttempt, setProjectsAttempt] = useState(0);
     const [takenName, setTakenName] = useState<string | null>(null);
     const [deleting, setDeleting] = useState(false);
     // The identifier of the initiative, or `null` while the draft is not saved. The ref gives
@@ -211,7 +220,10 @@ export function InitiativeForm({
         listProjects({ includeDeleted: false }).then(
             (loaded) => {
                 if (!current) return;
-                setProjects(sortProjects(loaded));
+                setProjectsLoad({
+                    kind: "loaded",
+                    projects: sortProjects(loaded),
+                });
                 // A draft that did not get a project starts in the only project.
                 if (loaded.length === 1) {
                     setDraft((values) =>
@@ -221,12 +233,16 @@ export function InitiativeForm({
                     );
                 }
             },
-            // The select box stays disabled.
-            () => {},
+            () => current && setProjectsLoad({ kind: "error" }),
         );
         return () => {
             current = false;
         };
+    }, [projectsAttempt]);
+
+    const retryProjects = useCallback(() => {
+        setProjectsLoad({ kind: "loading" });
+        setProjectsAttempt((value) => value + 1);
     }, []);
 
     // Creates the initiative from a draft that has a project and is not empty. If the name is
@@ -406,7 +422,8 @@ export function InitiativeForm({
                 </div>
                 {id === null ? (
                     <ProjectField
-                        projects={projects}
+                        load={projectsLoad}
+                        onRetry={retryProjects}
                         value={toValue(draft.projectId)}
                         allowEmpty
                         message={null}
@@ -424,7 +441,8 @@ export function InitiativeForm({
                         initiativeId={id}
                         initialProjectId={savedProjectId}
                         savedName={savedName}
-                        projects={projects}
+                        load={projectsLoad}
+                        onRetry={retryProjects}
                         onMoved={(summary) => onSavedRef.current(summary)}
                     />
                 )}
@@ -463,20 +481,23 @@ export function InitiativeForm({
 }
 
 /**
- * The "Project" label, the select box, and the texts below it. The choices are `projects`,
- * after an empty choice when `allowEmpty` is true. The select box is disabled while `projects`
- * is `null` or empty. When `projects` is empty, a text tells the user to create a project
- * first and links to the Projects page. `message` shows below the select box and describes
- * it.
+ * The "Project" label, the select box, and the texts below it. The choices are the loaded
+ * projects, after an empty choice when `allowEmpty` is true. The select box is disabled while
+ * the projects load and when no project exists. When no project exists, a text tells the user
+ * to create a project first and links to the Projects page. When the projects cannot be
+ * loaded, the field shows a message and a "Retry" button, which calls `onRetry`, in place of
+ * the select box. `message` shows below the select box and describes it.
  */
 function ProjectField({
-    projects,
+    load,
+    onRetry,
     value,
     allowEmpty,
     message,
     onChange,
 }: {
-    projects: Project[] | null;
+    load: ProjectsLoad;
+    onRetry: () => void;
     value: string;
     allowEmpty: boolean;
     message: string | null;
@@ -484,6 +505,20 @@ function ProjectField({
 }) {
     const selectId = useId();
     const messageId = useId();
+    if (load.kind === "error") {
+        return (
+            <div className="flex min-w-0 flex-col items-start gap-1.5">
+                <span className={FIELD_LABEL_CLASSES}>Project</span>
+                <div className="flex items-center gap-2 text-sm">
+                    <p>Couldn't load projects</p>
+                    <Button variant="outline" size="sm" onClick={onRetry}>
+                        Retry
+                    </Button>
+                </div>
+            </div>
+        );
+    }
+    const projects = load.kind === "loaded" ? load.projects : null;
     return (
         <div className="flex min-w-0 flex-col items-start gap-1.5">
             <label htmlFor={selectId} className={FIELD_LABEL_CLASSES}>
@@ -535,19 +570,22 @@ function ProjectField({
  * move finishes after the field unmounts.
  *
  * `initialProjectId` is the project of the initiative when the field mounts. `savedName`
- * holds the name that the backend has for the initiative.
+ * holds the name that the backend has for the initiative. `load` is the state of the list of
+ * projects, and `onRetry` loads it again.
  */
 function SavedProjectField({
     initiativeId,
     initialProjectId,
     savedName,
-    projects,
+    load,
+    onRetry,
     onMoved,
 }: {
     initiativeId: number;
     initialProjectId: number | null;
     savedName: RefObject<string>;
-    projects: Project[] | null;
+    load: ProjectsLoad;
+    onRetry: () => void;
     onMoved: (summary: InitiativeSummary) => void;
 }) {
     const [shown, setShown] = useState(toValue(initialProjectId));
@@ -565,7 +603,10 @@ function SavedProjectField({
         pendingRequests.current.add(request);
         setShown(value);
         setMessage(null);
-        const project = projects?.find((p) => String(p.id) === value);
+        const project =
+            load.kind === "loaded"
+                ? load.projects.find((p) => String(p.id) === value)
+                : undefined;
         let result: MoveToProjectResult;
         try {
             result = await setInitiativeProject(initiativeId, Number(value));
@@ -603,7 +644,8 @@ function SavedProjectField({
 
     return (
         <ProjectField
-            projects={projects}
+            load={load}
+            onRetry={onRetry}
             value={shown}
             allowEmpty={false}
             message={message}
