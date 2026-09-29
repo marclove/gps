@@ -1,10 +1,11 @@
 import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { useDelete } from "@/components/use-delete";
 import { useFailureToast } from "@/components/use-failure-toast";
 import {
+    actionItemName,
     createMeetingTask,
-    deleteTask,
     listMeetingTasks,
     setTaskCompleted,
     type Task,
@@ -25,11 +26,27 @@ const FAILURE_TEXTS: Record<Failure, string> = {
 
 /**
  * The panel that shows the action items of a meeting. The user can add items, change
- * their text, check them off, and remove them. Only the list scrolls. The heading and
- * the field that adds an item stay in place.
+ * their text, check them off, open them, and remove them. Only the list scrolls. The
+ * heading and the field that adds an item stay in place.
+ *
+ * `onOpen` gets the identifier and the text of an item when the user clicks its Open
+ * button, after a change to the text is saved. `savedTask` is the task that the task sheet
+ * saved last. The panel shows its title in the item of that task. A removed item is
+ * deleted with the delete action, which shows the delete toast with Undo. The panel loads
+ * the items again after each delete and restore, so that a restored item comes back at its
+ * place.
  */
-export function ActionItemsPanel({ meetingId }: { meetingId: number }) {
+export function ActionItemsPanel({
+    meetingId,
+    onOpen,
+    savedTask,
+}: {
+    meetingId: number;
+    onOpen: (id: number, text: string) => void;
+    savedTask?: Task;
+}) {
     const headingId = useId();
+    const { deleteItem, version } = useDelete();
     const [load, setLoad] = useState<LoadState>({ kind: "loading" });
     const [attempt, setAttempt] = useState(0);
     const [newText, setNewText] = useState("");
@@ -57,7 +74,7 @@ export function ActionItemsPanel({ meetingId }: { meetingId: number }) {
         return () => {
             current = false;
         };
-    }, [meetingId, attempt]);
+    }, [meetingId, attempt, version]);
 
     // Move the focus after a removal when the new list is in the page, so that the fields of the items are known.
     useEffect(() => {
@@ -132,9 +149,13 @@ export function ActionItemsPanel({ meetingId }: { meetingId: number }) {
         }
     }
 
-    async function remove(task: Task): Promise<boolean> {
+    async function remove(task: Task, text: string): Promise<boolean> {
         try {
-            await deleteTask(task.id);
+            await deleteItem({
+                kind: "task",
+                id: task.id,
+                name: actionItemName(text),
+            });
         } catch {
             failureToast.show(FAILURE_TEXTS.remove);
             return false;
@@ -214,7 +235,13 @@ export function ActionItemsPanel({ meetingId }: { meetingId: number }) {
                                         ? failureToast.clear()
                                         : failureToast.show(FAILURE_TEXTS.save)
                                 }
-                                onRemove={() => remove(task)}
+                                onOpen={(text) => onOpen(task.id, text)}
+                                savedTask={
+                                    savedTask?.id === task.id
+                                        ? savedTask
+                                        : undefined
+                                }
+                                onRemove={(text) => remove(task, text)}
                                 inputRef={itemFieldRef(task.id)}
                             />
                         ))}

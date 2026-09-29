@@ -17,6 +17,8 @@ import {
     type MeetingChanges,
 } from "@/lib/meetings";
 import { ActionItemsPanel } from "@/features/tasks/action-items-panel";
+import { useTaskSheet } from "@/features/work/use-task-sheet";
+import type { Task } from "@/lib/tasks";
 import { MeetingDetailsSidebar } from "./meeting-details-sidebar";
 import type { MeetingsPageState } from "./meetings-page";
 import { useDelete } from "@/components/use-delete";
@@ -29,6 +31,7 @@ const COMPLETE_DATE = /^\d{4}-\d{2}-\d{2}$/;
 /**
  * The editor for one meeting: its name and its notes at the left, and a sidebar with
  * its date, its project, its initiatives, the Delete button, and its action items at the right.
+ * The Open button of an action item opens the task sheet over the editor.
  * Changes are saved automatically. If `isNew` is true, the name field gets the focus
  * and its text is selected.
  */
@@ -61,6 +64,9 @@ export function MeetingEditor({
     const { deleteItem: deleteInProvider } = useDelete();
     const [deleting, setDeleting] = useState(false);
     const failureToast = useFailureToast();
+    // The task that the task sheet saved last, which the action items panel shows.
+    const [savedTask, setSavedTask] = useState<Task>();
+    const taskSheet = useTaskSheet({ onSaved: setSavedTask });
 
     useEffect(() => {
         if (!isNew) return;
@@ -188,8 +194,15 @@ export function MeetingEditor({
                         Delete
                     </Button>
                 }
-                lists={<ActionItemsPanel meetingId={meeting.id} />}
+                lists={
+                    <ActionItemsPanel
+                        meetingId={meeting.id}
+                        onOpen={taskSheet.openTask}
+                        savedTask={savedTask}
+                    />
+                }
             />
+            {taskSheet.sheet}
         </div>
     );
 }

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { XIcon } from "lucide-react";
+import { PanelRightOpenIcon, XIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
@@ -15,14 +15,20 @@ import { actionItemName, updateTaskTitle, type Task } from "@/lib/tasks";
  * when a save of the text succeeds and `false` when it fails. `inputRef` gets the
  * text field of the item, so that the panel can move the focus to it. `completed`
  * sets the checkbox, and `onCompletedChange` gets the new value when the user clicks it.
- * `onRemove` deletes the item when the user clicks the remove button. It resolves to
- * `true` when the item was deleted and to `false` when the delete failed.
+ * `onOpen` gets the text of the item when the user clicks the Open button. The row saves a
+ * change to the text that waits before it calls `onOpen`, and does not call it if the save
+ * fails. `savedTask` is the task after a save in the task sheet. When it changes, the row
+ * shows its title. `onRemove` gets the text of the item and deletes the item when the user
+ * clicks the remove button. It resolves to `true` when the item was deleted and to `false`
+ * when the delete failed.
  */
 export function ActionItemRow({
     task,
     completed,
     onCompletedChange,
     onSaveResult,
+    onOpen,
+    savedTask,
     onRemove,
     inputRef,
 }: {
@@ -30,11 +36,24 @@ export function ActionItemRow({
     completed: boolean;
     onCompletedChange: (completed: boolean) => void;
     onSaveResult: (ok: boolean) => void;
-    onRemove: () => Promise<boolean>;
+    onOpen: (text: string) => void;
+    savedTask?: Task;
+    onRemove: (text: string) => Promise<boolean>;
     inputRef: (element: HTMLTextAreaElement | null) => void;
 }) {
     // The row owns the text after the first render, so that an answer from the backend never replaces what the user typed.
     const [text, setText] = useState(task.title);
+    // The task that the sheet saved last, so that the row shows a title saved in the sheet once.
+    const [shownSavedTask, setShownSavedTask] = useState(savedTask);
+    if (savedTask !== shownSavedTask) {
+        setShownSavedTask(savedTask);
+        if (savedTask) setText(savedTask.title);
+    }
+    // The text that the backend stores, as far as the row knows, so that it is not saved again.
+    const storedText = useRef(task.title);
+    useEffect(() => {
+        if (savedTask) storedText.current = savedTask.title;
+    }, [savedTask]);
     // The delete that the user started last, until a save finds that it failed.
     const removal = useRef<Promise<boolean> | null>(null);
     // Whether a delete is in progress or has succeeded.
@@ -52,15 +71,17 @@ export function ActionItemRow({
             if (await current) return;
             if (removal.current === current) removal.current = null;
         }
+        if (title === storedText.current) return;
         try {
             await updateTaskTitle(task.id, title);
         } catch (error) {
             onSaveResultRef.current(false);
             throw error;
         }
+        storedText.current = title;
         onSaveResultRef.current(true);
     };
-    useAutosave(text, save);
+    const { flush } = useAutosave(text, save);
 
     return (
         <li className="group flex items-start gap-1">
@@ -96,13 +117,25 @@ export function ActionItemRow({
             <Button
                 variant="ghost"
                 size="icon-sm"
+                aria-label={`Open "${actionItemName(text)}"`}
+                className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
+                onClick={async () => {
+                    // The sheet loads the task, so it must find the text that the row shows.
+                    if (await flush()) onOpen(text);
+                }}
+            >
+                <PanelRightOpenIcon />
+            </Button>
+            <Button
+                variant="ghost"
+                size="icon-sm"
                 aria-label={`Remove "${actionItemName(text)}"`}
                 className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
                 onClick={() => {
                     // Ignore a click while the delete of an earlier click is in progress.
                     if (removing.current) return;
                     removing.current = true;
-                    const current = onRemove();
+                    const current = onRemove(text);
                     removal.current = current;
                     void current.then((ok) => {
                         if (!ok) removing.current = false;
