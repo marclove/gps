@@ -10,10 +10,10 @@ import { toast } from "@/components/ui/toast";
 import type { InitiativeSheet } from "@/features/initiatives/initiative-sheet";
 import type { InitiativeSummary } from "@/lib/initiatives";
 import {
-    FakeRoadmapBackend,
+    FakeBackend,
     type StoredInitiative,
     type StoredProject,
-} from "@/test/fake-roadmap-backend";
+} from "@/test/fake-backend";
 import { ProjectInitiatives } from "./project-initiatives";
 
 const invoke = vi.hoisted(() => vi.fn());
@@ -38,14 +38,14 @@ vi.mock("@/features/initiatives/initiative-sheet", () => ({
     },
 }));
 
-let backend: FakeRoadmapBackend;
+let backend: FakeBackend;
 let checkout: StoredProject;
 let billing: StoredProject;
 
 beforeEach(() => {
     invoke.mockReset();
     sheet.props = null;
-    backend = new FakeRoadmapBackend();
+    backend = new FakeBackend();
     checkout = backend.seedProject("Checkout");
     billing = backend.seedProject("Billing");
     invoke.mockImplementation(backend.handle);

@@ -3,10 +3,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import App from "@/App";
 import {
-    FakeRoadmapBackend,
+    FakeBackend,
     type Horizon,
     type StoredProject,
-} from "@/test/fake-roadmap-backend";
+} from "@/test/fake-backend";
 import { waitForCardInColumn } from "@/test/pointer-drag";
 
 // Feature spec for dragging cards on a roadmap that is filtered to one project in
@@ -18,13 +18,13 @@ const invoke = vi.hoisted(() => vi.fn());
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke }));
 
-let backend: FakeRoadmapBackend;
+let backend: FakeBackend;
 let checkout: StoredProject;
 let billing: StoredProject;
 
 beforeEach(() => {
     invoke.mockReset();
-    backend = new FakeRoadmapBackend();
+    backend = new FakeBackend();
     checkout = backend.seedProject("Checkout");
     billing = backend.seedProject("Billing");
     invoke.mockImplementation(backend.handle);

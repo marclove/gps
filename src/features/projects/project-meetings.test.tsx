@@ -7,23 +7,20 @@ import { FailureToastProvider } from "@/components/failure-toast-provider";
 import { Toaster } from "@/components/toaster";
 import { toast } from "@/components/ui/toast";
 import { formatMeetingDate } from "@/lib/dates";
-import {
-    FakeRoadmapBackend,
-    type StoredProject,
-} from "@/test/fake-roadmap-backend";
+import { FakeBackend, type StoredProject } from "@/test/fake-backend";
 import { ProjectMeetings } from "./project-meetings";
 
 const invoke = vi.hoisted(() => vi.fn());
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke }));
 
-let backend: FakeRoadmapBackend;
+let backend: FakeBackend;
 let checkout: StoredProject;
 let billing: StoredProject;
 
 beforeEach(() => {
     invoke.mockReset();
-    backend = new FakeRoadmapBackend();
+    backend = new FakeBackend();
     checkout = backend.seedProject("Checkout");
     billing = backend.seedProject("Billing");
     invoke.mockImplementation(backend.handle);

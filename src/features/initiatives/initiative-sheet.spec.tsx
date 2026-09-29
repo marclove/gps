@@ -2,7 +2,7 @@ import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "@/App";
-import { FakeRoadmapBackend } from "@/test/fake-roadmap-backend";
+import { FakeBackend } from "@/test/fake-backend";
 
 // Feature spec for the sheet, saving, and deleting an initiative in
 // docs/specs/0006-managing-initiatives.md, with the changes of
@@ -13,11 +13,11 @@ const invoke = vi.hoisted(() => vi.fn());
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke }));
 
-let backend: FakeRoadmapBackend;
+let backend: FakeBackend;
 
 beforeEach(() => {
     invoke.mockReset();
-    backend = new FakeRoadmapBackend();
+    backend = new FakeBackend();
     // Every initiative needs a project. When exactly one project exists, a draft starts in
     // it, so the specs of Spec 0006 create initiatives as before.
     backend.seedProject("Unsorted");
