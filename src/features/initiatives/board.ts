@@ -4,6 +4,7 @@ import {
     type Column,
     type InitiativeSummary,
 } from "@/lib/initiatives";
+import { columnOf } from "@/components/board/cards";
 
 /** The cards of the roadmap, in each column from the top. */
 export type Board = Record<Column, InitiativeSummary[]>;
@@ -78,41 +79,6 @@ export function fullIndex(
     if (place > 0) return position(visible[place - 1]) + 1;
     if (visible.length > 0) return position(visible[0]);
     return all.length;
-}
-
-/** Returns the column that holds the card with the identifier, or `null` if no column holds it. */
-export function columnOf(board: Board, id: number): Column | null {
-    return (
-        COLUMNS.find((column) =>
-            board[column.id].some((card) => card.id === id),
-        )?.id ?? null
-    );
-}
-
-/**
- * Returns a board with the card moved to the column `to`, at the place `index` in that
- * column, counted without the card. An index larger than the column puts the card at the end.
- * A card moved to Done goes first in Done, and the index has no effect. A move inside Done
- * does not change the board. If no column holds the card, the function returns the board that
- * it gets.
- */
-export function moveCard(
-    board: Board,
-    id: number,
-    to: Column,
-    index: number,
-): Board {
-    const from = columnOf(board, id);
-    if (from === null || (from === "done" && to === "done")) return board;
-    const card = board[from].find((candidate) => candidate.id === id)!;
-    const next: Board = {
-        ...board,
-        [from]: board[from].filter((candidate) => candidate.id !== id),
-    };
-    const destination = [...next[to]];
-    destination.splice(to === "done" ? 0 : index, 0, card);
-    next[to] = destination;
-    return next;
 }
 
 /**

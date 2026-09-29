@@ -1,5 +1,6 @@
 import { PlusIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { columnOf, moveCard } from "@/components/board/cards";
 import { PageHeader } from "@/components/page-header";
 import { useDelete, type RestoredItem } from "@/components/use-delete";
 import { useFailureToast } from "@/components/use-failure-toast";
@@ -23,11 +24,9 @@ import {
 import {
     addCard,
     buildBoard,
-    columnOf,
     emptyBoard,
     filterBoard,
     fullIndex,
-    moveCard,
     removeCard,
     replaceCard,
     type Board,

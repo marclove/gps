@@ -16,10 +16,11 @@ import {
 import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { CardPointerSensor } from "@/components/board/card-pointer-sensor";
+import { columnOf, moveCard } from "@/components/board/cards";
 import { COLUMNS, type Column } from "@/lib/initiatives";
 import { announcements, dropTarget } from "./announcements";
-import { CardPointerSensor } from "./card-pointer-sensor";
-import { columnOf, moveCard, type Board } from "./board";
+import type { Board } from "./board";
 import { InitiativeCardCopy } from "./initiative-card";
 import { RoadmapColumn } from "./roadmap-column";
 
