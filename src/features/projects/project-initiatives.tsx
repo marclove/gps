@@ -170,15 +170,21 @@ export function ProjectInitiatives({
                     <p className="text-muted-foreground">No initiatives</p>
                 )}
                 {rows.length > 0 && (
-                    <ul className="list-disc space-y-1 pl-5">
+                    // The WebKit of the macOS window draws no list marker when the item
+                    // holds only a flex box, so each item draws its own bullet. Safari drops
+                    // the list role of a list without markers, so the role is set again.
+                    <ul role="list" className="space-y-0.5">
                         {rows.map((initiative) => (
-                            <li key={initiative.id}>
+                            <li
+                                key={initiative.id}
+                                className="flex items-center gap-1 before:size-1.5 before:shrink-0 before:rounded-full before:bg-current before:content-['']"
+                            >
                                 <button
                                     type="button"
                                     onClick={() =>
                                         openInitiative(initiative.id)
                                     }
-                                    className="flex w-full items-center rounded-lg px-2 py-2 text-left outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50"
+                                    className="flex min-w-0 flex-1 items-center rounded-lg px-2 py-1 text-left outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50"
                                 >
                                     <span className="min-w-0 truncate">
                                         {initiativeDisplayName(initiative.name)}
