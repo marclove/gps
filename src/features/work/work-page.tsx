@@ -82,7 +82,7 @@ export function WorkPage() {
             changeBoard((board) => placeTask(board, task));
         },
         onDeleted: (id) => changeBoard((board) => removeTask(board, id)),
-        newButton,
+        focusAfterDelete: newButton,
     });
 
     useEffect(() => {

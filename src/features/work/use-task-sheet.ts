@@ -32,21 +32,22 @@ type OpenTask = {
  * The options are the callbacks of the page. `onSaved` receives the task after each save
  * that succeeds, also after the create of a draft. `onCreated` receives the task that a draft
  * created, once. When the user deletes the task in the sheet, the hook deletes it and shows
- * the delete toast. Then it closes the sheet, moves the focus to `newButton` if the page
+ * the delete toast. Then it closes the sheet, moves the focus to `focusAfterDelete` if the page
  * gives it, because the element that opened the sheet is gone, and calls `onDeleted` with the
- * identifier. If the delete fails, the sheet stays open, and a failure toast says "Couldn't
+ * identifier. The hook calls `onDeleted` before the sheet gives the focus away, so the page
+ * can set `focusAfterDelete` in it. If the delete fails, the sheet stays open, and a failure toast says "Couldn't
  * delete the task. Try again."
  */
 export function useTaskSheet({
     onSaved,
     onCreated,
     onDeleted,
-    newButton,
+    focusAfterDelete,
 }: {
     onSaved?: (task: Task) => void;
     onCreated?: (task: Task) => void;
     onDeleted?: (id: number) => void;
-    newButton?: RefObject<HTMLButtonElement | null>;
+    focusAfterDelete?: RefObject<HTMLElement | null>;
 }): {
     openId: TaskSheetTarget | null;
     openTask: (id: number, title: string) => void;
@@ -55,18 +56,18 @@ export function useTaskSheet({
 } {
     const [open, setOpen] = useState<OpenTask | null>(null);
     // True when the sheet closes because its task was deleted.
-    const [focusNewOnClose, setFocusNewOnClose] = useState(false);
+    const [focusAfterClose, setFocusAfterClose] = useState(false);
     const drafts = useRef(0);
     const { deleteItem } = useDelete();
     const failureToast = useFailureToast();
 
     function openTask(id: number, title: string) {
-        setFocusNewOnClose(false);
+        setFocusAfterClose(false);
         setOpen({ id, title, draft: 0 });
     }
 
     function openDraft() {
-        setFocusNewOnClose(false);
+        setFocusAfterClose(false);
         drafts.current += 1;
         setOpen({ id: "new", title: "", draft: drafts.current });
     }
@@ -111,7 +112,7 @@ export function useTaskSheet({
             return;
         }
         failureToast.clear();
-        setFocusNewOnClose(true);
+        setFocusAfterClose(true);
         setOpen((current) => (current?.id === id ? null : current));
         onDeleted?.(id);
     }
@@ -124,7 +125,7 @@ export function useTaskSheet({
         onSaved: saved,
         onCreated: created,
         onDelete: deleteTask,
-        finalFocus: focusNewOnClose ? newButton : undefined,
+        finalFocus: focusAfterClose ? focusAfterDelete : undefined,
     });
 
     return { openId: open?.id ?? null, openTask, openDraft, sheet };

@@ -16,7 +16,10 @@ import {
     type Meeting,
     type MeetingChanges,
 } from "@/lib/meetings";
-import { ActionItemsPanel } from "@/features/tasks/action-items-panel";
+import {
+    ActionItemsPanel,
+    type ActionItemsPanelHandle,
+} from "@/features/tasks/action-items-panel";
 import { useTaskSheet } from "@/features/work/use-task-sheet";
 import type { Task } from "@/lib/tasks";
 import { MeetingDetailsSidebar } from "./meeting-details-sidebar";
@@ -66,7 +69,17 @@ export function MeetingEditor({
     const failureToast = useFailureToast();
     // The task that the task sheet saved last, which the action items panel shows.
     const [savedTask, setSavedTask] = useState<Task>();
-    const taskSheet = useTaskSheet({ onSaved: setSavedTask });
+    const actionItems = useRef<ActionItemsPanelHandle>(null);
+    // The element that gets the focus after a task is deleted in the task sheet, because
+    // the Open button that opened the sheet is gone.
+    const focusAfterDelete = useRef<HTMLElement | null>(null);
+    const taskSheet = useTaskSheet({
+        onSaved: setSavedTask,
+        onDeleted: (id) => {
+            focusAfterDelete.current = actionItems.current?.deleted(id) ?? null;
+        },
+        focusAfterDelete,
+    });
 
     useEffect(() => {
         if (!isNew) return;
@@ -196,6 +209,7 @@ export function MeetingEditor({
                 }
                 lists={
                     <ActionItemsPanel
+                        ref={actionItems}
                         meetingId={meeting.id}
                         onOpen={taskSheet.openTask}
                         savedTask={savedTask}
