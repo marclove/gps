@@ -252,14 +252,14 @@ An attendee of a meeting.
 
 A task is one piece of work that the user must do. In a meeting, the user interface calls a task an action item (ADR 0010).
 
-- `title` is the one line of text that today is named `description`. `notes` is new and holds Markdown, for the definition that the user adds while a task waits in the icebox.
+- `title` is the one line of text that tells what to do. ADR 0018 renamed it from `description`. `description` is new and holds Markdown, for the definition that the user adds while a task waits in the icebox.
 - `meeting_id` is null for a task outside a meeting. The meeting is where the task was recorded. It says nothing about the project or the initiative of the task.
 - `project_id` and `initiative_id` are both stored. When `initiative_id` is set, `project_id` is the project of that initiative, and the backend sets it. Storing both makes "all tasks of this project" one condition. When the user changes the project of a task to a project that its initiative does not belong to, the backend clears `initiative_id`. When the user creates a task in a meeting, the user interface offers the meeting's project and initiatives as defaults.
 - `rank` is null while the task is in the icebox. It is unique among prioritized tasks. See "How tasks move".
 - `started_at` is set when the user starts the task, and cleared when the user undoes that.
 - `completed_at` keeps its meaning. Checking a task off in a meeting completes it, wherever it is in the backlog.
 - `deleted_at` is new. Today a task is deleted for real. In the target model a task is deleted like everything else, with undo.
-- Nothing records where a task from outside the application came from, other than what the user writes in `notes`.
+- Nothing records where a task from outside the application came from, other than what the user writes in `description`.
 
 ### `glossary_terms`
 
@@ -323,7 +323,7 @@ For each table that exists today, this section lists what changes. Each change n
 
 ### `tasks`
 
-- `description` becomes `title`. `notes`, `project_id`, `initiative_id`, `rank`, `started_at`, and `deleted_at` are added.
+- `description`, `project_id`, `initiative_id`, `rank`, `started_at`, and `deleted_at` are added.
 - Existing tasks get a null rank, so they start in the icebox, unless the ticket decides to place the open ones in the backlog in the order they were created.
 - The migration can set `initiative_id` and `project_id` of a task from the initiative of its meeting, if the ticket decides so.
 - Deleting a task no longer removes the row. This supersedes the permanent delete in ADR 0010.
@@ -338,7 +338,7 @@ These were considered and are not part of the target model. Each can be added la
 
 - Numeric progress on key results, and links from initiatives to key results instead of objectives.
 - RACI roles for other people on an initiative. The RACI role is the user's own.
-- The person who gave the user a task. What the user writes in `notes` is enough.
+- The person who gave the user a task. What the user writes in the `description` of the task is enough.
 - A RACI role for the user on a project as a whole. Responsibility lives on initiatives.
 - Moving an initiative to another project.
 - An order of the user's own in the icebox.
@@ -353,7 +353,7 @@ Each step is releasable on its own. The order is a suggestion.
 1. Rename `archived_at` to `deleted_at`, and replace positions with ranks. Neither changes what the user sees.
 2. Projects, with initiatives in projects and meetings about projects.
 3. Meetings that cover several initiatives.
-4. The Work section: icebox, backlog, Current, and Done, with notes and links on tasks.
+4. The Work section: icebox, backlog, Current, and Done, with descriptions and links on tasks.
 5. The directory: people, attendees, and stakeholders.
 6. Objectives and key results.
 7. The glossary.
