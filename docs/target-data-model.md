@@ -101,7 +101,7 @@ erDiagram
     tasks {
         INTEGER id PK "Identifier that SQLite assigns"
         TEXT title "Not null. One line of text that tells what to do"
-        TEXT notes "Not null, default empty. Markdown"
+        TEXT description "Not null, default empty. Markdown"
         INTEGER meeting_id FK "Null for a task outside a meeting. Refers to meetings.id"
         INTEGER project_id FK "Null for a task on no project. Refers to projects.id"
         INTEGER initiative_id FK "Null for a task on no initiative. Refers to initiatives.id. Its project is the project of the task"
