@@ -96,7 +96,32 @@ export function updateTaskTitle(id: number, title: string): Promise<Task> {
     return invoke<Task>("update_task_title", { id, title });
 }
 
-/** Marks a task as done or as not done and returns the stored task. */
+/**
+ * Moves a task to a column of the Work board and returns the stored task. For Current
+ * and the Backlog, `index` is the place among the cards of that column, counted from 0
+ * without the task. The backend ignores `index` for the Icebox and Done. The backend
+ * refuses a completed or deleted task.
+ */
+export function moveTask(
+    id: number,
+    destination: TaskStage,
+    index: number,
+): Promise<Task> {
+    return invoke<Task>("move_task", { id, destination, index });
+}
+
+/**
+ * Starts a task in the Backlog and returns the stored task. The task keeps its place in
+ * the list. The backend refuses a task that is not in the Backlog.
+ */
+export function startTask(id: number): Promise<Task> {
+    return invoke<Task>("start_task", { id });
+}
+
+/**
+ * Marks a task as done or as not done and returns the stored task. A task that is not
+ * done goes back to its held place. The backend refuses a deleted task.
+ */
 export function setTaskCompleted(
     id: number,
     completed: boolean,
@@ -104,7 +129,12 @@ export function setTaskCompleted(
     return invoke<Task>("set_task_completed", { id, completed });
 }
 
-/** Deletes a task permanently. */
+/** Marks a task as deleted. The task keeps its stage and its place, so `restoreTask` can bring it back. */
 export function deleteTask(id: number): Promise<void> {
     return invoke<void>("delete_task", { id });
+}
+
+/** Brings a deleted task back to its stage and its held place, and returns the stored task. */
+export function restoreTask(id: number): Promise<Task> {
+    return invoke<Task>("restore_task", { id });
 }

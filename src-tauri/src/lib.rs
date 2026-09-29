@@ -392,6 +392,29 @@ fn update_task_title(database: State<'_, Database>, id: i64, title: &str) -> Res
     clippy::needless_pass_by_value,
     reason = "Tauri gives managed state to commands by value"
 )]
+fn move_task(
+    database: State<'_, Database>,
+    id: i64,
+    destination: tasks::Destination,
+    index: i64,
+) -> Result<Task, String> {
+    database.run(|connection| tasks::move_to(connection, id, destination, index))
+}
+
+#[tauri::command]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Tauri gives managed state to commands by value"
+)]
+fn start_task(database: State<'_, Database>, id: i64) -> Result<Task, String> {
+    database.run(|connection| tasks::start(connection, id))
+}
+
+#[tauri::command]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Tauri gives managed state to commands by value"
+)]
 fn set_task_completed(
     database: State<'_, Database>,
     id: i64,
@@ -407,6 +430,15 @@ fn set_task_completed(
 )]
 fn delete_task(database: State<'_, Database>, id: i64) -> Result<(), String> {
     database.run(|connection| tasks::delete(connection, id))
+}
+
+#[tauri::command]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Tauri gives managed state to commands by value"
+)]
+fn restore_task(database: State<'_, Database>, id: i64) -> Result<Task, String> {
+    database.run(|connection| tasks::restore(connection, id))
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -451,8 +483,11 @@ pub fn run() {
             list_meeting_tasks,
             create_meeting_task,
             update_task_title,
+            move_task,
+            start_task,
             set_task_completed,
-            delete_task
+            delete_task,
+            restore_task
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

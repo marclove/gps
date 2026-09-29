@@ -6,7 +6,10 @@ import {
     getTask,
     listMeetingTasks,
     listTasks,
+    moveTask,
+    restoreTask,
     setTaskCompleted,
+    startTask,
     stageOf,
     taskTitle,
     updateTaskTitle,
@@ -29,8 +32,11 @@ describe("task commands", () => {
         await listMeetingTasks(1);
         await createMeetingTask(1, "Send the deck");
         await updateTaskTitle(3, "Call Sam");
+        await moveTask(3, "current", 1);
+        await startTask(3);
         await setTaskCompleted(3, true);
         await deleteTask(3);
+        await restoreTask(3);
 
         expect(invoke.mock.calls).toEqual([
             ["list_tasks"],
@@ -38,8 +44,11 @@ describe("task commands", () => {
             ["list_meeting_tasks", { meetingId: 1 }],
             ["create_meeting_task", { meetingId: 1, title: "Send the deck" }],
             ["update_task_title", { id: 3, title: "Call Sam" }],
+            ["move_task", { id: 3, destination: "current", index: 1 }],
+            ["start_task", { id: 3 }],
             ["set_task_completed", { id: 3, completed: true }],
             ["delete_task", { id: 3 }],
+            ["restore_task", { id: 3 }],
         ]);
     });
 });
