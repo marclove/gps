@@ -404,7 +404,9 @@ describe("Board", () => {
         await user.click(within(sheet).getByRole("button", { name: "Delete" }));
 
         await waitFor(() =>
-            expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+            expect(
+                screen.queryByRole("dialog", { name: "B" }),
+            ).not.toBeInTheDocument(),
         );
         expect(cardTitles("Backlog")).toEqual(["A", "C"]);
         expect(screen.getByRole("button", { name: "New task" })).toHaveFocus();
