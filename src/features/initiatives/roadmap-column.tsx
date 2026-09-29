@@ -6,7 +6,8 @@ import {
 } from "@dnd-kit/sortable";
 import type { ListData } from "@/components/board/drop-target";
 import type { Column, InitiativeSummary } from "@/lib/initiatives";
-import { InitiativeCard } from "./initiative-card";
+import { BoardCard } from "@/components/board/board-card";
+import { InitiativeCardContent } from "./initiative-card";
 
 // Done does not take part in sorting, so its cards stay in place while a card is over them.
 const keepInPlace: SortingStrategy = () => null;
@@ -68,14 +69,19 @@ export function RoadmapColumn({
                             <ul className="flex flex-col gap-2">
                                 {cards.map((card) => (
                                     <li key={card.id}>
-                                        <InitiativeCard
-                                            initiative={card}
-                                            projectName={projectName(
-                                                card.projectId,
-                                            )}
-                                            column={column.id}
+                                        <BoardCard
+                                            id={card.id}
+                                            draggable
                                             onOpen={onOpen}
-                                        />
+                                        >
+                                            <InitiativeCardContent
+                                                initiative={card}
+                                                projectName={projectName(
+                                                    card.projectId,
+                                                )}
+                                                done={column.id === "done"}
+                                            />
+                                        </BoardCard>
                                     </li>
                                 ))}
                             </ul>

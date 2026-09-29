@@ -143,8 +143,9 @@ export function InitiativesPage() {
         ) {
             return;
         }
+        // The first button of a card is its open button.
         const card = boardArea.current?.querySelector<HTMLElement>(
-            `[data-initiative-id="${restored.id}"]`,
+            `[data-card-id="${restored.id}"] button`,
         );
         if (card) {
             card.focus();
