@@ -115,79 +115,45 @@ export function initiativeDisplayName(name: string): string {
     return name.trim() === "" ? DEFAULT_INITIATIVE_NAME : name;
 }
 
-/** An initiative choice in the select box of a meeting: its identifier and its shown name. */
-export type InitiativeChoice = { id: number; label: string };
-
-/** A group of initiative choices in the select box of a meeting. */
-export type ChoiceGroup = {
-    label: string;
-    choices: InitiativeChoice[];
-};
-
-function choice(initiative: InitiativeSummary): InitiativeChoice {
-    return {
-        id: initiative.id,
-        label: initiativeDisplayName(initiative.name),
-    };
-}
+/**
+ * An initiative that the user can choose for a meeting: its identifier, its shown name, and
+ * whether it is deleted.
+ */
+export type InitiativeChoice = { id: number; label: string; deleted: boolean };
 
 function byLabel(a: { label: string }, b: { label: string }): number {
     return a.label.localeCompare(b.label, undefined, { sensitivity: "base" });
 }
 
-/** Returns the initiatives of the project. When `projectId` is `null`, returns no initiatives. */
-function ofProject(
-    all: InitiativeSummary[],
-    projectId: number | null,
-): InitiativeSummary[] {
-    return projectId === null
-        ? []
-        : all.filter((i) => i.projectId === projectId);
-}
-
 /**
- * Returns the groups of initiative choices for the select box of a meeting, without the empty
- * choice. Only the initiatives of the project `projectId` are included, and no initiatives when
- * `projectId` is `null`. The groups are "Now", "Next", and "Later", sorted by rank and then by
- * identifier, then "Completed", sorted by the shown name without regard to case. Deleted
- * initiatives are not included. Empty groups are not included.
+ * Returns the initiatives that the user can choose for a meeting of the project `projectId`:
+ * the initiatives of the project that are not deleted, also the completed ones, and the deleted
+ * initiatives of the project whose identifiers are in `linked`. The label is the shown name,
+ * with " (deleted)" after the name of a deleted initiative. The choices are sorted by the label
+ * without regard to case. Returns no choices when `projectId` is `null`.
  */
-export function initiativeChoiceGroups(
+export function initiativeChoices(
     all: InitiativeSummary[],
     projectId: number | null,
-): ChoiceGroup[] {
-    const initiatives = ofProject(all, projectId);
-    const open = initiatives
-        .filter((i) => i.deletedAt === null && i.completedAt === null)
-        .sort((a, b) => compareRanks(a.rank, b.rank) || a.id - b.id);
-    const groups: ChoiceGroup[] = COLUMNS.filter(
-        (column) => column.id !== "done",
-    ).map((column) => ({
-        label: column.title,
-        choices: open.filter((i) => i.horizon === column.id).map(choice),
-    }));
-    groups.push({
-        label: "Completed",
-        choices: initiatives
-            .filter((i) => i.deletedAt === null && i.completedAt !== null)
-            .map(choice)
-            .sort(byLabel),
-    });
-    return groups.filter((group) => group.choices.length > 0);
-}
-
-/**
- * Returns the choices for the deleted initiatives of the project `projectId`, also the
- * completed ones. Returns no choices when `projectId` is `null`. The select box of a meeting
- * shows one of them only while it is the initiative that the meeting is assigned to.
- */
-export function deletedInitiativeChoices(
-    all: InitiativeSummary[],
-    projectId: number | null,
+    linked: ReadonlySet<number>,
 ): InitiativeChoice[] {
-    return ofProject(all, projectId)
-        .filter((i) => i.deletedAt !== null)
-        .map(choice);
+    if (projectId === null) return [];
+    return all
+        .filter(
+            (i) =>
+                i.projectId === projectId &&
+                (i.deletedAt === null || linked.has(i.id)),
+        )
+        .map((i) => {
+            const deleted = i.deletedAt !== null;
+            const name = initiativeDisplayName(i.name);
+            return {
+                id: i.id,
+                label: deleted ? `${name} (deleted)` : name,
+                deleted,
+            };
+        })
+        .sort(byLabel);
 }
 
 /** Returns summaries of initiatives. Deleted initiatives are included only when asked. */
@@ -241,10 +207,11 @@ export function updateInitiative(
 }
 
 /**
- * Moves an initiative and the meetings that are assigned to it to another project. The
- * initiative keeps its column and rank. The result is "nameTaken" if an initiative of the
- * other project that is not deleted has the same name, and then nothing changes. The backend
- * rejects a project that is deleted or does not exist.
+ * Moves an initiative to another project. The initiative keeps its column and rank. A meeting
+ * that covers only this initiative moves to the project too. A meeting that also covers another
+ * initiative stays in its project and stops covering this initiative. The result is
+ * "nameTaken" if an initiative of the other project that is not deleted has the same name, and
+ * then nothing changes. The backend rejects a project that is deleted or does not exist.
  */
 export function setInitiativeProject(
     id: number,

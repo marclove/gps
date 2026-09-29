@@ -92,7 +92,7 @@ function currentSheet(): SheetProps {
 }
 
 describe("ProjectInitiatives", () => {
-    it("shows the initiatives of the project in the order of the roadmap, with their columns", async () => {
+    it("shows the initiatives of the project in the order of the roadmap", async () => {
         backend.seedInitiative({
             name: "Won",
             project: checkout,
@@ -118,10 +118,10 @@ describe("ProjectInitiatives", () => {
 
         await waitFor(() =>
             expect(rows()).toEqual([
-                "Untitled initiativeNow",
-                "SoonNext",
-                "SomedayLater",
-                "WonDone",
+                "Untitled initiative",
+                "Soon",
+                "Someday",
+                "Won",
             ]),
         );
         for (const row of within(list()).getAllByRole("listitem")) {
@@ -179,7 +179,7 @@ describe("ProjectInitiatives", () => {
             currentSheet().onSaved(summaryOf(created));
         });
 
-        expect(rows()).toEqual(["LaunchLater"]);
+        expect(rows()).toEqual(["Launch"]);
         expect(
             screen.getByText(
                 `Sheet ${created.id} named "Launch" in project ${checkout.id}`,
@@ -194,12 +194,12 @@ describe("ProjectInitiatives", () => {
             horizon: "now",
         });
         renderList(checkout.id);
-        await waitFor(() => expect(rows()).toEqual(["LaunchNow"]));
+        await waitFor(() => expect(rows()).toEqual(["Launch"]));
 
         act(() =>
             currentSheet().onSaved(summaryOf(launch, { name: "Launch v2" })),
         );
-        expect(rows()).toEqual(["Launch v2Now"]);
+        expect(rows()).toEqual(["Launch v2"]);
 
         act(() =>
             currentSheet().onSaved(
@@ -266,7 +266,7 @@ describe("ProjectInitiatives", () => {
         await user.click(
             await within(notifications).findByRole("button", { name: "Undo" }),
         );
-        await waitFor(() => expect(rows()).toEqual(["LaunchNow"]));
+        await waitFor(() => expect(rows()).toEqual(["Launch"]));
     });
 
     it("keeps the row and shows a failure toast when the delete fails", async () => {
@@ -289,7 +289,7 @@ describe("ProjectInitiatives", () => {
                 screen.getByRole("region", { name: "Notifications" }),
             ).findByText("Couldn't delete the initiative. Try again."),
         ).toBeInTheDocument();
-        expect(rows()).toEqual(["LaunchNow"]);
+        expect(rows()).toEqual(["Launch"]);
         expect(currentSheet().id).toBe(launch.id);
     });
 
@@ -304,6 +304,6 @@ describe("ProjectInitiatives", () => {
         ).toBeInTheDocument();
         await user.click(within(list()).getByRole("button", { name: "Retry" }));
 
-        await waitFor(() => expect(rows()).toEqual(["LaunchLater"]));
+        await waitFor(() => expect(rows()).toEqual(["Launch"]));
     });
 });

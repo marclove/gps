@@ -49,15 +49,15 @@ function list() {
 
 describe("ProjectMeetings", () => {
     it("lists the meetings about the project, newest first, with links to their editor pages", async () => {
-        const kickoff = backend.seedMeeting("Kickoff", null, {
+        const kickoff = backend.seedMeeting("Kickoff", [], {
             project: checkout,
             date: "2026-09-20",
         });
-        const untitled = backend.seedMeeting("", null, {
+        const untitled = backend.seedMeeting("", [], {
             project: checkout,
             date: "2026-09-24",
         });
-        backend.seedMeeting("Billing sync", null, { project: billing });
+        backend.seedMeeting("Billing sync", [], { project: billing });
         backend.seedMeeting("1:1");
         renderList(checkout.id);
 
@@ -76,7 +76,7 @@ describe("ProjectMeetings", () => {
     });
 
     it("says No meetings when the project has none", async () => {
-        backend.seedMeeting("Billing sync", null, { project: billing });
+        backend.seedMeeting("Billing sync", [], { project: billing });
         renderList(checkout.id);
 
         expect(
@@ -92,7 +92,7 @@ describe("ProjectMeetings", () => {
     });
 
     it("says so when the meetings cannot be loaded, and loads them again on Retry", async () => {
-        backend.seedMeeting("Kickoff", null, { project: checkout });
+        backend.seedMeeting("Kickoff", [], { project: checkout });
         // The first command is the load of the list.
         invoke.mockRejectedValueOnce("database is locked");
         const user = userEvent.setup();

@@ -27,7 +27,7 @@ const MEETING = {
     date: "2026-09-24",
     notes: "Discussed the roadmap",
     projectId: null,
-    initiativeId: null,
+    initiativeIds: [],
     createdAt: "2026-09-24T10:00:00.000Z",
     updatedAt: "2026-09-24T10:00:00.000Z",
 };

@@ -83,14 +83,20 @@ export function ProjectMeetings({ projectId }: { projectId: number | null }) {
                     <p className="text-muted-foreground">No meetings</p>
                 )}
                 {shown.kind === "loaded" && shown.meetings.length > 0 && (
-                    <ul className="flex flex-col gap-1">
+                    // The WebKit of the macOS window draws no list marker when the item
+                    // holds only a flex box, so each item draws its own bullet. Safari drops
+                    // the list role of a list without markers, so the role is set again.
+                    <ul role="list" className="space-y-0.5">
                         {shown.meetings.map((meeting) => (
-                            <li key={meeting.id}>
+                            <li
+                                key={meeting.id}
+                                className="flex items-center gap-1 before:size-1.5 before:shrink-0 before:rounded-full before:bg-current before:content-['']"
+                            >
                                 <Link
                                     to={`/meetings/${meeting.id}`}
-                                    className="flex items-center justify-between gap-2 rounded-lg px-3 py-2 hover:bg-muted"
+                                    className="flex min-w-0 flex-1 items-center justify-between gap-2 rounded-lg px-2 py-1 hover:bg-muted"
                                 >
-                                    <span className="min-w-0 truncate font-medium">
+                                    <span className="min-w-0 truncate">
                                         {displayName(meeting.name)}
                                     </span>
                                     <span className="shrink-0 text-muted-foreground">

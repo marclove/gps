@@ -71,7 +71,8 @@ export type StoredMeeting = {
     date: string;
     notes: string;
     projectId: number | null;
-    initiativeId: number | null;
+    /** The initiatives that the meeting covers, also deleted ones, in ascending order. */
+    initiativeIds: number[];
     createdAt: string;
     updatedAt: string;
     deletedAt: string | null;
@@ -112,7 +113,8 @@ export type FailingCommand =
     | "move_initiative"
     | "delete_initiative"
     | "restore_initiative"
-    | "set_meeting_initiative"
+    | "add_meeting_initiative"
+    | "remove_meeting_initiative"
     | "delete_meeting";
 
 /** Returns the initiative as `list_initiatives` returns it, without its description. */
@@ -260,12 +262,13 @@ export class FakeRoadmapBackend {
     }
 
     /**
-     * Seeds a meeting. A meeting with an initiative is about the project of the initiative.
-     * Otherwise it is about `fields.project`, or about no project.
+     * Seeds a meeting that covers the initiatives `initiativeIds`. A meeting with initiatives
+     * is about the project of the first one. Otherwise it is about `fields.project`, or about
+     * no project.
      */
     seedMeeting(
         name: string,
-        initiativeId: number | null = null,
+        initiativeIds: number[] = [],
         fields: {
             project?: StoredProject;
             date?: string;
@@ -274,8 +277,8 @@ export class FakeRoadmapBackend {
     ): StoredMeeting {
         const now = this.now();
         const projectId =
-            initiativeId !== null
-                ? this.initiative(initiativeId).projectId
+            initiativeIds.length > 0
+                ? this.initiative(initiativeIds[0]).projectId
                 : (fields.project?.id ?? null);
         const meeting: StoredMeeting = {
             id: this.nextId++,
@@ -283,7 +286,7 @@ export class FakeRoadmapBackend {
             date: fields.date ?? "2026-09-24",
             notes: "",
             projectId,
-            initiativeId,
+            initiativeIds: [...initiativeIds].sort((a, b) => a - b),
             createdAt: now,
             updatedAt: now,
             deletedAt: fields.deleted ? now : null,
@@ -416,7 +419,10 @@ export class FakeRoadmapBackend {
 
     /** Returns the meeting as `get_meeting` returns it, without `deletedAt`. */
     private meetingResult(meeting: StoredMeeting) {
-        const result: Partial<StoredMeeting> = { ...meeting };
+        const result: Partial<StoredMeeting> = {
+            ...meeting,
+            initiativeIds: [...meeting.initiativeIds],
+        };
         delete result.deletedAt;
         return result;
     }
@@ -468,14 +474,39 @@ export class FakeRoadmapBackend {
             case "restore_meeting":
                 this.meeting(args.id).deletedAt = null;
                 return null;
-            case "set_meeting_initiative": {
+            case "add_meeting_initiative": {
                 const meeting = this.meeting(args.id);
-                const initiativeId = args.initiativeId as number | null;
-                if (initiativeId !== null) {
-                    meeting.projectId = this.initiative(initiativeId).projectId;
+                const initiative = this.initiative(args.initiativeId);
+                if (initiative.deletedAt !== null) {
+                    throw `initiative ${String(initiative.id)} is deleted`;
                 }
-                meeting.initiativeId = initiativeId;
-                meeting.updatedAt = this.now();
+                if (!meeting.initiativeIds.includes(initiative.id)) {
+                    // A meeting follows an initiative to its project only when it covers
+                    // no other initiative.
+                    if (meeting.projectId !== initiative.projectId) {
+                        if (meeting.initiativeIds.length > 0) {
+                            throw `meeting ${String(meeting.id)} covers initiatives of another project`;
+                        }
+                        meeting.projectId = initiative.projectId;
+                    }
+                    meeting.initiativeIds = [
+                        ...meeting.initiativeIds,
+                        initiative.id,
+                    ].sort((a, b) => a - b);
+                    meeting.updatedAt = this.now();
+                }
+                return this.meetingResult(meeting);
+            }
+            case "remove_meeting_initiative": {
+                const meeting = this.meeting(args.id);
+                if (
+                    meeting.initiativeIds.includes(args.initiativeId as number)
+                ) {
+                    meeting.initiativeIds = meeting.initiativeIds.filter(
+                        (id) => id !== args.initiativeId,
+                    );
+                    meeting.updatedAt = this.now();
+                }
                 return this.meetingResult(meeting);
             }
             case "set_meeting_project": {
@@ -484,7 +515,7 @@ export class FakeRoadmapBackend {
                 if (projectId !== meeting.projectId) {
                     if (projectId !== null) this.activeProject(projectId);
                     meeting.projectId = projectId;
-                    meeting.initiativeId = null;
+                    meeting.initiativeIds = [];
                     meeting.updatedAt = this.now();
                 }
                 return this.meetingResult(meeting);
@@ -563,11 +594,19 @@ export class FakeRoadmapBackend {
                 }
                 initiative.projectId = project.id;
                 initiative.updatedAt = this.now();
+                // A meeting follows the initiative only when it covers no other initiative.
+                // Otherwise it stays in its project and no longer covers the initiative.
                 for (const meeting of this.meetings) {
-                    if (meeting.initiativeId === initiative.id) {
+                    if (!meeting.initiativeIds.includes(initiative.id))
+                        continue;
+                    if (meeting.initiativeIds.length === 1) {
                         meeting.projectId = project.id;
-                        meeting.updatedAt = initiative.updatedAt;
+                    } else {
+                        meeting.initiativeIds = meeting.initiativeIds.filter(
+                            (id) => id !== initiative.id,
+                        );
                     }
+                    meeting.updatedAt = initiative.updatedAt;
                 }
                 return { status: "moved", initiative: { ...initiative } };
             }

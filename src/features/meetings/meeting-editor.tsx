@@ -20,7 +20,7 @@ import { ActionItemsPanel } from "@/features/tasks/action-items-panel";
 import { MeetingDetailsSidebar } from "./meeting-details-sidebar";
 import type { MeetingsPageState } from "./meetings-page";
 import { useDelete } from "@/components/use-delete";
-import { MeetingInitiativeSelect } from "./meeting-initiative-select";
+import { MeetingInitiativesPicker } from "./meeting-initiatives-picker";
 import { MeetingProjectSelect } from "./meeting-project-select";
 
 /** Matches a complete calendar date in the `YYYY-MM-DD` format that the backend accepts. */
@@ -28,7 +28,7 @@ const COMPLETE_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 /**
  * The editor for one meeting: its name and its notes at the left, and a sidebar with
- * its date, its project, its initiative, the Delete button, and its action items at the right.
+ * its date, its project, its initiatives, the Delete button, and its action items at the right.
  * Changes are saved automatically. If `isNew` is true, the name field gets the focus
  * and its text is selected.
  */
@@ -44,11 +44,11 @@ export function MeetingEditor({
         date: meeting.date,
         notes: meeting.notes,
     });
-    // The project and the initiative of the meeting, as the backend stored them last. A new
-    // project clears the initiative, so the initiative row starts again after a project change.
+    // The project and the initiatives of the meeting, as the backend stored them last. A new
+    // project clears the initiatives, so the initiatives row starts again after a project change.
     const [assignment, setAssignment] = useState({
         projectId: meeting.projectId,
-        initiativeId: meeting.initiativeId,
+        initiativeIds: meeting.initiativeIds,
     });
     const save = useCallback(
         (changes: MeetingChanges) => updateMeeting(meeting.id, changes),
@@ -165,15 +165,15 @@ export function MeetingEditor({
                             onSaved={(saved) =>
                                 setAssignment({
                                     projectId: saved.projectId,
-                                    initiativeId: saved.initiativeId,
+                                    initiativeIds: saved.initiativeIds,
                                 })
                             }
                         />
-                        <MeetingInitiativeSelect
+                        <MeetingInitiativesPicker
                             key={assignment.projectId ?? "none"}
                             meetingId={meeting.id}
                             projectId={assignment.projectId}
-                            initiativeId={assignment.initiativeId}
+                            initiativeIds={assignment.initiativeIds}
                         />
                     </>
                 }

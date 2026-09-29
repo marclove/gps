@@ -36,7 +36,7 @@ const MEETING: Meeting = {
     notes: "",
     createdAt: "2026-09-24T17:00:00.000Z",
     updatedAt: "2026-09-24T17:00:00.000Z",
-    initiativeId: null,
+    initiativeIds: [],
     projectId: null,
 };
 
@@ -277,7 +277,7 @@ describe("MeetingEditorPage", () => {
         ).toBeInTheDocument();
     });
 
-    it("moves focus from the date to the project to the initiative to Delete to the action items with Tab", async () => {
+    it("moves focus from the date to the project to Choose initiatives to Delete to the action items with Tab", async () => {
         serveMeeting({
             get_meeting: () => ({ ...MEETING, projectId: 1 }),
             list_projects: () => [
@@ -297,18 +297,18 @@ describe("MeetingEditorPage", () => {
         const project = screen.getByRole("combobox", {
             name: "Meeting project",
         });
-        const initiative = screen.getByRole("combobox", {
-            name: "Meeting initiative",
+        const initiatives = screen.getByRole("button", {
+            name: "Choose initiatives",
         });
         await waitFor(() => expect(project).toBeEnabled());
-        await waitFor(() => expect(initiative).toBeEnabled());
+        await waitFor(() => expect(initiatives).toBeEnabled());
 
         screen.getByLabelText("Meeting date").focus();
         await user.tab();
         expect(project).toHaveFocus();
 
         await user.tab();
-        expect(initiative).toHaveFocus();
+        expect(initiatives).toHaveFocus();
 
         await user.tab();
         expect(screen.getByRole("button", { name: "Delete" })).toHaveFocus();

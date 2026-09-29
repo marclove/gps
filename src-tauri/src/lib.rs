@@ -187,12 +187,25 @@ fn restore_meeting(database: State<'_, Database>, id: i64) -> Result<(), String>
     clippy::needless_pass_by_value,
     reason = "Tauri gives managed state to commands by value"
 )]
-fn set_meeting_initiative(
+fn add_meeting_initiative(
     database: State<'_, Database>,
     id: i64,
-    initiative_id: Option<i64>,
+    initiative_id: i64,
 ) -> Result<Meeting, String> {
-    database.run(|connection| meetings::set_initiative(connection, id, initiative_id))
+    database.run(|connection| meetings::add_initiative(connection, id, initiative_id))
+}
+
+#[tauri::command]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Tauri gives managed state to commands by value"
+)]
+fn remove_meeting_initiative(
+    database: State<'_, Database>,
+    id: i64,
+    initiative_id: i64,
+) -> Result<Meeting, String> {
+    database.run(|connection| meetings::remove_initiative(connection, id, initiative_id))
 }
 
 #[tauri::command]
@@ -403,7 +416,8 @@ pub fn run() {
             update_meeting,
             delete_meeting,
             restore_meeting,
-            set_meeting_initiative,
+            add_meeting_initiative,
+            remove_meeting_initiative,
             set_meeting_project,
             list_initiatives,
             create_initiative,

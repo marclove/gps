@@ -17,7 +17,7 @@ type Meeting = {
     date: string;
     notes: string;
     projectId: number | null;
-    initiativeId: number | null;
+    initiativeIds: number[];
     createdAt: string;
     updatedAt: string;
 };
@@ -32,7 +32,7 @@ function seed(name: string, notes = "") {
         date: "2026-09-24",
         notes,
         projectId: null,
-        initiativeId: null,
+        initiativeIds: [],
         createdAt: now,
         updatedAt: now,
     };
