@@ -1,4 +1,5 @@
 import { useLayoutEffect, useRef, type FocusEvent } from "react";
+import { FIELD_LABEL_CLASSES } from "@/components/form-field-classes";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import {
@@ -61,11 +62,9 @@ export function MeetingInitiativesPicker({
         load.kind === "loaded" ? covered.length === 0 : checked.size === 0;
 
     return (
-        <div className="flex flex-col gap-1">
-            <div className="flex items-center justify-between gap-2">
-                <span className="shrink-0 text-sm font-medium">
-                    Initiatives
-                </span>
+        <div className="flex flex-col items-start gap-1.5">
+            <span className={FIELD_LABEL_CLASSES}>Initiatives</span>
+            <div className="flex flex-col items-start gap-1.5">
                 {load.kind === "error" ? (
                     <div className="flex items-center gap-2 text-sm">
                         <p>Couldn't load initiatives</p>
@@ -87,7 +86,7 @@ export function MeetingInitiativesPicker({
                         </PopoverTrigger>
                         <PopoverContent
                             aria-label="Choose initiatives"
-                            align="end"
+                            align="start"
                         >
                             <InitiativeCheckboxes
                                 choices={choices}

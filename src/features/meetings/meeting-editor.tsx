@@ -1,4 +1,5 @@
 import { Trash2Icon } from "lucide-react";
+import { FIELD_LABEL_CLASSES } from "@/components/form-field-classes";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { MarkdownEditor } from "@/components/markdown-editor/markdown-editor";
@@ -149,10 +150,10 @@ export function MeetingEditor({
             <MeetingDetailsSidebar
                 properties={
                     <>
-                        <div className="flex items-center justify-between gap-2">
+                        <div className="flex flex-col items-start gap-1.5">
                             <label
                                 htmlFor={dateId}
-                                className="text-sm font-medium"
+                                className={FIELD_LABEL_CLASSES}
                             >
                                 Date
                             </label>
@@ -173,9 +174,7 @@ export function MeetingEditor({
                                         date,
                                     }));
                                 }}
-                                // The base Input has `min-w-0`, so without `shrink-0` the
-                                // label squeezes this field and cuts off the year.
-                                className="w-auto shrink-0"
+                                className="w-auto"
                             />
                         </div>
                         <MeetingProjectSelect

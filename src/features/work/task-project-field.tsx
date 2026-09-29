@@ -5,7 +5,7 @@ import {
 } from "@/components/ui/native-select";
 import { byLabel } from "@/lib/initiatives";
 import { projectDisplayName, type Project } from "@/lib/projects";
-import { FIELD_LABEL_CLASSES } from "@/features/initiatives/initiative-form";
+import { FIELD_LABEL_CLASSES } from "@/components/form-field-classes";
 
 /**
  * Returns the projects that the user can choose for a task: the projects that are not

@@ -4,7 +4,7 @@ import {
     NativeSelectOption,
 } from "@/components/ui/native-select";
 import { initiativeChoices, type InitiativeSummary } from "@/lib/initiatives";
-import { FIELD_LABEL_CLASSES } from "@/features/initiatives/initiative-form";
+import { FIELD_LABEL_CLASSES } from "@/components/form-field-classes";
 
 /**
  * The "Initiative" label and select box of a task. The first choice is "No initiative". Then

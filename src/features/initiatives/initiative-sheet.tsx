@@ -14,9 +14,9 @@ import {
 } from "@/lib/initiatives";
 import {
     FIELD_LABEL_CLASSES,
-    InitiativeForm,
     NAME_FIELD_CLASSES,
-} from "./initiative-form";
+} from "@/components/form-field-classes";
+import { InitiativeForm } from "./initiative-form";
 
 /** What the sheet shows: the identifier of an initiative, or "new" for a draft. */
 export type SheetTarget = number | "new";

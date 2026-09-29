@@ -30,7 +30,7 @@ import { cn } from "@/lib/utils";
 import {
     FIELD_LABEL_CLASSES,
     NAME_FIELD_CLASSES,
-} from "@/features/initiatives/initiative-form";
+} from "@/components/form-field-classes";
 import { TaskInitiativeField } from "./task-initiative-field";
 import { TaskProjectField } from "./task-project-field";
 

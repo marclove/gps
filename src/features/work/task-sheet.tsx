@@ -13,7 +13,7 @@ import { getTask, taskTitle, type Task } from "@/lib/tasks";
 import {
     FIELD_LABEL_CLASSES,
     NAME_FIELD_CLASSES,
-} from "@/features/initiatives/initiative-form";
+} from "@/components/form-field-classes";
 import { TaskForm, type TaskChoices, type TaskMeeting } from "./task-form";
 
 /** What the sheet shows: the identifier of a task, or "new" for a draft. */

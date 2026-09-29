@@ -1,8 +1,9 @@
 import type { ReactNode } from "react";
+import { FIELD_LABEL_CLASSES } from "@/components/form-field-classes";
 import { Button } from "@/components/ui/button";
 
 /**
- * A row of the meeting details sidebar with a label and a select box. If the choices cannot
+ * A field of the meeting details sidebar: a label above a select box. If the choices cannot
  * be loaded, the row shows `errorText` and a Retry button instead of the select box.
  * `selectId` is the identifier of the select box in `children`, which the label refers to.
  */
@@ -22,14 +23,11 @@ export function ChoiceRow({
     children: ReactNode;
 }) {
     return (
-        <div className="flex items-center justify-between gap-2">
+        <div className="flex flex-col items-start gap-1.5">
             {failed ? (
-                <span className="shrink-0 text-sm font-medium">{label}</span>
+                <span className={FIELD_LABEL_CLASSES}>{label}</span>
             ) : (
-                <label
-                    htmlFor={selectId}
-                    className="shrink-0 text-sm font-medium"
-                >
+                <label htmlFor={selectId} className={FIELD_LABEL_CLASSES}>
                     {label}
                 </label>
             )}
