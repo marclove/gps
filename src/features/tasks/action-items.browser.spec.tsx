@@ -2,9 +2,11 @@ import { render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { page, userEvent } from "vitest/browser";
 import App from "@/App";
+import { FakeBackend, type StoredMeeting } from "@/test/fake-backend";
 
 // Feature spec for docs/specs/0005-meeting-action-items.md, with the words of
-// docs/specs/0007-deleted-rows-and-ranked-order.md.
+// docs/specs/0007-deleted-rows-and-ranked-order.md and the changes of
+// docs/specs/0010-work-section.md.
 // It runs in WebKit with the application's CSS, at the default window size of
 // 1200 by 800 pixels. The Tauri backend is replaced by an in-memory fake.
 
@@ -12,74 +14,19 @@ const invoke = vi.hoisted(() => vi.fn());
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke }));
 
-type Task = {
-    id: number;
-    meetingId: number;
-    title: string;
-    createdAt: string;
-    updatedAt: string;
-    completedAt: string | null;
-};
-
-const MEETING = {
-    id: 1,
-    name: "Weekly sync",
-    date: "2026-09-24",
-    notes: "Discussed the roadmap",
-    projectId: null,
-    initiativeIds: [],
-    createdAt: "2026-09-24T10:00:00.000Z",
-    updatedAt: "2026-09-24T10:00:00.000Z",
-};
-
-let tasks: Task[];
+let backend: FakeBackend;
+let meeting: StoredMeeting;
 
 function seedTask(title: string, completed = false) {
-    const time = new Date(
-        Date.UTC(2026, 8, 24, 10, 0, tasks.length + 1),
-    ).toISOString();
-    tasks.push({
-        id: tasks.length + 1,
-        meetingId: MEETING.id,
-        title,
-        createdAt: time,
-        updatedAt: time,
-        completedAt: completed ? time : null,
-    });
-}
-
-async function handle(command: string, args: Record<string, unknown> = {}) {
-    switch (command) {
-        case "list_meetings":
-            return [MEETING];
-        case "get_meeting":
-            return args.id === MEETING.id ? MEETING : null;
-        case "update_meeting":
-            return MEETING;
-        case "list_meeting_tasks":
-            return tasks.map((t) => ({ ...t }));
-        case "list_projects":
-        case "list_initiatives":
-            return [];
-        case "create_task": {
-            seedTask(args.title as string);
-            return { ...tasks[tasks.length - 1] };
-        }
-        case "set_task_completed": {
-            const task = tasks.find((t) => t.id === args.id);
-            if (!task) throw `task ${String(args.id)} not found`;
-            task.completedAt = args.completed ? task.updatedAt : null;
-            return { ...task };
-        }
-        default:
-            throw `unexpected command ${command}`;
-    }
+    backend.seedTask({ meeting, title, stage: completed ? "done" : "icebox" });
 }
 
 beforeEach(() => {
-    tasks = [];
     invoke.mockReset();
-    invoke.mockImplementation(handle);
+    backend = new FakeBackend();
+    meeting = backend.seedMeeting("Weekly sync");
+    meeting.notes = "Discussed the roadmap";
+    invoke.mockImplementation(backend.handle);
 });
 
 async function openMeeting() {
