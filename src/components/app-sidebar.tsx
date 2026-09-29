@@ -19,10 +19,10 @@ import {
 type Section = { title: string; path: string; icon: LucideIcon };
 
 const SECTIONS: Section[] = [
-    { title: "Projects", path: "/projects", icon: FolderIcon },
+    { title: "Work", path: "/work", icon: ListTodoIcon },
     { title: "Meetings", path: "/meetings", icon: NotebookPenIcon },
     { title: "Initiatives", path: "/initiatives", icon: TargetIcon },
-    { title: "Work", path: "/work", icon: ListTodoIcon },
+    { title: "Projects", path: "/projects", icon: FolderIcon },
 ];
 
 /**

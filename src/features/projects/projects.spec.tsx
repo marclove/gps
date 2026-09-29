@@ -73,16 +73,16 @@ function details() {
 }
 
 describe("Projects section", () => {
-    it("has a link above Meetings with a tooltip, and the application still opens on Meetings", async () => {
+    it("has a link at the bottom with a tooltip, and the application still opens on Meetings", async () => {
         const user = userEvent.setup();
         render(<App />);
 
         const links = within(mainNavigation()).getAllByRole("link");
         expect(links.map((link) => link.textContent)).toEqual([
-            "Projects",
+            "Work",
             "Meetings",
             "Initiatives",
-            "Work",
+            "Projects",
         ]);
         expect(projectsLink().querySelector("svg")).toBeInTheDocument();
         expect(

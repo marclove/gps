@@ -30,7 +30,7 @@ The terms "meeting" and "editor page" are defined in [Spec 0001](0001-take-meeti
 
 ### Section
 
-- The sidebar of the application has a link named "Work", below the link named "Initiatives". It shows a checklist icon, and its tooltip says "Work".
+- The sidebar of the application has a link named "Work". It shows a checklist icon, and its tooltip says "Work". The sidebar shows its links in this order, from the top: "Work", "Meetings", "Initiatives", and "Projects".
 - The link opens the Work page. While the Work page is open, the "Work" link is marked as the current page.
 - The application still opens on the Meetings page.
 
@@ -181,7 +181,7 @@ Deleting a project works as Spec 0008 describes, with this change:
 
 Merged specs are not changed. This spec changes them as follows:
 
-- [Spec 0003](0003-compact-section-nav.md), Spec 0006, and Spec 0008: the sidebar has a fourth link, "Work", below "Initiatives".
+- [Spec 0003](0003-compact-section-nav.md), Spec 0006, and Spec 0008: the sidebar has a fourth link, "Work", and the links are in the order "Work", "Meetings", "Initiatives", "Projects". "Projects" moves from the top to the bottom.
 - Spec 0005: the remove button of an action item deletes the task with a delete toast and "Undo", instead of removing it for good. If the action item cannot be removed, a failure toast says "Couldn't remove the action item. Try again.", as before. Each item has an "Open" button between the text field and the remove button. Action items are also tasks on the board of the Work page.
 - Spec 0006: the sheet of a saved initiative shows the list "Tasks" between the description and the buttons.
 - Spec 0008: the sidebar of the project page shows the list "Tasks" below the list "Meetings". A project that still has tasks is not deleted.

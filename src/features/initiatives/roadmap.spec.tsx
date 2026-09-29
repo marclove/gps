@@ -70,10 +70,10 @@ describe("Initiatives section", () => {
 
         const links = within(mainNavigation()).getAllByRole("link");
         expect(links.map((link) => link.textContent)).toEqual([
-            "Projects",
+            "Work",
             "Meetings",
             "Initiatives",
-            "Work",
+            "Projects",
         ]);
         expect(
             await screen.findByRole("button", { name: "New note" }),

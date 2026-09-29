@@ -36,11 +36,11 @@ async function renderApp() {
 }
 
 describe("AppSidebar", () => {
-    it("reaches the Projects link first and the Meetings link next with the Tab key", async () => {
+    it("reaches the Work link first and the Meetings link next with the Tab key", async () => {
         await renderApp();
 
         await userEvent.tab();
-        expect(document.activeElement).toBe(sectionLink("Projects"));
+        expect(document.activeElement).toBe(sectionLink("Work"));
 
         await userEvent.tab();
         expect(document.activeElement).toBe(meetingsLink());

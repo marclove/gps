@@ -95,16 +95,16 @@ function createCalls() {
 }
 
 describe("Work section", () => {
-    it("has a link below Initiatives with an icon and a tooltip, and the application still opens on Meetings", async () => {
+    it("has a link at the top with an icon and a tooltip, and the application still opens on Meetings", async () => {
         const user = userEvent.setup();
         render(<App />);
 
         const links = within(mainNavigation()).getAllByRole("link");
         expect(links.map((link) => link.textContent)).toEqual([
-            "Projects",
+            "Work",
             "Meetings",
             "Initiatives",
-            "Work",
+            "Projects",
         ]);
         expect(workLink().querySelector("svg")).toBeInTheDocument();
         expect(
