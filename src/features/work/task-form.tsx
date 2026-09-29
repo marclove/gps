@@ -363,7 +363,7 @@ export function TaskForm({
                     </div>
                 </div>
             </div>
-            <div className="flex items-start gap-4 px-6 pb-4">
+            <div className="flex flex-col items-stretch gap-4 px-6 pb-4">
                 <TaskProjectField
                     projects={choices?.projects ?? null}
                     value={selection.projectId}
