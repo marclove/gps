@@ -91,9 +91,61 @@ export function createMeetingTask(
     return invoke<Task>("create_meeting_task", { meetingId, title });
 }
 
-/** Replaces the title of a task and returns the stored task. */
+/**
+ * Creates a task in the Icebox, outside a meeting, and returns the stored task. The backend
+ * removes the spaces at the start and the end of the title. When `initiativeId` is set, the
+ * task gets the project of that initiative, and `projectId` is ignored. The backend refuses
+ * a project or an initiative that is deleted, and a task whose title, description, project,
+ * and initiative are all empty.
+ */
+export function createTask(fields: {
+    title: string;
+    description: string;
+    projectId: number | null;
+    initiativeId: number | null;
+}): Promise<Task> {
+    return invoke<Task>("create_task", fields);
+}
+
+/**
+ * Replaces the title of a task and returns the stored task. The backend removes the spaces
+ * at the start and the end of the title.
+ */
 export function updateTaskTitle(id: number, title: string): Promise<Task> {
     return invoke<Task>("update_task_title", { id, title });
+}
+
+/** Replaces the Markdown description of a task and returns the stored task. */
+export function updateTaskDescription(
+    id: number,
+    description: string,
+): Promise<Task> {
+    return invoke<Task>("update_task_description", { id, description });
+}
+
+/**
+ * Sets the project of a task, or clears it with `null`, and returns the stored task. The
+ * task keeps its initiative only when the initiative belongs to the new project. The
+ * backend refuses a deleted project. Setting the project that the task has changes nothing.
+ */
+export function setTaskProject(
+    id: number,
+    projectId: number | null,
+): Promise<Task> {
+    return invoke<Task>("set_task_project", { id, projectId });
+}
+
+/**
+ * Sets the initiative of a task, or clears it with `null`, and returns the stored task.
+ * With an initiative, the task also gets the project of that initiative. Without one, the
+ * task keeps its project. The backend refuses a deleted initiative. Setting the initiative
+ * that the task has changes nothing.
+ */
+export function setTaskInitiative(
+    id: number,
+    initiativeId: number | null,
+): Promise<Task> {
+    return invoke<Task>("set_task_initiative", { id, initiativeId });
 }
 
 /**

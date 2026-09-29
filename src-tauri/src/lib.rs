@@ -370,6 +370,22 @@ fn list_meeting_tasks(database: State<'_, Database>, meeting_id: i64) -> Result<
     clippy::needless_pass_by_value,
     reason = "Tauri gives managed state to commands by value"
 )]
+fn create_task(
+    database: State<'_, Database>,
+    title: &str,
+    description: &str,
+    project_id: Option<i64>,
+    initiative_id: Option<i64>,
+) -> Result<Task, String> {
+    database
+        .run(|connection| tasks::create(connection, title, description, project_id, initiative_id))
+}
+
+#[tauri::command]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Tauri gives managed state to commands by value"
+)]
 fn create_meeting_task(
     database: State<'_, Database>,
     meeting_id: i64,
@@ -385,6 +401,45 @@ fn create_meeting_task(
 )]
 fn update_task_title(database: State<'_, Database>, id: i64, title: &str) -> Result<Task, String> {
     database.run(|connection| tasks::update_title(connection, id, title))
+}
+
+#[tauri::command]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Tauri gives managed state to commands by value"
+)]
+fn update_task_description(
+    database: State<'_, Database>,
+    id: i64,
+    description: &str,
+) -> Result<Task, String> {
+    database.run(|connection| tasks::update_description(connection, id, description))
+}
+
+#[tauri::command]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Tauri gives managed state to commands by value"
+)]
+fn set_task_project(
+    database: State<'_, Database>,
+    id: i64,
+    project_id: Option<i64>,
+) -> Result<Task, String> {
+    database.run(|connection| tasks::set_project(connection, id, project_id))
+}
+
+#[tauri::command]
+#[expect(
+    clippy::needless_pass_by_value,
+    reason = "Tauri gives managed state to commands by value"
+)]
+fn set_task_initiative(
+    database: State<'_, Database>,
+    id: i64,
+    initiative_id: Option<i64>,
+) -> Result<Task, String> {
+    database.run(|connection| tasks::set_initiative(connection, id, initiative_id))
 }
 
 #[tauri::command]
@@ -481,8 +536,12 @@ pub fn run() {
             list_tasks,
             get_task,
             list_meeting_tasks,
+            create_task,
             create_meeting_task,
             update_task_title,
+            update_task_description,
+            set_task_project,
+            set_task_initiative,
             move_task,
             start_task,
             set_task_completed,

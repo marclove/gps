@@ -6,7 +6,7 @@ use rusqlite::{params, Connection, OptionalExtension, Row};
 use serde::{Deserialize, Serialize};
 
 use crate::meetings::NOW;
-use crate::rank;
+use crate::{projects, rank};
 
 /// One task that the user must do.
 ///
@@ -80,6 +80,17 @@ pub enum Error {
     Completed(i64),
     /// The task is not in the backlog, so it cannot be started.
     NotInBacklog(i64),
+    /// No project has the given identifier.
+    ProjectNotFound(i64),
+    /// The project with the given identifier is deleted, so the user cannot choose it.
+    ProjectDeleted(i64),
+    /// No initiative has the given identifier.
+    InitiativeNotFound(i64),
+    /// The initiative with the given identifier is deleted, so the user cannot choose it.
+    InitiativeDeleted(i64),
+    /// The title, the description, the project, and the initiative are all empty, so the
+    /// user did not change the new task. Such a task is never saved.
+    Empty,
     /// A stored rank is not a valid rank key, so no rank can be made next to it.
     Rank(rank::Error),
     /// The database reported an error.
@@ -94,6 +105,14 @@ impl fmt::Display for Error {
             Error::Deleted(id) => write!(f, "task {id} is deleted"),
             Error::Completed(id) => write!(f, "task {id} is completed"),
             Error::NotInBacklog(id) => write!(f, "task {id} is not in the backlog"),
+            Error::ProjectNotFound(id) => write!(f, "project {id} not found"),
+            Error::ProjectDeleted(id) => write!(f, "project {id} is deleted"),
+            Error::InitiativeNotFound(id) => write!(f, "initiative {id} not found"),
+            Error::InitiativeDeleted(id) => write!(f, "initiative {id} is deleted"),
+            Error::Empty => write!(
+                f,
+                "a task needs a title, a description, a project, or an initiative"
+            ),
             Error::Rank(error) => write!(f, "invalid rank: {error}"),
             Error::Database(error) => write!(f, "database error: {error}"),
         }
@@ -196,17 +215,133 @@ pub fn create_for_meeting(
     Ok(task)
 }
 
-/// Replaces the title of a task, and sets the time it was last changed. Returns the
-/// task as it is stored after the change.
-pub fn update_title(connection: &Connection, id: i64, title: &str) -> Result<Task, Error> {
-    let changed = connection.execute(
-        &format!("UPDATE tasks SET title = ?2, updated_at = {NOW} WHERE id = ?1"),
-        params![id, title],
-    )?;
-    if changed == 0 {
-        return Err(Error::NotFound(id));
+/// Creates a task in the icebox, outside a meeting. Returns the task as it is stored.
+///
+/// Removes the spaces at the start and the end of `title`. When `initiative_id` is set, the
+/// task gets the project of that initiative, and `project_id` is ignored. Refuses a project or
+/// an initiative that is deleted or does not exist. If the title and the description are empty
+/// and there is no project and no initiative, returns `Error::Empty` and saves nothing.
+pub fn create(
+    connection: &Connection,
+    title: &str,
+    description: &str,
+    project_id: Option<i64>,
+    initiative_id: Option<i64>,
+) -> Result<Task, Error> {
+    let title = title.trim();
+    if title.is_empty() && description.is_empty() && project_id.is_none() && initiative_id.is_none()
+    {
+        return Err(Error::Empty);
     }
-    get(connection, id)?.ok_or(Error::NotFound(id))
+    let transaction = connection.unchecked_transaction()?;
+    let project_id = if let Some(initiative_id) = initiative_id {
+        Some(project_of_initiative(&transaction, initiative_id)?)
+    } else if let Some(project_id) = project_id {
+        check_project(&transaction, project_id)?;
+        Some(project_id)
+    } else {
+        None
+    };
+    let id: i64 = transaction.query_row(
+        &format!(
+            "INSERT INTO tasks
+                 (title, description, project_id, initiative_id, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, {NOW}, {NOW})
+             RETURNING id"
+        ),
+        params![title, description, project_id, initiative_id],
+        |row| row.get(0),
+    )?;
+    let task = get(&transaction, id)?.ok_or(Error::NotFound(id))?;
+    transaction.commit()?;
+    Ok(task)
+}
+
+/// Removes the spaces at the start and the end of `title`, and saves it as the title of a
+/// task. Sets the time the task was last changed. Returns the task as it is stored after the
+/// change.
+pub fn update_title(connection: &Connection, id: i64, title: &str) -> Result<Task, Error> {
+    update_text(connection, id, "title", title.trim())
+}
+
+/// Replaces the description of a task, and sets the time the task was last changed. Stores the
+/// description as given. Returns the task as it is stored after the change.
+pub fn update_description(
+    connection: &Connection,
+    id: i64,
+    description: &str,
+) -> Result<Task, Error> {
+    update_text(connection, id, "description", description)
+}
+
+/// Sets the project of a task, or clears it when `project_id` is `None`. Returns the task as
+/// it is stored after the change.
+///
+/// The task keeps its initiative only when the initiative belongs to the new project. Without
+/// a project, the task has no initiative. Sets the time the task was last changed. If the task
+/// already has this project, changes nothing, also when the project is deleted. Refuses a
+/// project that is deleted or does not exist.
+pub fn set_project(
+    connection: &Connection,
+    id: i64,
+    project_id: Option<i64>,
+) -> Result<Task, Error> {
+    let transaction = connection.unchecked_transaction()?;
+    let task = get(&transaction, id)?.ok_or(Error::NotFound(id))?;
+    if task.project_id == project_id {
+        return Ok(task);
+    }
+    if let Some(project_id) = project_id {
+        check_project(&transaction, project_id)?;
+    }
+    transaction.execute(
+        &format!(
+            "UPDATE tasks
+             SET project_id = ?2,
+                 initiative_id = (SELECT initiatives.id FROM initiatives
+                                  WHERE initiatives.id = tasks.initiative_id
+                                    AND initiatives.project_id = ?2),
+                 updated_at = {NOW}
+             WHERE id = ?1"
+        ),
+        params![id, project_id],
+    )?;
+    let task = get(&transaction, id)?.ok_or(Error::NotFound(id))?;
+    transaction.commit()?;
+    Ok(task)
+}
+
+/// Sets the initiative of a task, or clears it when `initiative_id` is `None`. Returns the
+/// task as it is stored after the change.
+///
+/// With an initiative, the task also gets the project of that initiative. Without an
+/// initiative, the task keeps its project. Sets the time the task was last changed. If the
+/// task already has this initiative, changes nothing, also when the initiative is deleted.
+/// Refuses an initiative that is deleted or does not exist.
+pub fn set_initiative(
+    connection: &Connection,
+    id: i64,
+    initiative_id: Option<i64>,
+) -> Result<Task, Error> {
+    let transaction = connection.unchecked_transaction()?;
+    let task = get(&transaction, id)?.ok_or(Error::NotFound(id))?;
+    if task.initiative_id == initiative_id {
+        return Ok(task);
+    }
+    let project_id = match initiative_id {
+        Some(initiative_id) => Some(project_of_initiative(&transaction, initiative_id)?),
+        None => task.project_id,
+    };
+    transaction.execute(
+        &format!(
+            "UPDATE tasks SET initiative_id = ?2, project_id = ?3, updated_at = {NOW}
+             WHERE id = ?1"
+        ),
+        params![id, initiative_id, project_id],
+    )?;
+    let task = get(&transaction, id)?.ok_or(Error::NotFound(id))?;
+    transaction.commit()?;
+    Ok(task)
 }
 
 /// Moves a task to a column of the Work board. Returns the task as it is stored after the
@@ -442,6 +577,50 @@ fn return_to_held_place(connection: &Connection, id: i64) -> Result<(), Error> {
     Ok(())
 }
 
+/// Replaces one text column of a task, and sets the time the task was last changed. Returns
+/// the task as it is stored after the change.
+fn update_text(connection: &Connection, id: i64, column: &str, text: &str) -> Result<Task, Error> {
+    let transaction = connection.unchecked_transaction()?;
+    let changed = transaction.execute(
+        &format!("UPDATE tasks SET {column} = ?2, updated_at = {NOW} WHERE id = ?1"),
+        params![id, text],
+    )?;
+    if changed == 0 {
+        return Err(Error::NotFound(id));
+    }
+    let task = get(&transaction, id)?.ok_or(Error::NotFound(id))?;
+    transaction.commit()?;
+    Ok(task)
+}
+
+/// Refuses a project that is deleted or does not exist.
+fn check_project(connection: &Connection, project_id: i64) -> Result<(), Error> {
+    if projects::project_is_active(connection, project_id)? {
+        Ok(())
+    } else if projects::project_exists(connection, project_id)? {
+        Err(Error::ProjectDeleted(project_id))
+    } else {
+        Err(Error::ProjectNotFound(project_id))
+    }
+}
+
+/// Returns the project of an initiative that the user chooses for a task. Refuses an
+/// initiative that is deleted or does not exist.
+fn project_of_initiative(connection: &Connection, initiative_id: i64) -> Result<i64, Error> {
+    let (project_id, deleted): (i64, bool) = connection
+        .query_row(
+            "SELECT project_id, deleted_at IS NOT NULL FROM initiatives WHERE id = ?1",
+            params![initiative_id],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .optional()?
+        .ok_or(Error::InitiativeNotFound(initiative_id))?;
+    if deleted {
+        return Err(Error::InitiativeDeleted(initiative_id));
+    }
+    Ok(project_id)
+}
+
 fn task_from_row(row: &Row<'_>) -> rusqlite::Result<Task> {
     Ok(Task {
         id: row.get(0)?,
@@ -463,7 +642,7 @@ fn task_from_row(row: &Row<'_>) -> rusqlite::Result<Task> {
 mod tests {
     use super::*;
     use crate::db::open_in_memory;
-    use crate::meetings;
+    use crate::{initiatives, meetings, projects};
 
     const OLD_TIME: &str = "2000-01-01T00:00:00.000Z";
 
@@ -516,13 +695,13 @@ mod tests {
     }
 
     #[test]
-    fn update_title_changes_the_text_and_updated_at() {
+    fn update_title_trims_and_changes_updated_at() {
         let connection = open_in_memory();
         let meeting = meetings::create(&connection, "2026-09-24").unwrap();
         let created = create_for_meeting(&connection, meeting.id, "Send the deck").unwrap();
         set_updated_at(&connection, created.id, OLD_TIME);
 
-        let updated = update_title(&connection, created.id, "Send the final deck").unwrap();
+        let updated = update_title(&connection, created.id, "  Send the final deck ").unwrap();
 
         assert_eq!(updated.title, "Send the final deck");
         assert_eq!(updated.created_at, created.created_at);
@@ -540,6 +719,313 @@ mod tests {
             update_title(&connection, 999, "x"),
             Err(Error::NotFound(999))
         ));
+    }
+
+    #[test]
+    fn update_description_changes_the_text_and_updated_at() {
+        let connection = open_in_memory();
+        let created = create(&connection, "Send the deck", "", None, None).unwrap();
+        set_updated_at(&connection, created.id, OLD_TIME);
+
+        let updated = update_description(&connection, created.id, "  *Before* Friday\n").unwrap();
+
+        assert_eq!(updated.description, "  *Before* Friday\n");
+        assert_eq!(updated.title, "Send the deck");
+        assert_ne!(updated.updated_at, OLD_TIME);
+        assert_eq!(task(&connection, created.id), updated);
+        assert!(matches!(
+            update_description(&connection, 999, "x"),
+            Err(Error::NotFound(999))
+        ));
+    }
+
+    fn project(connection: &Connection, name: &str) -> i64 {
+        match projects::create(connection, name, "").unwrap() {
+            projects::CreateOutcome::Created { project } => project.id,
+            projects::CreateOutcome::NameTaken => panic!("the create should succeed"),
+        }
+    }
+
+    fn initiative(connection: &Connection, project_id: i64, name: &str) -> i64 {
+        match initiatives::create(connection, project_id, name, "", None).unwrap() {
+            initiatives::CreateOutcome::Created { initiative } => initiative.id,
+            initiatives::CreateOutcome::NameTaken => panic!("the create should succeed"),
+        }
+    }
+
+    fn count(connection: &Connection) -> i64 {
+        connection
+            .query_row("SELECT count(*) FROM tasks", [], |row| row.get(0))
+            .unwrap()
+    }
+
+    #[test]
+    fn create_trims_the_title_and_puts_the_task_in_the_icebox() {
+        let connection = open_in_memory();
+
+        let created = create(
+            &connection,
+            "  Send the deck ",
+            "Before *Friday*",
+            None,
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(created.title, "Send the deck");
+        assert_eq!(created.description, "Before *Friday*");
+        assert_eq!(created.meeting_id, None);
+        assert_eq!(created.project_id, None);
+        assert_eq!(created.initiative_id, None);
+        assert_eq!(created.rank, None);
+        assert_eq!(created.started_at, None);
+        assert_eq!(created.completed_at, None);
+        assert_eq!(created.deleted_at, None);
+        assert_eq!(created.created_at, created.updated_at);
+        assert_eq!(task(&connection, created.id), created);
+    }
+
+    #[test]
+    fn create_with_an_initiative_takes_its_project() {
+        let connection = open_in_memory();
+        let billing = project(&connection, "Billing");
+        let checkout = project(&connection, "Checkout");
+        let launch = initiative(&connection, billing, "Launch");
+
+        let with_initiative = create(&connection, "A", "", Some(checkout), Some(launch)).unwrap();
+        let with_project = create(&connection, "B", "", Some(checkout), None).unwrap();
+
+        assert_eq!(with_initiative.project_id, Some(billing));
+        assert_eq!(with_initiative.initiative_id, Some(launch));
+        assert_eq!(with_project.project_id, Some(checkout));
+        assert_eq!(with_project.initiative_id, None);
+    }
+
+    #[test]
+    fn create_refuses_a_deleted_project_or_initiative() {
+        let connection = open_in_memory();
+        let billing = project(&connection, "Billing");
+        let old = project(&connection, "Old");
+        mark_deleted(&connection, "projects", old);
+        let pilot = initiative(&connection, billing, "Pilot");
+        mark_deleted(&connection, "initiatives", pilot);
+
+        assert!(matches!(
+            create(&connection, "A", "", Some(old), None),
+            Err(Error::ProjectDeleted(id)) if id == old
+        ));
+        assert!(matches!(
+            create(&connection, "A", "", Some(999), None),
+            Err(Error::ProjectNotFound(999))
+        ));
+        assert!(matches!(
+            create(&connection, "A", "", Some(billing), Some(pilot)),
+            Err(Error::InitiativeDeleted(id)) if id == pilot
+        ));
+        assert!(matches!(
+            create(&connection, "A", "", None, Some(999)),
+            Err(Error::InitiativeNotFound(999))
+        ));
+        assert_eq!(count(&connection), 0);
+    }
+
+    #[test]
+    fn create_refuses_an_empty_task() {
+        let connection = open_in_memory();
+        let billing = project(&connection, "Billing");
+
+        assert!(matches!(
+            create(&connection, "  ", "", None, None),
+            Err(Error::Empty)
+        ));
+        assert_eq!(count(&connection), 0);
+
+        let with_project = create(&connection, "", "", Some(billing), None).unwrap();
+        let with_description = create(&connection, " ", "Notes", None, None).unwrap();
+        assert_eq!(with_project.title, "");
+        assert_eq!(with_description.title, "");
+        assert_eq!(count(&connection), 2);
+    }
+
+    /// Creates a project "Billing" with the initiative "Launch", a project "Checkout", and
+    /// a task on "Launch" whose `updated_at` is `OLD_TIME`. Returns the identifiers of the
+    /// project "Billing", the initiative, the project "Checkout", and the task.
+    fn task_on_initiative(connection: &Connection) -> (i64, i64, i64, i64) {
+        let billing = project(connection, "Billing");
+        let launch = initiative(connection, billing, "Launch");
+        let checkout = project(connection, "Checkout");
+        let id = create(connection, "Send the deck", "", None, Some(launch))
+            .unwrap()
+            .id;
+        set_updated_at(connection, id, OLD_TIME);
+        (billing, launch, checkout, id)
+    }
+
+    #[test]
+    fn set_initiative_sets_the_project() {
+        let connection = open_in_memory();
+        let billing = project(&connection, "Billing");
+        let launch = initiative(&connection, billing, "Launch");
+        let checkout = project(&connection, "Checkout");
+        let id = create(&connection, "A", "", Some(checkout), None)
+            .unwrap()
+            .id;
+        set_updated_at(&connection, id, OLD_TIME);
+
+        let updated = set_initiative(&connection, id, Some(launch)).unwrap();
+
+        assert_eq!(updated.initiative_id, Some(launch));
+        assert_eq!(updated.project_id, Some(billing));
+        assert_ne!(updated.updated_at, OLD_TIME);
+        assert_eq!(task(&connection, id), updated);
+    }
+
+    #[test]
+    fn set_initiative_to_none_keeps_the_project() {
+        let connection = open_in_memory();
+        let (billing, _, _, id) = task_on_initiative(&connection);
+
+        let updated = set_initiative(&connection, id, None).unwrap();
+
+        assert_eq!(updated.initiative_id, None);
+        assert_eq!(updated.project_id, Some(billing));
+        assert_ne!(updated.updated_at, OLD_TIME);
+    }
+
+    #[test]
+    fn set_initiative_refuses_a_deleted_initiative() {
+        let connection = open_in_memory();
+        let (billing, _, _, id) = task_on_initiative(&connection);
+        let pilot = initiative(&connection, billing, "Pilot");
+        mark_deleted(&connection, "initiatives", pilot);
+        let before = task(&connection, id);
+
+        assert!(matches!(
+            set_initiative(&connection, id, Some(pilot)),
+            Err(Error::InitiativeDeleted(other)) if other == pilot
+        ));
+        assert!(matches!(
+            set_initiative(&connection, id, Some(999)),
+            Err(Error::InitiativeNotFound(999))
+        ));
+        assert!(matches!(
+            set_initiative(&connection, 999, None),
+            Err(Error::NotFound(999))
+        ));
+        assert_eq!(task(&connection, id), before);
+    }
+
+    #[test]
+    fn set_project_clears_an_initiative_of_another_project() {
+        let connection = open_in_memory();
+        let (_, _, checkout, id) = task_on_initiative(&connection);
+
+        let updated = set_project(&connection, id, Some(checkout)).unwrap();
+
+        assert_eq!(updated.project_id, Some(checkout));
+        assert_eq!(updated.initiative_id, None);
+        assert_ne!(updated.updated_at, OLD_TIME);
+        assert_eq!(task(&connection, id), updated);
+    }
+
+    #[test]
+    fn set_project_keeps_an_initiative_of_that_project() {
+        let connection = open_in_memory();
+        let (billing, launch, checkout, id) = task_on_initiative(&connection);
+        // A task whose initiative is on another project than the task itself cannot come
+        // from the commands, so this state is stored with SQL.
+        connection
+            .execute(
+                "UPDATE tasks SET project_id = ?2 WHERE id = ?1",
+                params![id, checkout],
+            )
+            .unwrap();
+
+        let updated = set_project(&connection, id, Some(billing)).unwrap();
+
+        assert_eq!(updated.project_id, Some(billing));
+        assert_eq!(updated.initiative_id, Some(launch));
+        assert_ne!(updated.updated_at, OLD_TIME);
+    }
+
+    #[test]
+    fn set_project_to_none_clears_both() {
+        let connection = open_in_memory();
+        let (_, _, _, id) = task_on_initiative(&connection);
+
+        let updated = set_project(&connection, id, None).unwrap();
+
+        assert_eq!(updated.project_id, None);
+        assert_eq!(updated.initiative_id, None);
+        assert_ne!(updated.updated_at, OLD_TIME);
+    }
+
+    #[test]
+    fn set_project_refuses_a_deleted_project() {
+        let connection = open_in_memory();
+        let (_, _, checkout, id) = task_on_initiative(&connection);
+        mark_deleted(&connection, "projects", checkout);
+        let before = task(&connection, id);
+
+        assert!(matches!(
+            set_project(&connection, id, Some(checkout)),
+            Err(Error::ProjectDeleted(other)) if other == checkout
+        ));
+        assert!(matches!(
+            set_project(&connection, id, Some(999)),
+            Err(Error::ProjectNotFound(999))
+        ));
+        assert!(matches!(
+            set_project(&connection, 999, None),
+            Err(Error::NotFound(999))
+        ));
+        assert_eq!(task(&connection, id), before);
+    }
+
+    #[test]
+    fn setting_the_same_project_or_initiative_changes_nothing() {
+        let connection = open_in_memory();
+        let (billing, launch, _, id) = task_on_initiative(&connection);
+        let before = task(&connection, id);
+
+        assert_eq!(set_project(&connection, id, Some(billing)).unwrap(), before);
+        assert_eq!(
+            set_initiative(&connection, id, Some(launch)).unwrap(),
+            before
+        );
+
+        let loose = create(&connection, "Loose", "", None, None).unwrap().id;
+        set_updated_at(&connection, loose, OLD_TIME);
+        let loose_before = task(&connection, loose);
+        assert_eq!(set_project(&connection, loose, None).unwrap(), loose_before);
+        assert_eq!(
+            set_initiative(&connection, loose, None).unwrap(),
+            loose_before
+        );
+    }
+
+    #[test]
+    fn a_task_keeps_a_project_or_initiative_deleted_later() {
+        let connection = open_in_memory();
+        let (billing, launch, _, id) = task_on_initiative(&connection);
+        mark_deleted(&connection, "initiatives", launch);
+        mark_deleted(&connection, "projects", billing);
+
+        let kept = task(&connection, id);
+        assert_eq!(kept.project_id, Some(billing));
+        assert_eq!(kept.initiative_id, Some(launch));
+
+        let renamed = update_title(&connection, id, "Send the final deck").unwrap();
+        assert_eq!(renamed.project_id, Some(billing));
+        assert_eq!(renamed.initiative_id, Some(launch));
+        assert_eq!(
+            set_initiative(&connection, id, Some(launch)).unwrap(),
+            renamed
+        );
+        assert_eq!(
+            set_project(&connection, id, Some(billing)).unwrap(),
+            renamed
+        );
     }
 
     #[test]

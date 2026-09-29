@@ -378,6 +378,9 @@ const MEETINGS_WITH_ANOTHER_INITIATIVE: &str = "
 /// stays in its project and stops covering this initiative. Sets the time each of these
 /// meetings was last changed.
 ///
+/// Every task of the initiative, also a completed or deleted one, moves to the project too, and
+/// the time each task was last changed is set.
+///
 /// Sets the time the initiative was last changed. Does not change the column or the rank, so
 /// the initiative keeps its place on the roadmap. If the initiative already belongs to the
 /// project, changes nothing.
@@ -426,6 +429,10 @@ pub fn set_project(
             "UPDATE meetings SET project_id = ?2, updated_at = {NOW}
              WHERE id IN (SELECT meeting_id FROM meeting_initiatives WHERE initiative_id = ?1)"
         ),
+        params![id, project_id],
+    )?;
+    transaction.execute(
+        &format!("UPDATE tasks SET project_id = ?2, updated_at = {NOW} WHERE initiative_id = ?1"),
         params![id, project_id],
     )?;
     transaction.commit()?;
@@ -1588,6 +1595,45 @@ mod tests {
             assert_ne!(meeting.updated_at, OLD_TIME);
         }
         assert_eq!(fetch_meeting(&connection, unrelated.id), unrelated);
+    }
+
+    #[test]
+    fn set_project_moves_every_task_of_the_initiative() {
+        let connection = open_in_memory();
+        let billing = project(&connection, "Billing");
+        let moved = add(&connection, "Moved", "now");
+        let new_task = |title: &str| {
+            crate::tasks::create(&connection, title, "", None, Some(moved))
+                .unwrap()
+                .id
+        };
+        let open = new_task("Open");
+        let completed = new_task("Completed");
+        crate::tasks::set_completed(&connection, completed, true).unwrap();
+        let deleted = new_task("Deleted");
+        crate::tasks::delete(&connection, deleted).unwrap();
+        let other = crate::tasks::create(&connection, "Other", "", Some(home(&connection)), None)
+            .unwrap()
+            .id;
+        connection
+            .execute("UPDATE tasks SET updated_at = ?1", params![OLD_TIME])
+            .unwrap();
+        let other_before = crate::tasks::get(&connection, other).unwrap().unwrap();
+
+        let MoveOutcome::Moved { .. } = set_project(&connection, moved, billing).unwrap() else {
+            panic!("the move should succeed");
+        };
+
+        for id in [open, completed, deleted] {
+            let task = crate::tasks::get(&connection, id).unwrap().unwrap();
+            assert_eq!(task.project_id, Some(billing));
+            assert_eq!(task.initiative_id, Some(moved));
+            assert_ne!(task.updated_at, OLD_TIME);
+        }
+        assert_eq!(
+            crate::tasks::get(&connection, other).unwrap().unwrap(),
+            other_before
+        );
     }
 
     #[test]
