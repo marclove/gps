@@ -1,21 +1,61 @@
 import type { Active, Over, UniqueIdentifier } from "@dnd-kit/core";
 import { describe, expect, it } from "vitest";
-import type { Column } from "@/lib/initiatives";
-import { announcements, dropTarget } from "./announcements";
+import { boardAnnouncements, type BoardMessages } from "./announcements";
+import type { BoardColumnDef } from "./drop-target";
 
-const names: Record<number, string> = { 1: "A", 2: "B", 3: "C", 4: "" };
+type Column = "now" | "next" | "later" | "done";
+type Card = { id: number; name: string };
 
-const starts: Record<number, Column> = {
-    1: "now",
-    2: "done",
-    3: "next",
-    4: "later",
+const columns: BoardColumnDef<Card, Column>[] = [
+    { id: "now", title: "Now", ordered: true, draggable: true, emptyText: "" },
+    {
+        id: "next",
+        title: "Next",
+        ordered: true,
+        draggable: true,
+        emptyText: "",
+    },
+    {
+        id: "later",
+        title: "Later",
+        ordered: true,
+        draggable: true,
+        emptyText: "",
+    },
+    {
+        id: "done",
+        title: "Done",
+        ordered: false,
+        draggable: true,
+        emptyText: "",
+        sortedIndex: () => 0,
+    },
+];
+
+// The cards of the board before the drag: A in Now, C in Next, a card without a name in
+// Later, and B in Done.
+const cards: Record<Column, Card[]> = {
+    now: [{ id: 1, name: "A" }],
+    next: [{ id: 3, name: "C" }],
+    later: [{ id: 4, name: "" }],
+    done: [{ id: 2, name: "B" }],
 };
 
-const messages = announcements(
-    (id) => names[id as number] ?? "",
-    (id) => starts[id as number] ?? null,
-);
+const name = (card: Card) =>
+    card.name.trim() === "" ? "Untitled initiative" : card.name;
+
+const words: BoardMessages<Card, Column> = {
+    pickedUp: (card) => `Picked up ${name(card)}.`,
+    over: (card, column, position, count) =>
+        `${name(card)} is in ${column.title}, position ${position} of ${count}.`,
+    dropped: (card, column, position, count) =>
+        column.id === "done"
+            ? `${name(card)} was completed.`
+            : `${name(card)} was moved to ${column.title}, position ${position} of ${count}.`,
+    putBack: (card) => `${name(card)} was put back.`,
+};
+
+const messages = boardAnnouncements(columns, cards, words);
 
 function active(id: number): Active {
     return {
@@ -159,41 +199,5 @@ describe("announcements", () => {
         expect(
             messages.onDragOver({ active: active(1), over: null }),
         ).toBeUndefined();
-    });
-});
-
-describe("dropTarget", () => {
-    it("keeps the place of the card over its own list area", () => {
-        expect(dropTarget(active(2), overList("now", [1, 2, 3]))).toEqual({
-            column: "now",
-            index: 1,
-            count: 3,
-        });
-    });
-
-    it("keeps the place of a card in Done", () => {
-        expect(dropTarget(active(3), overCard(2, "done", 0, [2, 3]))).toEqual({
-            column: "done",
-            index: 1,
-            count: 2,
-        });
-    });
-
-    it("returns null for a target that is not a column or a card", () => {
-        expect(
-            dropTarget(active(1), {
-                id: "other",
-                rect: {
-                    width: 0,
-                    height: 0,
-                    top: 0,
-                    left: 0,
-                    bottom: 0,
-                    right: 0,
-                },
-                disabled: false,
-                data: { current: undefined },
-            }),
-        ).toBeNull();
     });
 });

@@ -4,8 +4,8 @@ import {
     verticalListSortingStrategy,
     type SortingStrategy,
 } from "@dnd-kit/sortable";
+import type { ListData } from "@/components/board/drop-target";
 import type { Column, InitiativeSummary } from "@/lib/initiatives";
-import type { ListData } from "./announcements";
 import { InitiativeCard } from "./initiative-card";
 
 // Done does not take part in sorting, so its cards stay in place while a card is over them.

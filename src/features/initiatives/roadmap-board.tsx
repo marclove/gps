@@ -11,21 +11,65 @@ import {
     type DragEndEvent,
     type DragOverEvent,
     type DragStartEvent,
-    type UniqueIdentifier,
 } from "@dnd-kit/core";
 import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { CardPointerSensor } from "@/components/board/card-pointer-sensor";
+import {
+    boardAnnouncements,
+    type BoardMessages,
+} from "@/components/board/announcements";
 import { columnOf, moveCard } from "@/components/board/cards";
-import { COLUMNS, type Column } from "@/lib/initiatives";
-import { announcements, dropTarget } from "./announcements";
+import {
+    dropTarget,
+    type BoardColumnDef,
+} from "@/components/board/drop-target";
+import {
+    COLUMNS,
+    initiativeDisplayName,
+    type Column,
+    type InitiativeSummary,
+} from "@/lib/initiatives";
 import type { Board } from "./board";
 import { InitiativeCardCopy } from "./initiative-card";
 import { RoadmapColumn } from "./roadmap-column";
 
+/**
+ * The columns of the roadmap. The user orders Now, Next, and Later. Done is sorted by the time
+ * of completion, so a card from another column goes first in Done.
+ */
+const ROADMAP_COLUMNS: BoardColumnDef<InitiativeSummary, Column>[] =
+    COLUMNS.map((column) => ({
+        ...column,
+        ordered: column.id !== "done",
+        draggable: true,
+        emptyText: "No initiatives",
+        sortedIndex: column.id === "done" ? () => 0 : undefined,
+    }));
+
+function shownName(initiative: InitiativeSummary): string {
+    return initiativeDisplayName(initiative.name);
+}
+
+/** The messages that screen readers announce while a card of the roadmap is dragged. */
+const ROADMAP_MESSAGES: BoardMessages<InitiativeSummary, Column> = {
+    pickedUp: (card) => `Picked up ${shownName(card)}.`,
+    over: (card, column, position, count) =>
+        `${shownName(card)} is in ${column.title}, position ${position} of ${count}.`,
+    dropped: (card, column, position, count) =>
+        column.id === "done"
+            ? `${shownName(card)} was completed.`
+            : `${shownName(card)} was moved to ${column.title}, position ${position} of ${count}.`,
+    putBack: (card) => `${shownName(card)} was put back.`,
+};
+
 /** The column and the index of a card, counted from 0. */
 type Place = { column: Column; index: number };
+
+function columnDef(id: Column): BoardColumnDef<InitiativeSummary, Column> {
+    return ROADMAP_COLUMNS.find((column) => column.id === id)!;
+}
 
 function placeOf(board: Board, id: number): Place | null {
     const column = columnOf(board, id);
@@ -111,16 +155,7 @@ export function RoadmapBoard({
         }),
     );
     const messages = useMemo(
-        () =>
-            announcements(
-                (id: UniqueIdentifier) => {
-                    const place = placeOf(board, Number(id));
-                    return place === null
-                        ? ""
-                        : board[place.column][place.index].name;
-                },
-                (id: UniqueIdentifier) => columnOf(board, Number(id)),
-            ),
+        () => boardAnnouncements(ROADMAP_COLUMNS, board, ROADMAP_MESSAGES),
         [board],
     );
 
@@ -131,7 +166,10 @@ export function RoadmapBoard({
     }
 
     function over({ active, over }: DragOverEvent) {
-        const target = over === null ? null : dropTarget(active, over);
+        const target =
+            over === null
+                ? null
+                : dropTarget(active, over, ROADMAP_COLUMNS, board);
         if (target === null) return;
         const id = Number(active.id);
         setDragBoard((current) =>
@@ -143,14 +181,17 @@ export function RoadmapBoard({
 
     function end({ active, over }: DragEndEvent) {
         const from = origin.current;
-        const target = over === null ? null : dropTarget(active, over);
+        const target =
+            over === null
+                ? null
+                : dropTarget(active, over, ROADMAP_COLUMNS, board);
         origin.current = null;
         setActiveId(null);
         setDragBoard(null);
         if (from === null || target === null) return;
         const unchanged =
             target.column === from.column &&
-            (target.column === "done" || target.index === from.index);
+            (!columnDef(target.column).ordered || target.index === from.index);
         if (!unchanged) onMove(Number(active.id), target.column, target.index);
     }
 
