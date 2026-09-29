@@ -23,9 +23,15 @@ erDiagram
         INTEGER id PK "Identifier that SQLite assigns"
         INTEGER meeting_id FK "Null for a task outside a meeting. Refers to meetings.id"
         TEXT title "Not null. One line of text that tells what to do"
+        TEXT description "Not null, default empty. Markdown"
+        INTEGER project_id FK "Null for a task on no project. Refers to projects.id"
+        INTEGER initiative_id FK "Null for a task on no initiative. Refers to initiatives.id. Belongs to the project of the task"
+        TEXT rank "Null while the task is in the icebox. Lexical key. Unique among prioritized tasks"
         TEXT created_at "Not null. RFC 3339 timestamp in UTC"
         TEXT updated_at "Not null. RFC 3339 timestamp in UTC"
+        TEXT started_at "Null until the task is started. Not null only when rank is not null. RFC 3339 timestamp in UTC"
         TEXT completed_at "Null until the task is completed. RFC 3339 timestamp in UTC"
+        TEXT deleted_at "Null until the task is deleted. RFC 3339 timestamp in UTC"
     }
     initiatives {
         INTEGER id PK "Identifier that SQLite assigns"
@@ -53,6 +59,8 @@ erDiagram
     initiatives ||--o{ meeting_initiatives : "is covered by"
     projects ||--o{ initiatives : "has initiatives"
     projects |o--o{ meetings : "has meetings"
+    projects |o--o{ tasks : "has tasks"
+    initiatives |o--o{ tasks : "has tasks"
 ```
 
 ## Tables
@@ -97,7 +105,7 @@ Each row is one company initiative that the user has a responsibility in, such a
 
 ### `projects`
 
-Each row is one project, a long lived effort of the company, such as a product area (see ADR 0019). A project can have many initiatives and many meetings.
+Each row is one project, a long lived effort of the company, such as a product area (see ADR 0019). A project can have many initiatives, many meetings, and many tasks.
 
 - `name` is stored without spaces at the start or the end. A project can have an empty name, when the user saved a draft that has a description but no name. The user interface shows "Untitled project" for it. The unique index `projects_name` on `name COLLATE NOCASE`, limited to rows where `deleted_at` is empty and `name` is not empty, makes sure that no two projects that are not deleted have the same name. Uppercase and lowercase letters A to Z do not count, so "Checkout" and "checkout" are the same name. Any number of projects can have an empty name, and a deleted project gives its name free.
 - `description` holds the description as Markdown, like the notes of a meeting.
@@ -106,12 +114,21 @@ Each row is one project, a long lived effort of the company, such as a product a
 
 ### `tasks`
 
-Each row is one task that the user must do, such as an action item from a meeting (see ADR 0010).
+Each row is one task that the user must do, such as an action item from a meeting (see ADR 0010). ADR 0023 added the description, the project, the initiative, and the columns that give the stage of a task.
 
 - `title` is the one line of text that tells what to do. ADR 0018 gave the column its name.
-
-- `meeting_id` refers to the meeting that the task comes from. It may be empty for a task outside a meeting, but the application does not create such tasks yet. An index on `meeting_id` makes it fast to find the tasks of a meeting.
+- `description` holds more about the task as Markdown, like the notes of a meeting. It is empty when the user wrote nothing.
+- `meeting_id` refers to the meeting that the task comes from. It is empty for a task outside a meeting. An index on `meeting_id` makes it fast to find the tasks of a meeting. Deleting a meeting does not change its tasks.
+- `project_id` refers to the project of the task. It is empty for a task on no project. A new action item gets the project of its meeting, unless that project is deleted. An index on `project_id` makes it fast to find the tasks of a project.
+- `initiative_id` refers to the initiative of the task. It is empty for a task on no initiative. When a task has an initiative, it has the project of that initiative, and the backend keeps this rule. A new action item gets an initiative only when its meeting covers exactly one initiative that is not deleted. An index on `initiative_id` makes it fast to find the tasks of an initiative.
+- The stage of a task is not stored in a column. It follows from `rank`, `started_at`, `completed_at`, and `deleted_at`:
+  - A task that is not completed and not deleted is in the icebox when `rank` is empty, in the backlog when `rank` is set and `started_at` is empty, and in current work when both are set.
+  - A task where `completed_at` is set is done.
+  - A task where `deleted_at` is set is deleted, and the application does not show it.
+- `rank` is a text key that gives the place of the task in the one list of prioritized tasks, as `rank` of `initiatives` does in its column (see ADR 0017). Current work and the backlog show the tasks of this list, each in the order of their ranks. It is empty while the task is in the icebox. A completed or deleted task keeps its `rank` and `started_at`, so that it can go back to its place. The unique index `tasks_rank` on `rank`, limited to rows where `rank` is set and `completed_at` and `deleted_at` are empty, makes sure that no two prioritized tasks have the same rank. Completed and deleted tasks are left out, because another task can take their place.
+- `started_at` is the time when the user started the task. A `CHECK` constraint makes sure that a started task has a rank.
 - `completed_at` is empty for a task that is not completed. When the user checks the task off, the backend sets it to the current time. If the user checks off a task that is already completed, the backend keeps the time that was recorded first. When the user unchecks the task, the backend clears it again.
+- `deleted_at` is empty for a task that is not deleted. A deleted task is not in the list of its meeting. No command sets it yet: deleting a task still removes its row.
 - The backend sets `created_at` and `updated_at`. It changes `updated_at` each time the title changes or the task is checked off or unchecked.
-- Deleting a meeting does not change its tasks.
-- The database enforces foreign keys, so `meeting_id` must refer to a meeting that exists.
+- The database enforces foreign keys, so `meeting_id`, `project_id`, and `initiative_id` must refer to rows that exist.
+- The migration that added the columns rebuilt the table. Each task kept its identifier, title, meeting, times, and completion, and got an empty description. Each task got the project of its meeting, also when the meeting was deleted, unless the project was deleted. Each task got the initiative of its meeting when the meeting covered exactly one initiative that was not deleted. `rank`, `started_at`, and `deleted_at` stayed empty, so each open task is in the icebox and each completed task is done.

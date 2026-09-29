@@ -68,6 +68,7 @@ fn migrations() -> Migrations<'static> {
         M::up(CREATE_PROJECTS).foreign_key_check(),
         M::up(PUT_INITIATIVES_IN_PROJECTS).foreign_key_check(),
         M::up(ADD_MEETING_INITIATIVES).foreign_key_check(),
+        M::up(REBUILD_TASKS).foreign_key_check(),
     ])
 }
 
@@ -235,6 +236,54 @@ ALTER TABLE meetings_new RENAME TO meetings;
 CREATE INDEX meetings_project_id ON meetings(project_id);
 ";
 
+/// Rebuilds the table `tasks` with the columns that store the description, the project, the
+/// initiative, and the stage of a task, and creates its indexes again.
+///
+/// `SQLite` cannot add a check constraint to a table that exists, so the migration rebuilds the
+/// table. The rows keep their identifiers. Each task keeps its title, meeting, times, and
+/// completion, and gets an empty description. Each task gets the project of its meeting, also
+/// when the meeting is deleted, unless the project is deleted. Each task gets the initiative of
+/// its meeting when the meeting covers exactly one initiative that is not deleted. The rank, the
+/// start, and the delete of each task stay empty, so an open task is in the icebox and a
+/// completed task is done.
+const REBUILD_TASKS: &str = "
+CREATE TABLE tasks_new (
+    id            INTEGER PRIMARY KEY,
+    meeting_id    INTEGER REFERENCES meetings(id),
+    title         TEXT NOT NULL,
+    description   TEXT NOT NULL DEFAULT '',
+    project_id    INTEGER REFERENCES projects(id),
+    initiative_id INTEGER REFERENCES initiatives(id),
+    rank          TEXT,
+    created_at    TEXT NOT NULL,
+    updated_at    TEXT NOT NULL,
+    started_at    TEXT,
+    completed_at  TEXT,
+    deleted_at    TEXT,
+    CHECK (started_at IS NULL OR rank IS NOT NULL)
+);
+INSERT INTO tasks_new
+    (id, meeting_id, title, description, project_id, initiative_id, rank, created_at,
+     updated_at, started_at, completed_at, deleted_at)
+SELECT tasks.id, tasks.meeting_id, tasks.title, '',
+       (SELECT projects.id FROM meetings JOIN projects ON projects.id = meetings.project_id
+        WHERE meetings.id = tasks.meeting_id AND projects.deleted_at IS NULL),
+       (SELECT max(initiatives.id) FROM meeting_initiatives
+        JOIN initiatives ON initiatives.id = meeting_initiatives.initiative_id
+        WHERE meeting_initiatives.meeting_id = tasks.meeting_id
+          AND initiatives.deleted_at IS NULL
+        HAVING count(*) = 1),
+       NULL, tasks.created_at, tasks.updated_at, NULL, tasks.completed_at, NULL
+FROM tasks;
+DROP TABLE tasks;
+ALTER TABLE tasks_new RENAME TO tasks;
+CREATE INDEX tasks_meeting_id ON tasks(meeting_id);
+CREATE INDEX tasks_project_id ON tasks(project_id);
+CREATE INDEX tasks_initiative_id ON tasks(initiative_id);
+CREATE UNIQUE INDEX tasks_rank ON tasks(rank)
+    WHERE rank IS NOT NULL AND completed_at IS NULL AND deleted_at IS NULL;
+";
+
 /// Opens the database file at `path`, and creates it if it does not exist.
 /// Applies all migrations that were not applied before.
 pub fn open(path: &Path) -> Result<Connection, rusqlite_migration::Error> {
@@ -298,7 +347,8 @@ mod tests {
         let connection = open(&path).unwrap();
         assert!(crate::meetings::list(&connection).unwrap().is_empty());
         let meeting = crate::meetings::create(&connection, "2026-09-24").unwrap();
-        let task = crate::tasks::create(&connection, meeting.id, "Send the deck").unwrap();
+        let task =
+            crate::tasks::create_for_meeting(&connection, meeting.id, "Send the deck").unwrap();
         drop(connection);
 
         let connection = open(&path).unwrap();
@@ -562,14 +612,10 @@ mod tests {
             .query_row("SELECT title FROM tasks WHERE id = 1", [], |row| row.get(0))
             .unwrap();
         assert_eq!(title, "Send the deck");
-        let columns: Vec<String> = connection
-            .prepare("SELECT name FROM pragma_table_info('tasks')")
-            .unwrap()
-            .query_map([], |row| row.get(0))
-            .unwrap()
-            .collect::<Result<_, _>>()
-            .unwrap();
-        assert!(!columns.contains(&"description".to_owned()));
+        assert_eq!(
+            column_values::<String>(&connection, "tasks", "description"),
+            [""]
+        );
     }
 
     #[test]
@@ -773,5 +819,187 @@ mod tests {
             )
             .unwrap();
         assert_eq!(index, 1);
+    }
+
+    /// The number of migrations before the migration that rebuilds the table `tasks` with the
+    /// columns that store the stage of a task.
+    const VERSION_WITHOUT_TASK_STAGES: usize = 11;
+
+    /// Migrates a new database to the version before the rebuild of `tasks`, runs `seed`, and
+    /// then applies all migrations.
+    fn migrate_tasks_with(seed: &str) -> Connection {
+        let mut connection = Connection::open_in_memory().unwrap();
+        migrations()
+            .to_version(&mut connection, VERSION_WITHOUT_TASK_STAGES)
+            .unwrap();
+        connection.execute_batch(seed).unwrap();
+        apply(&mut connection, &migrations()).unwrap();
+        connection
+    }
+
+    #[test]
+    fn task_stages_migration_keeps_title_meeting_and_completion() {
+        let connection = migrate_tasks_with(
+            "INSERT INTO meetings (id, name, notes, date, created_at, updated_at)
+             VALUES (1, 'Kickoff', '', '2026-09-24', 't', 't');
+             INSERT INTO tasks (id, meeting_id, title, created_at, updated_at, completed_at)
+             VALUES (1, 1, 'Send the deck', 'c1', 'u1', NULL),
+                    (2, 1, 'Book the room', 'c2', 'u2', 'd2');",
+        );
+
+        let task = |id| crate::tasks::get(&connection, id).unwrap().unwrap();
+        let expected = |id, title: &str, completed_at: Option<&str>| crate::tasks::Task {
+            id,
+            meeting_id: Some(1),
+            title: title.to_owned(),
+            description: String::new(),
+            project_id: None,
+            initiative_id: None,
+            rank: None,
+            created_at: format!("c{id}"),
+            updated_at: format!("u{id}"),
+            started_at: None,
+            completed_at: completed_at.map(str::to_owned),
+            deleted_at: None,
+        };
+        assert_eq!(task(1), expected(1, "Send the deck", None));
+        assert_eq!(task(2), expected(2, "Book the room", Some("d2")));
+        let enabled: bool = connection
+            .pragma_query_value(None, "foreign_keys", |row| row.get(0))
+            .unwrap();
+        assert!(enabled);
+    }
+
+    #[test]
+    fn task_stages_migration_gives_the_project_of_the_meeting() {
+        let connection = migrate_tasks_with(
+            "INSERT INTO projects (id, name, created_at, updated_at)
+             VALUES (1, 'Billing', 't', 't');
+             INSERT INTO meetings (id, name, notes, date, created_at, updated_at, deleted_at,
+                                   project_id)
+             VALUES (1, 'Sync', '', '2026-09-24', 't', 't', NULL, 1),
+                    (2, 'Old', '', '2026-09-24', 't', 't', 'd', 1),
+                    (3, 'Free', '', '2026-09-24', 't', 't', NULL, NULL);
+             INSERT INTO tasks (id, meeting_id, title, created_at, updated_at)
+             VALUES (1, 1, 'A', 't', 't'),
+                    (2, 2, 'B', 't', 't'),
+                    (3, 3, 'C', 't', 't'),
+                    (4, NULL, 'D', 't', 't');",
+        );
+
+        assert_eq!(
+            column_values::<Option<i64>>(&connection, "tasks", "project_id"),
+            [Some(1), Some(1), None, None]
+        );
+        let missing = connection.execute("UPDATE tasks SET project_id = 999 WHERE id = 1", []);
+        assert!(missing.is_err());
+    }
+
+    #[test]
+    fn task_stages_migration_skips_a_deleted_project() {
+        let connection = migrate_tasks_with(
+            "INSERT INTO projects (id, name, created_at, updated_at, deleted_at)
+             VALUES (1, 'Billing', 't', 't', 'd');
+             INSERT INTO meetings (id, name, notes, date, created_at, updated_at, project_id)
+             VALUES (1, 'Sync', '', '2026-09-24', 't', 't', 1);
+             INSERT INTO tasks (id, meeting_id, title, created_at, updated_at)
+             VALUES (1, 1, 'A', 't', 't');",
+        );
+
+        assert_eq!(
+            column_values::<Option<i64>>(&connection, "tasks", "project_id"),
+            [None]
+        );
+    }
+
+    #[test]
+    fn task_stages_migration_gives_the_only_initiative_that_is_not_deleted() {
+        let connection = migrate_tasks_with(
+            "INSERT INTO projects (id, name, created_at, updated_at)
+             VALUES (1, 'Billing', 't', 't');
+             INSERT INTO initiatives
+                 (id, project_id, name, horizon, rank, created_at, updated_at, deleted_at)
+             VALUES (1, 1, 'Launch', 'now', 'a', 't', 't', NULL),
+                    (2, 1, 'Pilot', 'now', 'b', 't', 't', 'd'),
+                    (3, 1, 'Rollout', 'now', 'c', 't', 't', NULL);
+             INSERT INTO meetings (id, name, notes, date, created_at, updated_at, project_id)
+             VALUES (1, 'One live', '', '2026-09-24', 't', 't', 1),
+                    (2, 'Two live', '', '2026-09-24', 't', 't', 1),
+                    (3, 'None', '', '2026-09-24', 't', 't', 1);
+             INSERT INTO meeting_initiatives (meeting_id, initiative_id, created_at)
+             VALUES (1, 1, 't'), (1, 2, 't'), (2, 1, 't'), (2, 3, 't');
+             INSERT INTO tasks (id, meeting_id, title, created_at, updated_at)
+             VALUES (1, 1, 'A', 't', 't'),
+                    (2, 2, 'B', 't', 't'),
+                    (3, 3, 'C', 't', 't');",
+        );
+
+        assert_eq!(
+            column_values::<Option<i64>>(&connection, "tasks", "initiative_id"),
+            [Some(1), None, None]
+        );
+        let missing = connection.execute("UPDATE tasks SET initiative_id = 999 WHERE id = 1", []);
+        assert!(missing.is_err());
+    }
+
+    #[test]
+    fn task_stages_migration_refuses_a_started_task_without_rank() {
+        let connection = migrate_tasks_with(
+            "INSERT INTO tasks (id, meeting_id, title, created_at, updated_at)
+             VALUES (1, NULL, 'A', 't', 't');",
+        );
+
+        let result = connection.execute("UPDATE tasks SET started_at = 's' WHERE id = 1", []);
+        assert!(
+            matches!(
+                result,
+                Err(rusqlite::Error::SqliteFailure(ref error, _))
+                    if error.extended_code == rusqlite::ffi::SQLITE_CONSTRAINT_CHECK
+            ),
+            "{result:?}"
+        );
+        connection
+            .execute(
+                "UPDATE tasks SET rank = 'a', started_at = 's' WHERE id = 1",
+                [],
+            )
+            .unwrap();
+    }
+
+    #[test]
+    fn task_stages_migration_refuses_two_prioritized_tasks_with_one_rank() {
+        let connection = migrate_tasks_with(
+            "INSERT INTO tasks (id, meeting_id, title, created_at, updated_at)
+             VALUES (1, NULL, 'A', 't', 't'),
+                    (2, NULL, 'B', 't', 't'),
+                    (3, NULL, 'C', 't', 't'),
+                    (4, NULL, 'D', 't', 't');",
+        );
+        connection
+            .execute("UPDATE tasks SET rank = 'a' WHERE id = 1", [])
+            .unwrap();
+
+        let result = connection.execute("UPDATE tasks SET rank = 'a' WHERE id = 2", []);
+        assert!(
+            matches!(
+                result,
+                Err(rusqlite::Error::SqliteFailure(ref error, _))
+                    if error.extended_code == rusqlite::ffi::SQLITE_CONSTRAINT_UNIQUE
+            ),
+            "{result:?}"
+        );
+
+        connection
+            .execute(
+                "UPDATE tasks SET rank = 'a', completed_at = 'd' WHERE id = 3",
+                [],
+            )
+            .unwrap();
+        connection
+            .execute(
+                "UPDATE tasks SET rank = 'a', deleted_at = 'd' WHERE id = 4",
+                [],
+            )
+            .unwrap();
     }
 }

@@ -8,6 +8,11 @@ use serde::Serialize;
 use crate::meetings::NOW;
 
 /// One task that the user must do.
+///
+/// The stage of the task follows from `rank`, `started_at`, `completed_at`, and `deleted_at`.
+/// A task without a rank is in the icebox. A task with a rank is in the backlog, or in current
+/// work when it is started. A completed task is done. A completed or deleted task keeps its
+/// rank and its start, so that it can go back to its place.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Task {
@@ -18,14 +23,31 @@ pub struct Task {
     pub meeting_id: Option<i64>,
     /// The one line of text that tells what to do.
     pub title: String,
+    /// The Markdown text that tells more about the task. It is empty when the user wrote
+    /// nothing.
+    pub description: String,
+    /// The identifier of the project of the task, or `None` if the task is on no project.
+    pub project_id: Option<i64>,
+    /// The identifier of the initiative of the task, or `None` if the task is on no
+    /// initiative. The initiative belongs to the project of the task.
+    pub initiative_id: Option<i64>,
+    /// The key that gives the place of the task in the list of prioritized tasks. It is
+    /// `None` while the task is in the icebox.
+    pub rank: Option<String>,
     /// The time when the task was created, as an RFC 3339 timestamp in UTC.
     pub created_at: String,
-    /// The time when the title or the completion was last changed, as an RFC 3339
-    /// timestamp in UTC.
+    /// The time when the content of the task was last changed, as an RFC 3339 timestamp in
+    /// UTC.
     pub updated_at: String,
+    /// The time when the user started the task, as an RFC 3339 timestamp in UTC. It is
+    /// `None` if the task is not started.
+    pub started_at: Option<String>,
     /// The time when the user first marked the task as completed, as an RFC 3339 timestamp
     /// in UTC. It is `None` if the task is not completed.
     pub completed_at: Option<String>,
+    /// The time when the user deleted the task, as an RFC 3339 timestamp in UTC. It is
+    /// `None` if the task is not deleted.
+    pub deleted_at: Option<String>,
 }
 
 /// A problem that stops a task operation.
@@ -57,38 +79,86 @@ impl From<rusqlite::Error> for Error {
     }
 }
 
-/// Returns the tasks of a meeting. The task that was created first is first.
+/// The columns that every query of this module reads, in the order that `task_from_row`
+/// expects.
+const COLUMNS: &str = "id, meeting_id, title, description, project_id, initiative_id, rank, \
+                       created_at, updated_at, started_at, completed_at, deleted_at";
+
+/// Returns the tasks that are not deleted, in no specific order.
+pub fn list(connection: &Connection) -> Result<Vec<Task>, Error> {
+    let mut statement = connection.prepare(&format!(
+        "SELECT {COLUMNS} FROM tasks WHERE deleted_at IS NULL"
+    ))?;
+    let tasks = statement
+        .query_map([], task_from_row)?
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(tasks)
+}
+
+/// Returns the task with the given identifier, also when the task is deleted. Returns `None`
+/// if no task has this identifier.
+pub fn get(connection: &Connection, id: i64) -> Result<Option<Task>, Error> {
+    let task = connection
+        .query_row(
+            &format!("SELECT {COLUMNS} FROM tasks WHERE id = ?1"),
+            params![id],
+            task_from_row,
+        )
+        .optional()?;
+    Ok(task)
+}
+
+/// Returns the tasks of a meeting that are not deleted. The task that was created first is
+/// first.
 pub fn list_for_meeting(connection: &Connection, meeting_id: i64) -> Result<Vec<Task>, Error> {
-    let mut statement = connection.prepare(
-        "SELECT id, meeting_id, title, created_at, updated_at, completed_at FROM tasks
-         WHERE meeting_id = ?1
-         ORDER BY created_at, id",
-    )?;
+    let mut statement = connection.prepare(&format!(
+        "SELECT {COLUMNS} FROM tasks
+         WHERE meeting_id = ?1 AND deleted_at IS NULL
+         ORDER BY created_at, id"
+    ))?;
     let tasks = statement
         .query_map(params![meeting_id], task_from_row)?
         .collect::<Result<Vec<_>, _>>()?;
     Ok(tasks)
 }
 
-/// Creates a task that is not completed, for the given meeting. Stores the title as given.
-pub fn create(connection: &Connection, meeting_id: i64, title: &str) -> Result<Task, Error> {
-    let meeting_exists: bool = connection.query_row(
-        "SELECT EXISTS(SELECT 1 FROM meetings WHERE id = ?1)",
-        params![meeting_id],
-        |row| row.get(0),
-    )?;
-    if !meeting_exists {
-        return Err(Error::MeetingNotFound(meeting_id));
-    }
-    let id = connection.query_row(
-        &format!(
-            "INSERT INTO tasks (meeting_id, title, created_at, updated_at)
-             VALUES (?1, ?2, {NOW}, {NOW}) RETURNING id"
-        ),
-        params![meeting_id, title],
-        |row| row.get(0),
-    )?;
-    get(connection, id)?.ok_or(Error::NotFound(id))
+/// Creates a task in the icebox for the given meeting. Stores the title as given.
+///
+/// The task gets the project of the meeting, unless that project is deleted. The task gets an
+/// initiative only when the meeting covers exactly one initiative that is not deleted.
+pub fn create_for_meeting(
+    connection: &Connection,
+    meeting_id: i64,
+    title: &str,
+) -> Result<Task, Error> {
+    let transaction = connection.unchecked_transaction()?;
+    let id: i64 = transaction
+        .query_row(
+            &format!(
+                "INSERT INTO tasks
+                     (meeting_id, title, project_id, initiative_id, created_at, updated_at)
+                 SELECT meetings.id, ?2,
+                        (SELECT projects.id FROM projects
+                         WHERE projects.id = meetings.project_id
+                           AND projects.deleted_at IS NULL),
+                        (SELECT max(initiatives.id) FROM meeting_initiatives
+                         JOIN initiatives
+                           ON initiatives.id = meeting_initiatives.initiative_id
+                         WHERE meeting_initiatives.meeting_id = meetings.id
+                           AND initiatives.deleted_at IS NULL
+                         HAVING count(*) = 1),
+                        {NOW}, {NOW}
+                 FROM meetings WHERE meetings.id = ?1
+                 RETURNING id"
+            ),
+            params![meeting_id, title],
+            |row| row.get(0),
+        )
+        .optional()?
+        .ok_or(Error::MeetingNotFound(meeting_id))?;
+    let task = get(&transaction, id)?.ok_or(Error::NotFound(id))?;
+    transaction.commit()?;
+    Ok(task)
 }
 
 /// Replaces the title of a task, and sets the time it was last changed. Returns the
@@ -135,26 +205,20 @@ pub fn delete(connection: &Connection, id: i64) -> Result<(), Error> {
     Ok(())
 }
 
-fn get(connection: &Connection, id: i64) -> Result<Option<Task>, Error> {
-    let task = connection
-        .query_row(
-            "SELECT id, meeting_id, title, created_at, updated_at, completed_at FROM tasks
-             WHERE id = ?1",
-            params![id],
-            task_from_row,
-        )
-        .optional()?;
-    Ok(task)
-}
-
 fn task_from_row(row: &Row<'_>) -> rusqlite::Result<Task> {
     Ok(Task {
         id: row.get(0)?,
         meeting_id: row.get(1)?,
         title: row.get(2)?,
-        created_at: row.get(3)?,
-        updated_at: row.get(4)?,
-        completed_at: row.get(5)?,
+        description: row.get(3)?,
+        project_id: row.get(4)?,
+        initiative_id: row.get(5)?,
+        rank: row.get(6)?,
+        created_at: row.get(7)?,
+        updated_at: row.get(8)?,
+        started_at: row.get(9)?,
+        completed_at: row.get(10)?,
+        deleted_at: row.get(11)?,
     })
 }
 
@@ -180,9 +244,9 @@ mod tests {
         let connection = open_in_memory();
         let first = meetings::create(&connection, "2026-09-24").unwrap();
         let second = meetings::create(&connection, "2026-09-24").unwrap();
-        create(&connection, first.id, "A").unwrap();
-        create(&connection, second.id, "X").unwrap();
-        create(&connection, first.id, "B").unwrap();
+        create_for_meeting(&connection, first.id, "A").unwrap();
+        create_for_meeting(&connection, second.id, "X").unwrap();
+        create_for_meeting(&connection, first.id, "B").unwrap();
 
         let titles: Vec<String> = list_for_meeting(&connection, first.id)
             .unwrap()
@@ -193,11 +257,11 @@ mod tests {
     }
 
     #[test]
-    fn create_returns_a_task_that_is_not_completed() {
+    fn create_for_meeting_returns_a_task_that_is_not_completed() {
         let connection = open_in_memory();
         let meeting = meetings::create(&connection, "2026-09-24").unwrap();
 
-        let task = create(&connection, meeting.id, "Send the deck").unwrap();
+        let task = create_for_meeting(&connection, meeting.id, "Send the deck").unwrap();
 
         assert_eq!(task.meeting_id, Some(meeting.id));
         assert_eq!(task.title, "Send the deck");
@@ -206,10 +270,10 @@ mod tests {
     }
 
     #[test]
-    fn create_fails_for_a_meeting_that_does_not_exist() {
+    fn create_for_meeting_refuses_a_missing_meeting() {
         let connection = open_in_memory();
         assert!(matches!(
-            create(&connection, 999, "x"),
+            create_for_meeting(&connection, 999, "x"),
             Err(Error::MeetingNotFound(999))
         ));
     }
@@ -218,7 +282,7 @@ mod tests {
     fn update_title_changes_the_text_and_updated_at() {
         let connection = open_in_memory();
         let meeting = meetings::create(&connection, "2026-09-24").unwrap();
-        let created = create(&connection, meeting.id, "Send the deck").unwrap();
+        let created = create_for_meeting(&connection, meeting.id, "Send the deck").unwrap();
         set_updated_at(&connection, created.id, OLD_TIME);
 
         let updated = update_title(&connection, created.id, "Send the final deck").unwrap();
@@ -245,7 +309,7 @@ mod tests {
     fn set_completed_records_the_first_completion_time_and_clears_it() {
         let connection = open_in_memory();
         let meeting = meetings::create(&connection, "2026-09-24").unwrap();
-        let created = create(&connection, meeting.id, "Send the deck").unwrap();
+        let created = create_for_meeting(&connection, meeting.id, "Send the deck").unwrap();
         set_updated_at(&connection, created.id, OLD_TIME);
 
         let completed = set_completed(&connection, created.id, true).unwrap();
@@ -276,7 +340,7 @@ mod tests {
     fn delete_removes_the_task() {
         let connection = open_in_memory();
         let meeting = meetings::create(&connection, "2026-09-24").unwrap();
-        let task = create(&connection, meeting.id, "Send the deck").unwrap();
+        let task = create_for_meeting(&connection, meeting.id, "Send the deck").unwrap();
 
         delete(&connection, task.id).unwrap();
 
@@ -293,7 +357,7 @@ mod tests {
     fn deleting_a_meeting_keeps_its_tasks() {
         let connection = open_in_memory();
         let meeting = meetings::create(&connection, "2026-09-24").unwrap();
-        let task = create(&connection, meeting.id, "Send the deck").unwrap();
+        let task = create_for_meeting(&connection, meeting.id, "Send the deck").unwrap();
 
         meetings::delete(&connection, meeting.id).unwrap();
 
@@ -301,5 +365,144 @@ mod tests {
             list_for_meeting(&connection, meeting.id).unwrap(),
             vec![task]
         );
+    }
+
+    /// Stores a project, two initiatives of it, and a meeting about the project, with SQL.
+    /// The meeting covers the initiatives in `covered`. Returns the identifier of the meeting.
+    fn meeting_of_project(connection: &Connection, covered: &[i64]) -> i64 {
+        connection
+            .execute_batch(
+                "INSERT INTO projects (id, name, created_at, updated_at)
+                 VALUES (1, 'Billing', 't', 't');
+                 INSERT INTO initiatives (id, project_id, name, horizon, rank, created_at,
+                                          updated_at)
+                 VALUES (1, 1, 'Launch', 'now', 'a', 't', 't'),
+                        (2, 1, 'Pilot', 'now', 'b', 't', 't');",
+            )
+            .unwrap();
+        let meeting = meetings::create(connection, "2026-09-24").unwrap();
+        connection
+            .execute(
+                "UPDATE meetings SET project_id = 1 WHERE id = ?1",
+                params![meeting.id],
+            )
+            .unwrap();
+        for initiative_id in covered {
+            connection
+                .execute(
+                    "INSERT INTO meeting_initiatives (meeting_id, initiative_id, created_at)
+                     VALUES (?1, ?2, 't')",
+                    params![meeting.id, initiative_id],
+                )
+                .unwrap();
+        }
+        meeting.id
+    }
+
+    fn mark_deleted(connection: &Connection, table: &str, id: i64) {
+        connection
+            .execute(
+                &format!("UPDATE {table} SET deleted_at = 'd' WHERE id = ?1"),
+                params![id],
+            )
+            .unwrap();
+    }
+
+    #[test]
+    fn list_leaves_out_deleted_tasks() {
+        let connection = open_in_memory();
+        let meeting = meetings::create(&connection, "2026-09-24").unwrap();
+        let kept = create_for_meeting(&connection, meeting.id, "A").unwrap();
+        let deleted = create_for_meeting(&connection, meeting.id, "B").unwrap();
+        mark_deleted(&connection, "tasks", deleted.id);
+
+        assert_eq!(list(&connection).unwrap(), vec![kept]);
+    }
+
+    #[test]
+    fn get_returns_a_deleted_task() {
+        let connection = open_in_memory();
+        let meeting = meetings::create(&connection, "2026-09-24").unwrap();
+        let task = create_for_meeting(&connection, meeting.id, "A").unwrap();
+        mark_deleted(&connection, "tasks", task.id);
+
+        let found = get(&connection, task.id).unwrap().unwrap();
+
+        assert_eq!(found.deleted_at.as_deref(), Some("d"));
+        assert_eq!(get(&connection, 999).unwrap(), None);
+    }
+
+    #[test]
+    fn list_for_meeting_leaves_out_deleted_tasks() {
+        let connection = open_in_memory();
+        let meeting = meetings::create(&connection, "2026-09-24").unwrap();
+        let kept = create_for_meeting(&connection, meeting.id, "A").unwrap();
+        let deleted = create_for_meeting(&connection, meeting.id, "B").unwrap();
+        mark_deleted(&connection, "tasks", deleted.id);
+
+        assert_eq!(
+            list_for_meeting(&connection, meeting.id).unwrap(),
+            vec![kept]
+        );
+    }
+
+    #[test]
+    fn create_for_meeting_puts_the_task_in_the_icebox() {
+        let connection = open_in_memory();
+        let meeting = meetings::create(&connection, "2026-09-24").unwrap();
+
+        let task = create_for_meeting(&connection, meeting.id, "Send the deck").unwrap();
+
+        assert_eq!(task.rank, None);
+        assert_eq!(task.started_at, None);
+        assert_eq!(task.deleted_at, None);
+        assert_eq!(task.description, "");
+        assert_eq!(task.project_id, None);
+        assert_eq!(task.initiative_id, None);
+    }
+
+    #[test]
+    fn create_for_meeting_gives_the_project_of_the_meeting() {
+        let connection = open_in_memory();
+        let meeting_id = meeting_of_project(&connection, &[]);
+
+        let task = create_for_meeting(&connection, meeting_id, "Send the deck").unwrap();
+
+        assert_eq!(task.project_id, Some(1));
+        assert_eq!(task.initiative_id, None);
+    }
+
+    #[test]
+    fn create_for_meeting_skips_a_deleted_project() {
+        let connection = open_in_memory();
+        let meeting_id = meeting_of_project(&connection, &[]);
+        mark_deleted(&connection, "projects", 1);
+
+        let task = create_for_meeting(&connection, meeting_id, "Send the deck").unwrap();
+
+        assert_eq!(task.project_id, None);
+    }
+
+    #[test]
+    fn create_for_meeting_gives_the_only_initiative_that_is_not_deleted() {
+        let connection = open_in_memory();
+        let meeting_id = meeting_of_project(&connection, &[1, 2]);
+        mark_deleted(&connection, "initiatives", 1);
+
+        let task = create_for_meeting(&connection, meeting_id, "Send the deck").unwrap();
+
+        assert_eq!(task.project_id, Some(1));
+        assert_eq!(task.initiative_id, Some(2));
+    }
+
+    #[test]
+    fn create_for_meeting_gives_no_initiative_for_two_initiatives() {
+        let connection = open_in_memory();
+        let meeting_id = meeting_of_project(&connection, &[1, 2]);
+
+        let task = create_for_meeting(&connection, meeting_id, "Send the deck").unwrap();
+
+        assert_eq!(task.project_id, Some(1));
+        assert_eq!(task.initiative_id, None);
     }
 }

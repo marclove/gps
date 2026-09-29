@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useFailureToast } from "@/components/use-failure-toast";
 import {
-    createTask,
+    createMeetingTask,
     deleteTask,
     listMeetingTasks,
     setTaskCompleted,
@@ -86,7 +86,7 @@ export function ActionItemsPanel({ meetingId }: { meetingId: number }) {
         // Clear the field at once, so the user can type the next item while this one saves.
         setNewText("");
         try {
-            const task = await createTask(meetingId, text);
+            const task = await createMeetingTask(meetingId, text);
             setLoad((current) =>
                 current.kind === "loaded"
                     ? { kind: "loaded", tasks: [...current.tasks, task] }

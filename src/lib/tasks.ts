@@ -3,6 +3,10 @@ import { invoke } from "@tauri-apps/api/core";
 /**
  * One task. The user interface calls a task of a meeting an "action item". The backend
  * type is `Task` in `src-tauri/src/tasks.rs`.
+ *
+ * The stage of a task follows from `rank`, `startedAt`, `completedAt`, and `deletedAt`
+ * (see `stageOf`). A completed or deleted task keeps its rank and its start, so that it
+ * can go back to its place.
  */
 export type Task = {
     id: number;
@@ -10,13 +14,47 @@ export type Task = {
     meetingId: number | null;
     /** The one line of text that tells what to do. */
     title: string;
+    /** The Markdown text that tells more about the task. It is empty when the user wrote nothing. */
+    description: string;
+    /** The project of the task, or `null` if the task is on no project. */
+    projectId: number | null;
+    /** The initiative of the task, or `null` if the task is on no initiative. The initiative belongs to the project of the task. */
+    initiativeId: number | null;
+    /** The key that gives the place of the task in the list of prioritized tasks, or `null` while the task is in the Icebox. Compare ranks as text. */
+    rank: string | null;
     /** The time when the task was created, as an RFC 3339 timestamp in UTC. */
     createdAt: string;
-    /** The time when the task was last changed, as an RFC 3339 timestamp in UTC. */
+    /** The time when the content of the task was last changed, as an RFC 3339 timestamp in UTC. */
     updatedAt: string;
+    /** The time when the user started the task, as an RFC 3339 timestamp in UTC, or `null` if it is not started. */
+    startedAt: string | null;
     /** The time when the task was completed, as an RFC 3339 timestamp in UTC, or `null` if it is not done. */
     completedAt: string | null;
+    /** The time when the user deleted the task, as an RFC 3339 timestamp in UTC, or `null` if it is not deleted. */
+    deletedAt: string | null;
 };
+
+/** The stage of a task that is not deleted. Each stage is one column of the Work board. */
+export type TaskStage = "current" | "backlog" | "icebox" | "done";
+
+/**
+ * Returns the stage of a task that is not deleted. A completed task is done. A task
+ * without a rank is in the Icebox. A task with a rank is in Current when it is started,
+ * and in the Backlog when it is not started.
+ */
+export function stageOf(task: Task): TaskStage {
+    if (task.completedAt !== null) return "done";
+    if (task.rank === null) return "icebox";
+    return task.startedAt !== null ? "current" : "backlog";
+}
+
+/** The name that the Work section shows for a task that has an empty title. */
+const UNTITLED_TASK = "Untitled task";
+
+/** Returns the title to show for a task. A task with an empty title shows "Untitled task". */
+export function taskTitle(task: { title: string }): string {
+    return task.title.trim() === "" ? UNTITLED_TASK : task.title;
+}
 
 /** The name that the controls of an action item use when the item has an empty text. */
 const UNTITLED_ACTION_ITEM = "Untitled action item";
@@ -26,14 +64,31 @@ export function actionItemName(text: string): string {
     return text.trim() === "" ? UNTITLED_ACTION_ITEM : text;
 }
 
-/** Returns the tasks of a meeting, with the oldest first. */
+/** Returns the tasks that are not deleted, in no specific order. */
+export function listTasks(): Promise<Task[]> {
+    return invoke<Task[]>("list_tasks");
+}
+
+/** Returns the task with the given identifier, also a deleted task, or `null` if no task has it. */
+export function getTask(id: number): Promise<Task | null> {
+    return invoke<Task | null>("get_task", { id });
+}
+
+/** Returns the tasks of a meeting that are not deleted, with the oldest first. */
 export function listMeetingTasks(meetingId: number): Promise<Task[]> {
     return invoke<Task[]>("list_meeting_tasks", { meetingId });
 }
 
-/** Creates a task that is not done in a meeting and returns the stored task. */
-export function createTask(meetingId: number, title: string): Promise<Task> {
-    return invoke<Task>("create_task", { meetingId, title });
+/**
+ * Creates a task in the Icebox for a meeting and returns the stored task. The task gets
+ * the project of the meeting, and gets its initiative when the meeting covers exactly one
+ * initiative that is not deleted.
+ */
+export function createMeetingTask(
+    meetingId: number,
+    title: string,
+): Promise<Task> {
+    return invoke<Task>("create_meeting_task", { meetingId, title });
 }
 
 /** Replaces the title of a task and returns the stored task. */

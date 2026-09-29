@@ -23,14 +23,20 @@ function task(id: number, title: string): Task {
         id,
         meetingId: 1,
         title,
+        description: "",
+        projectId: null,
+        initiativeId: null,
+        rank: null,
         createdAt: "2026-09-24T10:00:00.000Z",
         updatedAt: "2026-09-24T10:00:00.000Z",
+        startedAt: null,
         completedAt: null,
+        deletedAt: null,
     };
 }
 
 /**
- * Answers the task commands. `create` answers `create_task`, `complete` answers
+ * Answers the task commands. `create` answers `create_meeting_task`, `complete` answers
  * `set_task_completed`, `update` answers `update_task_title`, and `remove`
  * answers `delete_task`.
  */
@@ -53,7 +59,7 @@ function answer({
             switch (command) {
                 case "list_meeting_tasks":
                     return tasks;
-                case "create_task":
+                case "create_meeting_task":
                     return create(args.title as string);
                 case "set_task_completed":
                     return complete(
@@ -117,7 +123,9 @@ function updateCalls() {
 }
 
 function createCalls() {
-    return invoke.mock.calls.filter(([command]) => command === "create_task");
+    return invoke.mock.calls.filter(
+        ([command]) => command === "create_meeting_task",
+    );
 }
 
 beforeEach(() => {
@@ -174,8 +182,8 @@ describe("ActionItemsPanel", () => {
         await user.click(addField());
         await user.keyboard("First{Enter}Second{Enter}");
         expect(createCalls()).toEqual([
-            ["create_task", { meetingId: 1, title: "First" }],
-            ["create_task", { meetingId: 1, title: "Second" }],
+            ["create_meeting_task", { meetingId: 1, title: "First" }],
+            ["create_meeting_task", { meetingId: 1, title: "Second" }],
         ]);
 
         pending[0](task(1, "First"));
