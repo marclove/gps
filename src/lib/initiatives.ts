@@ -111,7 +111,8 @@ export function initiativeDisplayName(name: string): string {
  */
 export type InitiativeChoice = { id: number; label: string; deleted: boolean };
 
-function byLabel(a: { label: string }, b: { label: string }): number {
+/** Compares two choices by their labels, without regard to case, to sort them. */
+export function byLabel(a: { label: string }, b: { label: string }): number {
     return a.label.localeCompare(b.label, undefined, { sensitivity: "base" });
 }
 

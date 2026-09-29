@@ -3,6 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Board, type BoardColumnDef } from "@/components/board/board";
 import { moveCard } from "@/components/board/cards";
 import { PageHeader } from "@/components/page-header";
+import { useDelete } from "@/components/use-delete";
 import { useFailureToast } from "@/components/use-failure-toast";
 import { Button } from "@/components/ui/button";
 import { listProjects, projectDisplayName } from "@/lib/projects";
@@ -22,11 +23,13 @@ import {
     emptyWorkBoard,
     hasTaskAction,
     placeTask,
+    removeTask,
     replaceTask,
     WORK_COLUMNS,
     WORK_MESSAGES,
     type WorkBoard,
 } from "./work-board";
+import { useTaskSheet } from "./use-task-sheet";
 
 type BoardState =
     | { kind: "loading" }
@@ -49,6 +52,11 @@ type BoardState =
  * only the backend knows its new place. If the backend cannot save a move or a start, the page
  * shows a failure toast and loads the board again when no other move is waiting for the
  * backend, so that the board shows what the backend has.
+ *
+ * A card, and the "New task" button for a draft, open the task sheet. A saved change shows on
+ * the card, which stays in its place. A task that a draft created appears at the top of the
+ * Icebox. After a delete, the card leaves the board, and the focus moves to "New task". The
+ * board loads again after each delete and restore.
  */
 export function WorkPage() {
     const [state, setState] = useState<BoardState>({ kind: "loading" });
@@ -62,6 +70,20 @@ export function WorkPage() {
     // True when the board can differ from the backend, and the page must load it again when
     // no move waits for the backend.
     const reloadAfterMoves = useRef(false);
+    const { version } = useDelete();
+    const newButton = useRef<HTMLButtonElement>(null);
+    const { openTask, openDraft, sheet } = useTaskSheet({
+        onSaved: (task) => {
+            startedChanges.current += 1;
+            changeBoard((board) => replaceTask(board, task));
+        },
+        onCreated: (task) => {
+            startedChanges.current += 1;
+            changeBoard((board) => placeTask(board, task));
+        },
+        onDeleted: (id) => changeBoard((board) => removeTask(board, id)),
+        newButton,
+    });
 
     useEffect(() => {
         let current = true;
@@ -103,7 +125,7 @@ export function WorkPage() {
         return () => {
             current = false;
         };
-    }, [attempt]);
+    }, [attempt, version]);
 
     function retry() {
         setState({ kind: "loading" });
@@ -210,6 +232,13 @@ export function WorkPage() {
     );
 
     const board = state.kind === "loaded" ? state.board : emptyWorkBoard();
+
+    function open(id: number) {
+        const task = Object.values(board)
+            .flat()
+            .find((card) => card.id === id);
+        openTask(id, task?.title ?? "");
+    }
     function projectName(task: Task): string | null {
         if (task.projectId === null || state.kind !== "loaded") return null;
         return state.projectNames.get(task.projectId) ?? null;
@@ -219,8 +248,7 @@ export function WorkPage() {
         // The header stays in place, and the board gets the remaining height.
         <div className="grid min-h-0 flex-1 grid-rows-[auto_minmax(0,1fr)]">
             <PageHeader crumbs={[{ label: "Work" }]}>
-                {/* The task sheet opens the draft once it exists. */}
-                <Button>
+                <Button ref={newButton} onClick={openDraft}>
                     <PlusIcon />
                     New task
                 </Button>
@@ -263,13 +291,13 @@ export function WorkPage() {
                             ) : null
                         }
                         messages={WORK_MESSAGES}
-                        // The task sheet opens from a card once it exists.
-                        onOpen={() => {}}
+                        onOpen={open}
                         onMove={move}
                         loading={state.kind === "loading"}
                     />
                 </div>
             )}
+            {sheet}
         </div>
     );
 }
