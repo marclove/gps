@@ -38,7 +38,7 @@ function applySaved(
 /**
  * The list of the initiatives of a project, in the sidebar of the project page. It shows the
  * initiatives that are not deleted in the order of the roadmap: Now, Next, Later, and then
- * Done. Each row shows the name and the column of the initiative. A click on a row opens the
+ * Done. Each row shows the name of the initiative. A click on a row opens the
  * sheet of the initiative. "New initiative" opens the sheet for a draft in this project. When
  * the sheet saves, moves to another project, or deletes an initiative, the list changes to
  * match. The list loads again after each delete and restore.
@@ -123,14 +123,7 @@ export function ProjectInitiatives({
     const board =
         shown.kind === "loaded" ? buildBoard(shown.initiatives) : null;
     const rows =
-        board === null
-            ? []
-            : COLUMNS.flatMap((column) =>
-                  board[column.id].map((initiative) => ({
-                      initiative,
-                      columnTitle: column.title,
-                  })),
-              );
+        board === null ? [] : COLUMNS.flatMap((column) => board[column.id]);
     const listedName =
         typeof openId === "number" && shown.kind === "loaded"
             ? shown.initiatives.find((item) => item.id === openId)?.name
@@ -177,21 +170,18 @@ export function ProjectInitiatives({
                     <p className="text-muted-foreground">No initiatives</p>
                 )}
                 {rows.length > 0 && (
-                    <ul className="flex flex-col gap-1">
-                        {rows.map(({ initiative, columnTitle }) => (
+                    <ul className="list-disc space-y-1 pl-5">
+                        {rows.map((initiative) => (
                             <li key={initiative.id}>
                                 <button
                                     type="button"
                                     onClick={() =>
                                         openInitiative(initiative.id)
                                     }
-                                    className="flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-left outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50"
+                                    className="flex w-full items-center rounded-lg px-2 py-2 text-left outline-none hover:bg-muted focus-visible:ring-3 focus-visible:ring-ring/50"
                                 >
-                                    <span className="min-w-0 truncate font-medium">
+                                    <span className="min-w-0 truncate">
                                         {initiativeDisplayName(initiative.name)}
-                                    </span>
-                                    <span className="shrink-0 text-muted-foreground">
-                                        {columnTitle}
                                     </span>
                                 </button>
                             </li>

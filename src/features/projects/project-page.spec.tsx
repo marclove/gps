@@ -170,7 +170,7 @@ describe("The project page", () => {
 });
 
 describe("The initiatives of a project", () => {
-    it("lists the initiatives of the project that are not deleted, in roadmap order, with their columns", async () => {
+    it("lists the initiatives of the project that are not deleted, in roadmap order", async () => {
         backend.seedInitiative({
             name: "Old win",
             project: checkout,
@@ -206,11 +206,11 @@ describe("The initiatives of a project", () => {
 
         await waitFor(() =>
             expect(initiativeRows()).toEqual([
-                "Untitled initiativeNow",
-                "Next oneNext",
-                "Later oneLater",
-                "New winDone",
-                "Old winDone",
+                "Untitled initiative",
+                "Next one",
+                "Later one",
+                "New win",
+                "Old win",
             ]),
         );
     });
@@ -251,7 +251,7 @@ describe("The initiatives of a project", () => {
             await within(sheet).findByText("Saved", {}, SAVE_TIMEOUT),
         ).toBeInTheDocument();
 
-        expect(initiativeRows({ hidden: true })).toEqual(["Launch v2Now"]);
+        expect(initiativeRows({ hidden: true })).toEqual(["Launch v2"]);
         expect(
             screen.getByRole("textbox", {
                 name: "Project name",
@@ -316,7 +316,7 @@ describe("The initiatives of a project", () => {
             within(notifications()).getByRole("button", { name: "Undo" }),
         );
 
-        await waitFor(() => expect(initiativeRows()).toEqual(["LaunchNow"]));
+        await waitFor(() => expect(initiativeRows()).toEqual(["Launch"]));
     });
 
     it("creates an initiative in the project with New initiative", async () => {
@@ -349,7 +349,7 @@ describe("The initiatives of a project", () => {
             SAVE_TIMEOUT,
         );
         await waitFor(() =>
-            expect(initiativeRows({ hidden: true })).toEqual(["LaunchLater"]),
+            expect(initiativeRows({ hidden: true })).toEqual(["Launch"]),
         );
     });
 });

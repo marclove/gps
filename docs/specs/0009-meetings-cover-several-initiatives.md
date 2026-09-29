@@ -2,7 +2,7 @@
 
 Ticket: [0009 Meetings that cover several initiatives](../features/0009-meetings-cover-several-initiatives.md)
 
-Executable spec: `src/features/meetings/meeting-initiatives.spec.tsx`. It replaces `src/features/meetings/meeting-initiative.spec.tsx`, which checked the select box of Specs 0006, 0007, and 0008. The earlier specs `src/features/meetings/meeting-project.spec.tsx` and `src/features/initiatives/initiative-project.spec.tsx` now check the behavior of Spec 0008 with the changes that this spec describes under "Changes to earlier specs".
+Executable spec: `src/features/meetings/meeting-initiatives.spec.tsx`. It replaces `src/features/meetings/meeting-initiative.spec.tsx`, which checked the select box of Specs 0006, 0007, and 0008. The earlier specs `src/features/meetings/meeting-project.spec.tsx`, `src/features/initiatives/initiative-project.spec.tsx`, and `src/features/projects/project-page.spec.tsx` now check the behavior of Spec 0008 with the changes that this spec describes under "Changes to earlier specs".
 
 ## Summary
 
@@ -66,6 +66,7 @@ Merged specs are not changed. This spec changes them as follows:
 - [Spec 0006](0006-managing-initiatives.md), [Spec 0007](0007-deleted-rows-and-ranked-order.md), and Spec 0008: the "Initiative" row with the select box "Meeting initiative" is replaced by the "Initiatives" row described above. A meeting covers any number of initiatives instead of being assigned to at most one. The choices are no longer grouped by roadmap column and "Completed".
 - Spec 0007: a deleted initiative that a meeting covers is shown with " (deleted)" in the list and in the popover, instead of as the last choice of the select box.
 - Spec 0008: when an initiative moves to another project, a meeting that covers it moves with it only when it covers no other initiative. Otherwise the meeting stays and no longer covers the moved initiative.
+- Spec 0008: each row of the list "Initiatives" on the project page shows only the name of the initiative, or "Untitled initiative". It no longer shows the column of the initiative.
 - [Spec 0005](0005-meeting-action-items.md), Spec 0006, Spec 0007, and Spec 0008: the meeting details sidebar shows, from top to bottom, the "Date" row, the "Project" row, the "Initiatives" row, the "Delete" button, a separator, and the action items panel.
 
 ## Not checked by the executable specs
