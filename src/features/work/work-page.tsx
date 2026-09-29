@@ -33,8 +33,7 @@ import { useTaskSheet } from "./use-task-sheet";
 
 type BoardState =
     | { kind: "loading" }
-    /** `failed` is the list that could not be loaded. */
-    | { kind: "error"; failed: "tasks" | "projects" }
+    | { kind: "error" }
     | {
           kind: "loaded";
           board: WorkBoard;
@@ -93,12 +92,8 @@ export function WorkPage() {
             listProjects({ includeDeleted: true }),
         ]).then(([tasks, projects]) => {
             if (!current) return;
-            if (tasks.status === "rejected") {
-                setState({ kind: "error", failed: "tasks" });
-                return;
-            }
-            if (projects.status === "rejected") {
-                setState({ kind: "error", failed: "projects" });
+            if (tasks.status === "rejected" || projects.status === "rejected") {
+                setState({ kind: "error" });
                 return;
             }
             if (startedChanges.current !== changesBefore) {
@@ -255,7 +250,7 @@ export function WorkPage() {
             </PageHeader>
             {state.kind === "error" ? (
                 <div className="flex items-start gap-2 px-6 text-sm">
-                    <p>Couldn't load {state.failed}</p>
+                    <p>Couldn't load tasks</p>
                     <Button variant="outline" size="sm" onClick={retry}>
                         Retry
                     </Button>

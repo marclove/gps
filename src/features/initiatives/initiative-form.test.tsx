@@ -993,6 +993,38 @@ describe("InitiativeForm", () => {
             expect(onOpenTask).not.toHaveBeenCalled();
         });
 
+        it("does not open the task when the sheet closes while the change that waits is saved", async () => {
+            let resolveUpdate: () => void = () => {};
+            mockBackend((command: string, args) => {
+                if (command === "list_tasks") return Promise.resolve([DECK]);
+                if (command === "update_initiative")
+                    return new Promise((resolve) => {
+                        resolveUpdate = () =>
+                            resolve({ ...PILOT, raciRole: args.raciRole });
+                    });
+                return Promise.reject(new Error(`Unexpected ${command}`));
+            });
+            const onOpenTask = vi.fn();
+            const user = userEvent.setup();
+            const { unmount } = await renderForm(PILOT, null, onOpenTask);
+            const list = screen.getByRole("region", { name: "Tasks" });
+            const row = await within(list).findByRole("button", {
+                name: "Send the deck",
+            });
+
+            await user.selectOptions(
+                screen.getByRole("combobox", { name: "RACI role" }),
+                "Informed",
+            );
+            await user.click(row);
+            expect(callsOf("update_initiative")).toHaveLength(1);
+            // Escape closes the sheet, which unmounts the form.
+            unmount();
+            await act(async () => resolveUpdate());
+
+            expect(onOpenTask).not.toHaveBeenCalled();
+        });
+
         it("is not shown in a draft", async () => {
             const onOpenTask = vi.fn();
             await renderForm(null, CHECKOUT.id, onOpenTask);

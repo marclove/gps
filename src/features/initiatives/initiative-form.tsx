@@ -348,9 +348,10 @@ export function InitiativeForm({
     }
 
     // The page closes the sheet and opens the task sheet only after the changes that wait are
-    // saved. If they cannot be saved, the sheet stays open and shows "Couldn't save".
+    // saved. If they cannot be saved, the sheet stays open and shows "Couldn't save". If the
+    // sheet closes while they are saved, the task sheet does not open.
     async function openTask(taskId: number, title: string) {
-        if (!(await flush())) return;
+        if (!(await flush()) || !mounted.current) return;
         onOpenTask?.(taskId, title);
     }
 

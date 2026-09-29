@@ -572,6 +572,40 @@ describe("ActionItemsPanel", () => {
         );
     });
 
+    it("does not open an item that is removed while its text is saved", async () => {
+        let resolveUpdate: () => void = () => {};
+        answer({
+            tasks: [task(1, "Send the deck")],
+            update: (id, title) =>
+                new Promise<Task>((resolve) => {
+                    resolveUpdate = () => resolve(task(id, title));
+                }),
+        });
+        const onOpen = vi.fn();
+        const user = userEvent.setup();
+        renderPanel(onOpen);
+        const field = await screen.findByRole("textbox", {
+            name: "Action item",
+        });
+
+        await user.click(field);
+        await user.keyboard("{End} to Alex");
+        await user.click(
+            screen.getByRole("button", {
+                name: 'Open "Send the deck to Alex"',
+            }),
+        );
+        await user.click(
+            screen.getByRole("button", {
+                name: 'Remove "Send the deck to Alex"',
+            }),
+        );
+        await waitFor(() => expect(itemValues()).toEqual([]));
+        await act(async () => resolveUpdate());
+
+        expect(onOpen).not.toHaveBeenCalled();
+    });
+
     it("drops a waiting text change when the item is removed, and Undo brings back the saved title", async () => {
         answer({ tasks: [task(1, "Send the deck"), task(2, "Book a room")] });
         const user = userEvent.setup();
@@ -628,6 +662,42 @@ describe("ActionItemsPanel", () => {
         // The title is saved already, so the item does not save it again.
         await new Promise((resolve) => setTimeout(resolve, 800));
         expect(updateCalls()).toEqual([]);
+    });
+
+    it("saves the title that the sheet saved when it is typed again after a remove and Undo", async () => {
+        answer({ tasks: [task(1, "Send the deck")] });
+        const user = userEvent.setup();
+        const { rerender } = renderPanel();
+        await waitFor(() => expect(itemValues()).toEqual(["Send the deck"]));
+
+        rerender(task(1, "Y"));
+        const field = screen.getByRole("textbox", { name: "Action item" });
+        await user.clear(field);
+        await user.keyboard("Z");
+        await waitFor(() =>
+            expect(updateCalls()).toEqual([
+                ["update_task_title", { id: 1, title: "Z" }],
+            ]),
+        );
+
+        await user.click(screen.getByRole("button", { name: 'Remove "Z"' }));
+        await waitFor(() => expect(itemValues()).toEqual([]));
+        await user.click(
+            await within(notifications()).findByRole("button", {
+                name: "Undo",
+            }),
+        );
+        await waitFor(() => expect(itemValues()).toEqual(["Z"]));
+
+        await user.clear(screen.getByRole("textbox", { name: "Action item" }));
+        await user.keyboard("Y");
+
+        await waitFor(() =>
+            expect(updateCalls()).toEqual([
+                ["update_task_title", { id: 1, title: "Z" }],
+                ["update_task_title", { id: 1, title: "Y" }],
+            ]),
+        );
     });
 
     it("comes back at its place after Undo", async () => {

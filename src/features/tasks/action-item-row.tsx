@@ -17,7 +17,7 @@ import { actionItemName, updateTaskTitle, type Task } from "@/lib/tasks";
  * sets the checkbox, and `onCompletedChange` gets the new value when the user clicks it.
  * `onOpen` gets the text of the item when the user clicks the Open button. The row saves a
  * change to the text that waits before it calls `onOpen`, and does not call it if the save
- * fails. `savedTask` is the task after a save in the task sheet. When it changes, the row
+ * fails or if the user removes the item during the save. `savedTask` is the task after a save in the task sheet. When it changes, the row
  * shows its title. `onRemove` gets the text of the item and deletes the item when the user
  * clicks the remove button. It resolves to `true` when the item was deleted and to `false`
  * when the delete failed.
@@ -51,8 +51,13 @@ export function ActionItemRow({
     }
     // The text that the backend stores, as far as the row knows, so that it is not saved again.
     const storedText = useRef(task.title);
+    // The task that the sheet saved before the row mounted. The row gets its title from
+    // `task` then, and the backend can store a newer title than this one.
+    const mountSavedTask = useRef(savedTask);
     useEffect(() => {
-        if (savedTask) storedText.current = savedTask.title;
+        if (savedTask && savedTask !== mountSavedTask.current) {
+            storedText.current = savedTask.title;
+        }
     }, [savedTask]);
     // The delete that the user started last, until a save finds that it failed.
     const removal = useRef<Promise<boolean> | null>(null);
@@ -121,7 +126,8 @@ export function ActionItemRow({
                 className="opacity-0 group-hover:opacity-100 focus-visible:opacity-100"
                 onClick={async () => {
                     // The sheet loads the task, so it must find the text that the row shows.
-                    if (await flush()) onOpen(text);
+                    // An item that the user removes while the text is saved does not open.
+                    if ((await flush()) && !removing.current) onOpen(text);
                 }}
             >
                 <PanelRightOpenIcon />

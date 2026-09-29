@@ -118,6 +118,22 @@ function notifications() {
 }
 
 describe("WorkPage", () => {
+    it("says that it couldn't load tasks when the projects fail to load", async () => {
+        backend.seedTask({ title: "A" });
+        invoke.mockImplementation(
+            (command: string, args: Record<string, unknown> = {}) =>
+                command === "list_projects"
+                    ? Promise.reject("database is locked")
+                    : backend.handle(command, args),
+        );
+        renderPage();
+
+        expect(
+            await screen.findByText("Couldn't load tasks"),
+        ).toBeInTheDocument();
+        expect(screen.queryByTestId("icebox")).toBeNull();
+    });
+
     it("moves the card at once and replaces it with the answer of move_task", async () => {
         backend.seedTask({ title: "A" });
         backend.seedTask({ title: "C", stage: "backlog" });
