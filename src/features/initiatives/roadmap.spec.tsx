@@ -73,6 +73,7 @@ describe("Initiatives section", () => {
             "Projects",
             "Meetings",
             "Initiatives",
+            "Work",
         ]);
         expect(
             await screen.findByRole("button", { name: "New note" }),

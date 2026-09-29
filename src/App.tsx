@@ -11,6 +11,7 @@ import { MeetingEditorPage } from "@/features/meetings/meeting-editor-page";
 import { MeetingsPage } from "@/features/meetings/meetings-page";
 import { ProjectPage } from "@/features/projects/project-page";
 import { ProjectsPage } from "@/features/projects/projects-page";
+import { WorkPage } from "@/features/work/work-page";
 
 function App() {
     return (
@@ -51,6 +52,10 @@ function App() {
                                         <Route
                                             path="/initiatives"
                                             element={<InitiativesPage />}
+                                        />
+                                        <Route
+                                            path="/work"
+                                            element={<WorkPage />}
                                         />
                                     </Routes>
                                 </SidebarInset>

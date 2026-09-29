@@ -82,6 +82,7 @@ describe("Projects section", () => {
             "Projects",
             "Meetings",
             "Initiatives",
+            "Work",
         ]);
         expect(projectsLink().querySelector("svg")).toBeInTheDocument();
         expect(

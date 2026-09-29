@@ -1,5 +1,6 @@
 import {
     FolderIcon,
+    ListTodoIcon,
     NotebookPenIcon,
     TargetIcon,
     type LucideIcon,
@@ -21,6 +22,7 @@ const SECTIONS: Section[] = [
     { title: "Projects", path: "/projects", icon: FolderIcon },
     { title: "Meetings", path: "/meetings", icon: NotebookPenIcon },
     { title: "Initiatives", path: "/initiatives", icon: TargetIcon },
+    { title: "Work", path: "/work", icon: ListTodoIcon },
 ];
 
 /**
