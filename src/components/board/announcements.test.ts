@@ -195,6 +195,31 @@ describe("announcements", () => {
         );
     });
 
+    it("keeps the message of the pick up while the card is over its own place", () => {
+        const drag = boardAnnouncements(columns, cards, words);
+        drag.onDragStart({ active: active(1) });
+
+        // dnd-kit finds the card under itself as soon as it is picked up.
+        expect(
+            drag.onDragOver({
+                active: active(1),
+                over: overCard(1, "now", 0, [1]),
+            }),
+        ).toBeUndefined();
+        expect(
+            drag.onDragOver({
+                active: active(1),
+                over: overList("next", [3]),
+            }),
+        ).toBe("A is in Next, position 2 of 2.");
+        expect(
+            drag.onDragOver({
+                active: active(1),
+                over: overCard(1, "now", 0, [1]),
+            }),
+        ).toBe("A is in Now, position 1 of 1.");
+    });
+
     it("says nothing while the card is over no column", () => {
         expect(
             messages.onDragOver({ active: active(1), over: null }),

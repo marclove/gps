@@ -8,12 +8,19 @@ import {
     useSensor,
     useSensors,
     type CollisionDetection,
+    type DragCancelEvent,
     type DragEndEvent,
     type DragOverEvent,
     type DragStartEvent,
 } from "@dnd-kit/core";
 import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
-import { useMemo, useRef, useState, type ReactNode } from "react";
+import {
+    useLayoutEffect,
+    useMemo,
+    useRef,
+    useState,
+    type ReactNode,
+} from "react";
 import { createPortal } from "react-dom";
 import { boardAnnouncements, type BoardMessages } from "./announcements";
 import { BoardColumn } from "./board-column";
@@ -77,9 +84,10 @@ const findTarget: CollisionDetection = (args) => {
  *
  * The user drags a card of a column whose cards are `draggable` with the pointer, or with the
  * keyboard: Space picks the card up and drops it, the arrow keys move it, and Escape puts it
- * back. While a card is dragged over another column, the board shows it in that column: at the
- * place under it in a column that the user orders, and at the place that `sortedIndex` gives
- * in a column that the user does not order. While a card is dragged, the board draws
+ * back. After a drag with the keyboard, the open button of the card has the keyboard focus.
+ * While a card is dragged over another column, the board shows it in that column: at the place
+ * under it in a column that the user orders, and at the place that `sortedIndex` gives in a
+ * column that the user does not order. While a card is dragged, the board draws
  * `renderCopy` below the pointer, above the columns, because the scrolling list of a column
  * would cut off the card itself at the edge of the column. Screen readers announce each step
  * with the text of `messages`.
@@ -120,6 +128,9 @@ export function Board<C extends { id: number }, K extends string = string>({
     const origin = useRef<Place<K> | null>(null);
     // The identifier of the dragged card.
     const [activeId, setActiveId] = useState<number | null>(null);
+    // The card whose open button gets the keyboard focus after a drag with the keyboard ends.
+    const focusAfterDrag = useRef<number | null>(null);
+    const columnsArea = useRef<HTMLDivElement>(null);
     const shown = dragCards ?? cards;
     const activeColumn = activeId === null ? null : columnOf(shown, activeId);
     const activeCard =
@@ -139,6 +150,19 @@ export function Board<C extends { id: number }, K extends string = string>({
         () => boardAnnouncements(columns, cards, messages),
         [columns, cards, messages],
     );
+
+    // A card that moves to another column during a drag is a new element, which does not have
+    // the focus. dnd-kit gives the focus back only in a later frame, so the board gives it at
+    // once, when the drag ends.
+    useLayoutEffect(() => {
+        const id = focusAfterDrag.current;
+        if (id === null) return;
+        focusAfterDrag.current = null;
+        const button = columnsArea.current?.querySelector<HTMLElement>(
+            `[data-card-id="${id}"] > button`,
+        );
+        if (button && document.activeElement !== button) button.focus();
+    });
 
     function columnDef(id: K): BoardColumnDef<C, K> {
         return columns.find((column) => column.id === id)!;
@@ -162,7 +186,9 @@ export function Board<C extends { id: number }, K extends string = string>({
         );
     }
 
-    function end({ active, over }: DragEndEvent) {
+    function end({ active, over, activatorEvent }: DragEndEvent) {
+        if (activatorEvent instanceof KeyboardEvent)
+            focusAfterDrag.current = Number(active.id);
         const from = origin.current;
         const target =
             over === null ? null : dropTarget(active, over, columns, cards);
@@ -176,7 +202,9 @@ export function Board<C extends { id: number }, K extends string = string>({
         if (!unchanged) onMove(Number(active.id), target.column, target.index);
     }
 
-    function cancel() {
+    function cancel({ active, activatorEvent }: DragCancelEvent) {
+        if (activatorEvent instanceof KeyboardEvent)
+            focusAfterDrag.current = Number(active.id);
         origin.current = null;
         setActiveId(null);
         setDragCards(null);
@@ -193,6 +221,7 @@ export function Board<C extends { id: number }, K extends string = string>({
             onDragCancel={cancel}
         >
             <div
+                ref={columnsArea}
                 className="grid min-h-0 grid-rows-[minmax(0,1fr)] gap-4 px-6 pb-4"
                 style={{
                     gridTemplateColumns: `repeat(${columns.length}, minmax(0, 1fr))`,

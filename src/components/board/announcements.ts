@@ -34,6 +34,9 @@ export type BoardMessages<C, K extends string = string> = {
  * drag, and `messages` gives the text of each message. A card that drops outside the columns,
  * or in its own column when the user does not order that column, was put back. If `cards` does
  * not hold the dragged card, the messages are empty.
+ *
+ * When a card is picked up, dnd-kit at once finds the card over its own place. That is not a
+ * move, so the messages say nothing then, and the message of the pick up stays.
  */
 export function boardAnnouncements<C extends { id: number }, K extends string>(
     columns: readonly BoardColumnDef<C, K>[],
@@ -42,12 +45,18 @@ export function boardAnnouncements<C extends { id: number }, K extends string>(
 ): Announcements {
     const cardOf = (active: Active) => findCard(cards, active.id);
     const columnDef = (id: K) => columns.find((column) => column.id === id)!;
+    // True from the pick up of a card until the first time that the card is over something.
+    let justPickedUp = false;
     return {
         onDragStart: ({ active }) => {
+            justPickedUp = true;
             const card = cardOf(active);
             return card ? messages.pickedUp(card) : "";
         },
         onDragOver: ({ active, over }) => {
+            const first = justPickedUp;
+            justPickedUp = false;
+            if (first && over?.id === active.id) return undefined;
             const card = cardOf(active);
             const target = over && dropTarget(active, over, columns, cards);
             if (!card || !target) return undefined;

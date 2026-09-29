@@ -49,7 +49,7 @@ function active(id: number): Active {
 /** A card under the dragged card, at `index` in the column `column` with the cards `items`. */
 function overCard(
     id: number,
-    column: Column,
+    column: string,
     index: number,
     items: UniqueIdentifier[],
 ): Over {
@@ -64,7 +64,7 @@ function overCard(
 }
 
 /** The list area of the column `column`, with the cards `items`. */
-function overList(column: Column, items: UniqueIdentifier[]): Over {
+function overList(column: string, items: UniqueIdentifier[]): Over {
     return {
         id: column,
         rect: { width: 0, height: 0, top: 0, left: 0, bottom: 0, right: 0 },
@@ -97,6 +97,54 @@ describe("dropTarget", () => {
             index: 1,
             count: 2,
         });
+    });
+
+    it("puts a card from another column at the place that sortedIndex gives among the others", () => {
+        type Named = { id: number; name: string };
+        const named: BoardColumnDef<Named, "open" | "sorted">[] = [
+            {
+                id: "open",
+                title: "Open",
+                ordered: true,
+                draggable: true,
+                emptyText: "",
+            },
+            {
+                id: "sorted",
+                title: "Sorted",
+                ordered: false,
+                draggable: true,
+                emptyText: "",
+                sortedIndex: (card, others) =>
+                    others.filter((other) => other.name < card.name).length,
+            },
+        ];
+        const namedCards: Record<"open" | "sorted", Named[]> = {
+            open: [{ id: 1, name: "C" }],
+            sorted: [
+                { id: 2, name: "A" },
+                { id: 3, name: "B" },
+                { id: 4, name: "D" },
+            ],
+        };
+
+        // Dropped on the first card, but C sorts after A and B.
+        expect(
+            dropTarget(
+                active(1),
+                overCard(2, "sorted", 0, [2, 3, 4]),
+                named,
+                namedCards,
+            ),
+        ).toEqual({ column: "sorted", index: 2, count: 4 });
+        expect(
+            dropTarget(
+                active(1),
+                overList("sorted", [2, 3, 4]),
+                named,
+                namedCards,
+            ),
+        ).toEqual({ column: "sorted", index: 2, count: 4 });
     });
 
     it("returns null for a target that is not a column or a card", () => {
