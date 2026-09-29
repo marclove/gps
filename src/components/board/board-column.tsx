@@ -4,34 +4,39 @@ import {
     verticalListSortingStrategy,
     type SortingStrategy,
 } from "@dnd-kit/sortable";
-import type { ListData } from "@/components/board/drop-target";
-import type { Column, InitiativeSummary } from "@/lib/initiatives";
-import { BoardCard } from "@/components/board/board-card";
-import { InitiativeCardContent } from "./initiative-card";
+import type { ReactNode } from "react";
+import { cn } from "@/lib/utils";
+import { BoardCard } from "./board-card";
+import type { BoardColumnDef, ListData } from "./drop-target";
 
-// Done does not take part in sorting, so its cards stay in place while a card is over them.
+// In a column that the user does not order, the cards stay in place while a card is over them.
 const keepInPlace: SortingStrategy = () => null;
 
 /**
- * A column of the roadmap. It is a region named after the column, with a heading that shows
- * the title and the number of cards, and a list of cards below the heading. Only the list
- * scrolls. The whole list area, also when it is empty, is a place to drop a card. The column
- * must be in a `DndContext`. Each card shows the name that `projectName` gives for its
- * project. While `loading` is true, the column shows no cards and no text about empty
- * columns.
+ * A column of a board. It is a region named after the title of `column`, with a heading that
+ * shows the title and the number of cards, the `header` of the column if it has one, and a
+ * list of the cards `cards` below. Only the list scrolls. The whole list area, also when it is
+ * empty, is a place to drop a card. An empty column shows the `emptyText` of the column. The
+ * column must be in a `DndContext`.
+ *
+ * Each card shows `renderContent` in its open button and `renderActions` beside it. A click on
+ * a card calls `onOpen` with its identifier. While `loading` is true, the column shows no cards
+ * and no text about an empty column.
  */
-export function RoadmapColumn({
+export function BoardColumn<C extends { id: number }, K extends string>({
     column,
     cards,
-    projectName,
+    renderContent,
+    renderActions,
     onOpen,
-    loading = false,
+    loading,
 }: {
-    column: { id: Column; title: string };
-    cards: InitiativeSummary[];
-    projectName: (projectId: number) => string;
+    column: BoardColumnDef<C, K>;
+    cards: C[];
+    renderContent: (card: C, column: K) => ReactNode;
+    renderActions?: (card: C, column: K) => ReactNode;
     onOpen: (id: number) => void;
-    loading?: boolean;
+    loading: boolean;
 }) {
     const items = cards.map((card) => card.id);
     const data: ListData = { column: column.id, items };
@@ -39,12 +44,20 @@ export function RoadmapColumn({
     return (
         <section
             aria-label={column.title}
-            className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] rounded-xl bg-muted/50"
+            className={cn(
+                "grid min-h-0 rounded-xl bg-muted/50",
+                column.header === undefined
+                    ? "grid-rows-[auto_minmax(0,1fr)]"
+                    : "grid-rows-[auto_auto_minmax(0,1fr)]",
+            )}
         >
             <h2 className="flex items-baseline gap-2 px-3 pt-3 pb-2 text-sm font-medium">
                 {column.title}
                 <span className="text-muted-foreground">{cards.length}</span>
             </h2>
+            {column.header !== undefined && (
+                <div className="px-2 pb-1">{column.header}</div>
+            )}
             {/* The padding leaves room for the focus ring of the cards, which the scrolling
                 area would cut off. The list area has no padding at its sides, because the
                 keyboard moves a card to the next column by the left edges of the cards and
@@ -53,16 +66,16 @@ export function RoadmapColumn({
                 <div ref={setNodeRef} className="flex-1">
                     {!loading && cards.length === 0 && (
                         <p className="px-1 text-sm text-muted-foreground">
-                            No initiatives
+                            {column.emptyText}
                         </p>
                     )}
                     <SortableContext
                         id={column.id}
                         items={items}
                         strategy={
-                            column.id === "done"
-                                ? keepInPlace
-                                : verticalListSortingStrategy
+                            column.ordered
+                                ? verticalListSortingStrategy
+                                : keepInPlace
                         }
                     >
                         {cards.length > 0 && (
@@ -71,16 +84,14 @@ export function RoadmapColumn({
                                     <li key={card.id}>
                                         <BoardCard
                                             id={card.id}
-                                            draggable
+                                            draggable={column.draggable}
                                             onOpen={onOpen}
+                                            actions={renderActions?.(
+                                                card,
+                                                column.id,
+                                            )}
                                         >
-                                            <InitiativeCardContent
-                                                initiative={card}
-                                                projectName={projectName(
-                                                    card.projectId,
-                                                )}
-                                                done={column.id === "done"}
-                                            />
+                                            {renderContent(card, column.id)}
                                         </BoardCard>
                                     </li>
                                 ))}
