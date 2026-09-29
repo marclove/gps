@@ -17,7 +17,10 @@ import {
     updateProject,
     type Project,
 } from "@/lib/projects";
+import type { Task } from "@/lib/tasks";
 import { cn } from "@/lib/utils";
+import { TaskList, type TaskListHandle } from "@/features/work/task-list";
+import { useTaskSheet } from "@/features/work/use-task-sheet";
 import { ProjectDetailsSidebar } from "./project-details-sidebar";
 import { ProjectInitiatives } from "./project-initiatives";
 import { ProjectMeetings } from "./project-meetings";
@@ -58,8 +61,12 @@ function isEmptyDraft(values: Draft): boolean {
  * editor first saves the changes that are waiting, then deletes the project, and opens the
  * Projects page with the focus on "New project".
  *
- * The sidebar shows the initiatives and the meetings of the project. For a draft, both lists
- * are empty until the draft is saved.
+ * The sidebar shows the initiatives, the meetings, and the open tasks of the project. For a
+ * draft, the lists are empty until the draft is saved. A click on a row of the list "Tasks",
+ * or of the list "Tasks" in the sheet of an initiative, opens the task sheet over the page.
+ * The list "Tasks" of the page shows the changes that the task sheet saves. After a task is
+ * deleted in the task sheet, the focus goes to the row that is then at its place in the list
+ * "Tasks", else to the row before it, else to the heading of the list.
  */
 export function ProjectEditor({
     project,
@@ -94,6 +101,20 @@ export function ProjectEditor({
     const { deleteItem } = useDelete();
     const failureToast = useFailureToast();
     const isDraft = project === null;
+    // The task that the task sheet saved last, which the list "Tasks" shows.
+    const [savedTask, setSavedTask] = useState<Task>();
+    const taskList = useRef<TaskListHandle>(null);
+    // The element that gets the focus after a task is deleted in the task sheet, because the
+    // row that opened the sheet is gone.
+    const focusAfterDelete = useRef<HTMLElement | null>(null);
+    const taskSheet = useTaskSheet({
+        onSaved: setSavedTask,
+        onDeleted: (deletedId) => {
+            focusAfterDelete.current =
+                taskList.current?.deleted(deletedId) ?? null;
+        },
+        focusAfterDelete,
+    });
 
     useEffect(() => {
         onCreatedRef.current = onCreated;
@@ -280,11 +301,24 @@ export function ProjectEditor({
                 }
                 lists={
                     <>
-                        <ProjectInitiatives projectId={id} />
+                        <ProjectInitiatives
+                            projectId={id}
+                            onOpenTask={taskSheet.openTask}
+                        />
                         <ProjectMeetings projectId={id} />
+                        <TaskList
+                            ref={taskList}
+                            // A draft project has no tasks.
+                            filter={(task) =>
+                                id !== null && task.projectId === id
+                            }
+                            onOpen={taskSheet.openTask}
+                            savedTask={savedTask}
+                        />
                     </>
                 }
             />
+            {taskSheet.sheet}
         </div>
     );
 }

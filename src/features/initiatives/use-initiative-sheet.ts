@@ -10,6 +10,7 @@ export type InitiativeSheetControl = {
     onCreated: (id: number) => void;
     onDelete: (id: number, savedName: string) => Promise<void>;
     finalFocus: RefObject<HTMLElement | null> | undefined;
+    onOpenTask: ((id: number, title: string) => void) | undefined;
 };
 
 /**
@@ -28,11 +29,18 @@ export type InitiativeSheetControl = {
  * row or card that opened the sheet is gone, and calls `onDeleted` with the identifier. If
  * the delete fails, the sheet stays open, and a failure toast says "Couldn't delete the
  * initiative. Try again."
+ *
+ * When the page gives `onOpenTask`, the sheet of a saved initiative shows the list "Tasks".
+ * When the user clicks a row and the changes that were waiting are saved, the hook closes
+ * the sheet and calls `onOpenTask` with the identifier and the title of the task, so that the
+ * page opens the task sheet in its place. Only one sheet is open at a time.
  */
 export function useInitiativeSheet({
     onDeleted,
+    onOpenTask,
 }: {
     onDeleted: (id: number) => void;
+    onOpenTask?: (id: number, title: string) => void;
 }) {
     // The initiative whose sheet is open, "new" for a draft, or `null`.
     const [openId, setOpenId] = useState<SheetTarget | null>(null);
@@ -77,6 +85,13 @@ export function useInitiativeSheet({
         onCreated: editCreated,
         onDelete: deleteInitiative,
         finalFocus: focusNewOnClose ? newButton : undefined,
+        onOpenTask:
+            onOpenTask === undefined
+                ? undefined
+                : (id, title) => {
+                      setOpenId(null);
+                      onOpenTask(id, title);
+                  },
     };
 
     return { openId, openInitiative, openDraft, newButton, sheet };
