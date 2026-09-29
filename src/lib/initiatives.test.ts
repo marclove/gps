@@ -1,7 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
     COLUMNS,
-    compareRanks,
     createInitiative,
     deleteInitiative,
     getInitiative,
@@ -142,16 +141,6 @@ function summary(
 
 const COMPLETED = "2026-09-20T00:00:00Z";
 const DELETED = "2026-09-21T00:00:00Z";
-
-describe("compareRanks", () => {
-    it("compareRanks sorts by character codes, not by language rules", () => {
-        expect(compareRanks("81f", "c")).toBeLessThan(0);
-        expect(compareRanks("c", "81f")).toBeGreaterThan(0);
-        // localeCompare puts "a" before "B", but the character code of "B" is smaller.
-        expect(compareRanks("B", "a")).toBeLessThan(0);
-        expect(compareRanks("8", "8")).toBe(0);
-    });
-});
 
 describe("initiativeChoices", () => {
     it("sorts the choices alphabetically without regard to case", () => {

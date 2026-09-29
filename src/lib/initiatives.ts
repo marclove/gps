@@ -34,7 +34,7 @@ export type Initiative = {
     horizon: Horizon;
     /**
      * The key that gives the place of the initiative in its column. Initiatives sort from the
-     * top in the order of their ranks. Compare ranks only with `compareRanks`. A completed or
+     * top in the order of their ranks. Compare ranks only with `compareRanks` in `ranks.ts`. A completed or
      * deleted initiative keeps the rank that it had last.
      */
     rank: string;
@@ -47,16 +47,6 @@ export type Initiative = {
     /** The time when the initiative was deleted, as an RFC 3339 timestamp in UTC, or `null` if it is not deleted. */
     deletedAt: string | null;
 };
-
-/**
- * Compares two ranks by the codes of their characters, and not by the rules of a language.
- * Returns -1 if `a` sorts first, 1 if `b` sorts first, and 0 if they are equal.
- */
-export function compareRanks(a: string, b: string): number {
-    if (a < b) return -1;
-    if (a > b) return 1;
-    return 0;
-}
 
 /** The part of an initiative that the roadmap shows. */
 export type InitiativeSummary = Omit<Initiative, "description">;

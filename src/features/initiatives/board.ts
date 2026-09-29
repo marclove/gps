@@ -1,9 +1,9 @@
 import {
     COLUMNS,
-    compareRanks,
     type Column,
     type InitiativeSummary,
 } from "@/lib/initiatives";
+import { compareRanks } from "@/lib/ranks";
 import { columnOf } from "@/components/board/cards";
 
 /** The cards of the roadmap, in each column from the top. */
