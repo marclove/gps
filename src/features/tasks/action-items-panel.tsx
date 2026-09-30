@@ -1,10 +1,19 @@
-import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
+import {
+    useEffect,
+    useId,
+    useImperativeHandle,
+    useRef,
+    useState,
+    type KeyboardEvent,
+    type Ref,
+} from "react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { useDelete } from "@/components/use-delete";
 import { useFailureToast } from "@/components/use-failure-toast";
 import {
-    createTask,
-    deleteTask,
+    actionItemName,
+    createMeetingTask,
     listMeetingTasks,
     setTaskCompleted,
     type Task,
@@ -23,13 +32,42 @@ const FAILURE_TEXTS: Record<Failure, string> = {
     remove: "Couldn't remove the action item. Try again.",
 };
 
+/** The actions of the action items panel that its page can call. */
+export type ActionItemsPanelHandle = {
+    /**
+     * Takes the item of a task that was deleted outside the panel, such as in the task
+     * sheet, out of the list. Returns the element that gets the focus: the field of the item
+     * that is then at its place, else the field of the item before it, else the field that
+     * adds an item. Returns `null` when the list does not show the task.
+     */
+    deleted: (id: number) => HTMLElement | null;
+};
+
 /**
  * The panel that shows the action items of a meeting. The user can add items, change
- * their text, check them off, and remove them. Only the list scrolls. The heading and
- * the field that adds an item stay in place.
+ * their text, check them off, open them, and remove them. Only the list scrolls. The
+ * heading and the field that adds an item stay in place.
+ *
+ * `onOpen` gets the identifier and the text of an item when the user clicks its Open
+ * button, after a change to the text is saved. `savedTask` is the task that the task sheet
+ * saved last. The panel shows its title in the item of that task. A removed item is
+ * deleted with the delete action, which shows the delete toast with Undo. The panel loads
+ * the items again after each delete and restore, so that a restored item comes back at its
+ * place. `ref` gets the actions of the panel.
  */
-export function ActionItemsPanel({ meetingId }: { meetingId: number }) {
+export function ActionItemsPanel({
+    meetingId,
+    onOpen,
+    savedTask,
+    ref,
+}: {
+    ref?: Ref<ActionItemsPanelHandle>;
+    meetingId: number;
+    onOpen: (id: number, text: string) => void;
+    savedTask?: Task;
+}) {
     const headingId = useId();
+    const { deleteItem, version } = useDelete();
     const [load, setLoad] = useState<LoadState>({ kind: "loading" });
     const [attempt, setAttempt] = useState(0);
     const [newText, setNewText] = useState("");
@@ -57,7 +95,7 @@ export function ActionItemsPanel({ meetingId }: { meetingId: number }) {
         return () => {
             current = false;
         };
-    }, [meetingId, attempt]);
+    }, [meetingId, attempt, version]);
 
     // Move the focus after a removal when the new list is in the page, so that the fields of the items are known.
     useEffect(() => {
@@ -86,7 +124,7 @@ export function ActionItemsPanel({ meetingId }: { meetingId: number }) {
         // Clear the field at once, so the user can type the next item while this one saves.
         setNewText("");
         try {
-            const task = await createTask(meetingId, text);
+            const task = await createMeetingTask(meetingId, text);
             setLoad((current) =>
                 current.kind === "loaded"
                     ? { kind: "loaded", tasks: [...current.tasks, task] }
@@ -132,35 +170,65 @@ export function ActionItemsPanel({ meetingId }: { meetingId: number }) {
         }
     }
 
-    async function remove(task: Task): Promise<boolean> {
+    async function remove(task: Task, text: string): Promise<boolean> {
         try {
-            await deleteTask(task.id);
+            await deleteItem({
+                kind: "task",
+                id: task.id,
+                name: actionItemName(text),
+            });
         } catch {
             failureToast.show(FAILURE_TEXTS.remove);
             return false;
         }
+        takeOut(task.id);
+        failureToast.clear();
+        return true;
+    }
+
+    /** Takes a deleted item out of the list. The focus then moves as after a removal. */
+    function takeOut(id: number) {
         setLoad((current) => {
             if (current.kind !== "loaded") return current;
-            const index = current.tasks.findIndex(
-                (stored) => stored.id === task.id,
-            );
+            const index = current.tasks.findIndex((stored) => stored.id === id);
             if (index !== -1) removedIndex.current = index;
             return {
                 kind: "loaded",
-                tasks: current.tasks.filter((stored) => stored.id !== task.id),
+                tasks: current.tasks.filter((stored) => stored.id !== id),
             };
         });
         setCompleted((current) => {
             const next = new Map(current);
-            next.delete(task.id);
+            next.delete(id);
             return next;
         });
-        completeClicks.current.delete(task.id);
-        savedCompleted.current.delete(task.id);
-        itemFields.current.delete(task.id);
-        failureToast.clear();
-        return true;
+        completeClicks.current.delete(id);
+        savedCompleted.current.delete(id);
+        itemFields.current.delete(id);
     }
+
+    /**
+     * Returns the element that gets the focus after the item is removed: the field of the
+     * item that is then at its place, else the field of the item before it, else the field
+     * that adds an item. Returns `null` when the list does not show the item.
+     */
+    function focusAfterRemoval(id: number): HTMLElement | null {
+        if (load.kind !== "loaded") return null;
+        const index = load.tasks.findIndex((stored) => stored.id === id);
+        if (index === -1) return null;
+        const rest = load.tasks.filter((stored) => stored.id !== id);
+        const next = rest[Math.min(index, rest.length - 1)];
+        if (next === undefined) return addFieldRef.current;
+        return itemFields.current.get(next.id) ?? null;
+    }
+
+    useImperativeHandle(ref, () => ({
+        deleted(id: number) {
+            const target = focusAfterRemoval(id);
+            takeOut(id);
+            return target;
+        },
+    }));
 
     function itemFieldRef(id: number) {
         return (element: HTMLTextAreaElement | null) => {
@@ -214,7 +282,13 @@ export function ActionItemsPanel({ meetingId }: { meetingId: number }) {
                                         ? failureToast.clear()
                                         : failureToast.show(FAILURE_TEXTS.save)
                                 }
-                                onRemove={() => remove(task)}
+                                onOpen={(text) => onOpen(task.id, text)}
+                                savedTask={
+                                    savedTask?.id === task.id
+                                        ? savedTask
+                                        : undefined
+                                }
+                                onRemove={(text) => remove(task, text)}
                                 inputRef={itemFieldRef(task.id)}
                             />
                         ))}

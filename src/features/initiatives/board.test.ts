@@ -3,10 +3,8 @@ import type { Column, InitiativeSummary } from "@/lib/initiatives";
 import {
     addCard,
     buildBoard,
-    columnOf,
     filterBoard,
     fullIndex,
-    moveCard,
     removeCard,
     replaceCard,
     type Board,
@@ -120,115 +118,6 @@ describe("buildBoard", () => {
         ]);
 
         expect(board.done.map((card) => card.id)).toEqual([3, 2, 1]);
-    });
-});
-
-describe("columnOf", () => {
-    it("returns the column that holds the card", () => {
-        const board = sampleBoard();
-
-        expect(columnOf(board, 2)).toBe("now");
-        expect(columnOf(board, 3)).toBe("next");
-        expect(columnOf(board, 4)).toBe("done");
-    });
-
-    it("returns null when no column holds the card", () => {
-        expect(columnOf(sampleBoard(), 99)).toBeNull();
-    });
-});
-
-describe("moveCard", () => {
-    it("moves a card down in its column", () => {
-        const board = buildBoard([
-            summary(1, { horizon: "now", rank: "4" }),
-            summary(2, { horizon: "now", rank: "8" }),
-            summary(3, { horizon: "now", rank: "c" }),
-        ]);
-
-        expect(moveCard(board, 1, "now", 2).now.map((c) => c.id)).toEqual([
-            2, 3, 1,
-        ]);
-    });
-
-    it("moves a card up in its column", () => {
-        const board = buildBoard([
-            summary(1, { horizon: "now", rank: "4" }),
-            summary(2, { horizon: "now", rank: "8" }),
-            summary(3, { horizon: "now", rank: "c" }),
-        ]);
-
-        expect(moveCard(board, 3, "now", 0).now.map((c) => c.id)).toEqual([
-            3, 1, 2,
-        ]);
-    });
-
-    it("moves a card to the given place in another column", () => {
-        const moved = moveCard(sampleBoard(), 2, "next", 0);
-
-        expect(ids(moved)).toEqual({
-            now: [1],
-            next: [2, 3],
-            later: [],
-            done: [5, 4],
-        });
-    });
-
-    it("moves a card into an empty column", () => {
-        const moved = moveCard(sampleBoard(), 1, "later", 0);
-
-        expect(ids(moved).later).toEqual([1]);
-        expect(ids(moved).now).toEqual([2]);
-    });
-
-    it("puts a card at the end when the index is larger than the column", () => {
-        const moved = moveCard(sampleBoard(), 3, "now", 10);
-
-        expect(ids(moved).now).toEqual([1, 2, 3]);
-    });
-
-    it("puts a card moved to Done first and ignores the index", () => {
-        const moved = moveCard(sampleBoard(), 1, "done", 2);
-
-        expect(ids(moved)).toEqual({
-            now: [2],
-            next: [3],
-            later: [],
-            done: [1, 5, 4],
-        });
-    });
-
-    it("leaves Done unchanged when a card moves inside Done", () => {
-        const board = sampleBoard();
-
-        const moved = moveCard(board, 5, "done", 1);
-
-        expect(ids(moved)).toEqual(ids(board));
-    });
-
-    it("moves a card from Done to another column", () => {
-        const moved = moveCard(sampleBoard(), 4, "next", 1);
-
-        expect(ids(moved)).toEqual({
-            now: [1, 2],
-            next: [3, 4],
-            later: [],
-            done: [5],
-        });
-    });
-
-    it("returns the same board when no column holds the card", () => {
-        const board = sampleBoard();
-
-        expect(moveCard(board, 99, "now", 0)).toBe(board);
-    });
-
-    it("does not change the board that it gets", () => {
-        const board = sampleBoard();
-        const before = ids(board);
-
-        moveCard(board, 1, "later", 0);
-
-        expect(ids(board)).toEqual(before);
     });
 });
 

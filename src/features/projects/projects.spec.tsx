@@ -2,7 +2,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "@/App";
-import { FakeRoadmapBackend } from "@/test/fake-roadmap-backend";
+import { FakeBackend } from "@/test/fake-backend";
 
 // Feature spec for the section, the Projects page, creating a project, unique project names,
 // and deleting a project in docs/specs/0008-projects.md.
@@ -13,11 +13,11 @@ const invoke = vi.hoisted(() => vi.fn());
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke }));
 
-let backend: FakeRoadmapBackend;
+let backend: FakeBackend;
 
 beforeEach(() => {
     invoke.mockReset();
-    backend = new FakeRoadmapBackend();
+    backend = new FakeBackend();
     invoke.mockImplementation(backend.handle);
 });
 
@@ -73,15 +73,16 @@ function details() {
 }
 
 describe("Projects section", () => {
-    it("has a link above Meetings with a tooltip, and the application still opens on Meetings", async () => {
+    it("has a link at the bottom with a tooltip, and the application still opens on Meetings", async () => {
         const user = userEvent.setup();
         render(<App />);
 
         const links = within(mainNavigation()).getAllByRole("link");
         expect(links.map((link) => link.textContent)).toEqual([
-            "Projects",
+            "Work",
             "Meetings",
             "Initiatives",
+            "Projects",
         ]);
         expect(projectsLink().querySelector("svg")).toBeInTheDocument();
         expect(

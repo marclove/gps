@@ -93,7 +93,9 @@ function commands(): string[] {
         .map(([command]) => command as string)
         .filter(
             (command) =>
-                command !== "list_initiatives" && command !== "list_meetings",
+                command !== "list_initiatives" &&
+                command !== "list_meetings" &&
+                command !== "list_tasks",
         );
 }
 

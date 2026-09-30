@@ -1,5 +1,6 @@
 import {
     FolderIcon,
+    ListTodoIcon,
     NotebookPenIcon,
     TargetIcon,
     type LucideIcon,
@@ -18,9 +19,10 @@ import {
 type Section = { title: string; path: string; icon: LucideIcon };
 
 const SECTIONS: Section[] = [
-    { title: "Projects", path: "/projects", icon: FolderIcon },
+    { title: "Work", path: "/work", icon: ListTodoIcon },
     { title: "Meetings", path: "/meetings", icon: NotebookPenIcon },
     { title: "Initiatives", path: "/initiatives", icon: TargetIcon },
+    { title: "Projects", path: "/projects", icon: FolderIcon },
 ];
 
 /**
@@ -34,7 +36,8 @@ export function AppSidebar() {
         >
             <SidebarContent>
                 <nav aria-label="Main">
-                    <SidebarGroup>
+                    {/* The top padding centers the first icon on the page header, which is 64 pixels tall. */}
+                    <SidebarGroup className="pt-4">
                         <SidebarMenu className="gap-2">
                             {SECTIONS.map((section) => (
                                 <SidebarMenuItem key={section.path}>

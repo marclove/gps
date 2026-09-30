@@ -1,7 +1,7 @@
 import { createContext, useContext } from "react";
 
 /** A kind of item that the user can delete. */
-export type DeleteKind = "meeting" | "initiative" | "project";
+export type DeleteKind = "meeting" | "initiative" | "project" | "task";
 
 /**
  * The error of `deleteItem` when the backend refuses the delete, for example because a
@@ -22,7 +22,8 @@ export type ItemToDelete = {
     /**
      * The item's raw name, exactly as stored. It may be empty; the delete toast
      * shows the default name of the kind for an empty name, such as "Untitled
-     * meeting".
+     * meeting". For a task, the caller can give the shown name instead, such as
+     * "Untitled action item" for an action item with an empty text.
      */
     name: string;
 };

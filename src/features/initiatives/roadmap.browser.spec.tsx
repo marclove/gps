@@ -2,7 +2,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import App from "@/App";
-import { FakeRoadmapBackend, type Horizon } from "@/test/fake-roadmap-backend";
+import { FakeBackend, type Horizon } from "@/test/fake-backend";
 import { dragWithPointer, waitForCardInColumn } from "@/test/pointer-drag";
 
 // Feature spec for dragging cards and for the layout of the roadmap and the sheet in
@@ -15,11 +15,11 @@ const invoke = vi.hoisted(() => vi.fn());
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke }));
 
-let backend: FakeRoadmapBackend;
+let backend: FakeBackend;
 
 beforeEach(() => {
     invoke.mockReset();
-    backend = new FakeRoadmapBackend();
+    backend = new FakeBackend();
     // Every initiative needs a project. When exactly one project exists, a draft starts in
     // it, so the specs of Spec 0006 create initiatives as before.
     backend.seedProject("Unsorted");

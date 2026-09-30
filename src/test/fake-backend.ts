@@ -1,9 +1,16 @@
 /**
- * An in-memory fake of the backend commands for projects, meetings, and initiatives, for
- * the feature specs of the roadmap and of projects. It keeps the order of the initiatives in each column
- * in the same way as the real backend: each initiative has a rank, a text key, and a
- * change gives only the changed initiative a new rank, between the ranks of its new
- * neighbors. The keys are not the keys that the real backend makes.
+ * An in-memory fake of the backend commands for projects, meetings, initiatives, and
+ * tasks. The feature specs and some unit tests use it in place of the Tauri backend.
+ *
+ * The fake keeps the order of initiatives and tasks as the real backend does. Each
+ * initiative on the roadmap and each prioritized task has a rank, which is a text key.
+ * A change gives only the changed row a new rank, between the ranks of its new neighbors.
+ * The keys are not the keys that the real backend makes.
+ *
+ * The stage of a task comes from its columns. A deleted task is on no board. A task with
+ * `completedAt` is in Done. A task with no rank is in the Icebox. A task with a rank and
+ * `startedAt` is in Current. Other tasks are in the Backlog. A completed or deleted task
+ * keeps its rank and its start, so that it can go back to its held place.
  */
 
 const DIGITS = "0123456789abcdef";
@@ -78,6 +85,57 @@ export type StoredMeeting = {
     deletedAt: string | null;
 };
 
+export type StoredTask = {
+    id: number;
+    meetingId: number | null;
+    title: string;
+    description: string;
+    projectId: number | null;
+    initiativeId: number | null;
+    /** The place in the list, or `null` when the task is in the Icebox. */
+    rank: string | null;
+    createdAt: string;
+    updatedAt: string;
+    startedAt: string | null;
+    completedAt: string | null;
+    deletedAt: string | null;
+};
+
+/** A column of the board of the Work page. */
+export type TaskStage = "current" | "backlog" | "icebox" | "done";
+
+export type SeedTask = {
+    title: string;
+    /**
+     * The meeting that the task came from. When `project` and `initiative` are not given,
+     * the task gets them from the meeting, as `create_meeting_task` does.
+     */
+    meeting?: StoredMeeting;
+    /** The project. By default, the project of `initiative`, or of `meeting`, or none. */
+    project?: StoredProject | null;
+    initiative?: StoredInitiative | null;
+    description?: string;
+    /**
+     * The column. By default, "icebox". A task in "current" or "backlog" goes after every
+     * task that was seeded before it, so that the list is in the order of seeding. A task in "current" gets `startedAt`. A task in "done" gets `completedAt`.
+     */
+    stage?: TaskStage;
+    /**
+     * For a task in "done" only: the stage that the task goes back to when it is reopened.
+     * By default, "icebox". With "current" or "backlog", the task holds a place after every
+     * task that was seeded before it.
+     */
+    heldStage?: "current" | "backlog" | "icebox";
+    /** The rank. By default, the rank that `stage` and `heldStage` give. */
+    rank?: string | null;
+    createdAt?: string;
+    startedAt?: string | null;
+    completedAt?: string | null;
+    /** When true, the task is deleted. `deletedAt` gives the time. */
+    deleted?: boolean;
+    deletedAt?: string | null;
+};
+
 export type SeedInitiative = {
     name: string;
     /**
@@ -115,7 +173,21 @@ export type FailingCommand =
     | "restore_initiative"
     | "add_meeting_initiative"
     | "remove_meeting_initiative"
-    | "delete_meeting";
+    | "delete_meeting"
+    | "list_meeting_tasks"
+    | "list_tasks"
+    | "get_task"
+    | "create_task"
+    | "create_meeting_task"
+    | "update_task_title"
+    | "update_task_description"
+    | "set_task_project"
+    | "set_task_initiative"
+    | "move_task"
+    | "start_task"
+    | "set_task_completed"
+    | "delete_task"
+    | "restore_task";
 
 /** Returns the initiative as `list_initiatives` returns it, without its description. */
 function summary(initiative: StoredInitiative) {
@@ -150,10 +222,11 @@ function nameKey(name: string): string {
     return name.trim().toLowerCase();
 }
 
-export class FakeRoadmapBackend {
+export class FakeBackend {
     projects: StoredProject[] = [];
     initiatives: StoredInitiative[] = [];
     meetings: StoredMeeting[] = [];
+    tasks: StoredTask[] = [];
     /** The commands that reject with "database is locked" until removed from this set. */
     failing = new Set<FailingCommand>();
     /** The commands that reject once, and then work again. */
@@ -162,6 +235,8 @@ export class FakeRoadmapBackend {
     // Projects count their own identifiers, as a table of the real database does, so that
     // seeding a project does not change the identifiers of initiatives and meetings.
     private nextProjectId = 1;
+    // Tasks count their own identifiers too.
+    private nextTaskId = 1;
     private clock = 0;
 
     private now(): string {
@@ -220,6 +295,82 @@ export class FakeRoadmapBackend {
             .filter((i) => i.horizon === horizon)
             .sort(byRank);
         return ranks[ranks.length - 1]?.rank ?? null;
+    }
+
+    /** Returns the stage of a task, or "deleted" for a deleted task. */
+    stageOf(task: StoredTask): TaskStage | "deleted" {
+        if (task.deletedAt !== null) return "deleted";
+        if (task.completedAt !== null) return "done";
+        if (task.rank === null) return "icebox";
+        return task.startedAt !== null ? "current" : "backlog";
+    }
+
+    /** The prioritized tasks in Current and the Backlog, in the order of the list. */
+    private list(): (StoredTask & { rank: string })[] {
+        return this.tasks
+            .filter(
+                (t): t is StoredTask & { rank: string } =>
+                    t.rank !== null &&
+                    t.completedAt === null &&
+                    t.deletedAt === null,
+            )
+            .sort(byRank);
+    }
+
+    /**
+     * The key after the largest rank of all tasks, also completed and deleted ones, so that
+     * each seeded task holds its own place.
+     */
+    private afterAllTasks(): string {
+        const ranks = this.tasks
+            .map((t) => t.rank)
+            .filter((rank) => rank !== null)
+            .sort();
+        return keyBetween(ranks[ranks.length - 1] ?? null, null);
+    }
+
+    /**
+     * Puts the task in Current or the Backlog at the index among the other cards of that
+     * column. The task goes directly after the card above the index, or directly before the
+     * card below it when the index is 0, or to the end of the list when the column has no
+     * other card.
+     */
+    private placeTask(
+        task: StoredTask,
+        stage: "current" | "backlog",
+        index: number,
+    ) {
+        const list = this.list().filter((t) => t !== task);
+        const column = list.filter((t) =>
+            stage === "current" ? t.startedAt !== null : t.startedAt === null,
+        );
+        const at = Math.min(Math.max(index, 0), column.length);
+        const above = column[at - 1];
+        const below = column[at];
+        if (above) {
+            const next = list[list.indexOf(above) + 1];
+            task.rank = keyBetween(above.rank, next?.rank ?? null);
+        } else if (below) {
+            const previous = list[list.indexOf(below) - 1];
+            task.rank = keyBetween(previous?.rank ?? null, below.rank);
+        } else {
+            task.rank = keyBetween(list[list.length - 1]?.rank ?? null, null);
+        }
+    }
+
+    /**
+     * Gives a reopened or restored task a new rank if a task of the list has its rank: the
+     * new rank is directly after that task.
+     */
+    private keepTaskPlace(task: StoredTask) {
+        if (task.rank === null) return;
+        const list = this.list().filter((t) => t !== task);
+        const holder = list.findIndex((t) => t.rank === task.rank);
+        if (holder === -1) return;
+        task.rank = keyBetween(
+            list[holder].rank,
+            list[holder + 1]?.rank ?? null,
+        );
     }
 
     seedProject(
@@ -293,6 +444,95 @@ export class FakeRoadmapBackend {
         };
         this.meetings.push(meeting);
         return meeting;
+    }
+
+    /** Seeds a task. See `SeedTask` for the defaults. */
+    seedTask(fields: SeedTask): StoredTask {
+        const stage = fields.stage ?? "icebox";
+        const held = stage === "done" ? (fields.heldStage ?? "icebox") : stage;
+        const meeting = fields.meeting ?? null;
+        let initiative = fields.initiative;
+        if (initiative === undefined) {
+            const covered =
+                meeting?.initiativeIds
+                    .map((id) => this.initiative(id))
+                    .filter((i) => i.deletedAt === null) ?? [];
+            initiative =
+                fields.project === undefined && covered.length === 1
+                    ? covered[0]
+                    : null;
+        }
+        const projectId =
+            fields.project !== undefined
+                ? (fields.project?.id ?? null)
+                : (initiative?.projectId ?? meeting?.projectId ?? null);
+        const createdAt = fields.createdAt ?? this.now();
+        const rank =
+            fields.rank !== undefined
+                ? fields.rank
+                : held === "icebox"
+                  ? null
+                  : this.afterAllTasks();
+        const task: StoredTask = {
+            id: this.nextTaskId++,
+            meetingId: meeting?.id ?? null,
+            title: fields.title,
+            description: fields.description ?? "",
+            projectId,
+            initiativeId: initiative?.id ?? null,
+            rank,
+            createdAt,
+            updatedAt: createdAt,
+            startedAt:
+                fields.startedAt !== undefined
+                    ? fields.startedAt
+                    : held === "current"
+                      ? createdAt
+                      : null,
+            completedAt:
+                fields.completedAt !== undefined
+                    ? fields.completedAt
+                    : stage === "done"
+                      ? this.now()
+                      : null,
+            deletedAt:
+                fields.deletedAt !== undefined
+                    ? fields.deletedAt
+                    : fields.deleted
+                      ? this.now()
+                      : null,
+        };
+        this.tasks.push(task);
+        return task;
+    }
+
+    /**
+     * The titles of the tasks in the column of the Work page, from the top. Current and the
+     * Backlog are in the order of the list. The Icebox has the newest task first. Done has
+     * the task that was completed last first.
+     */
+    workColumn(stage: TaskStage): string[] {
+        if (stage === "current" || stage === "backlog") {
+            return this.list()
+                .filter((t) => this.stageOf(t) === stage)
+                .map((t) => t.title);
+        }
+        const key = stage === "icebox" ? "createdAt" : "completedAt";
+        return this.tasks
+            .filter((t) => this.stageOf(t) === stage)
+            .sort((a, b) => b[key]!.localeCompare(a[key]!) || b.id - a.id)
+            .map((t) => t.title);
+    }
+
+    /** The titles of the tasks in Current and the Backlog, in the order of the list. */
+    listOrder(): string[] {
+        return this.list().map((t) => t.title);
+    }
+
+    findTask(title: string): StoredTask {
+        const task = this.tasks.find((t) => t.title === title);
+        if (!task) throw new Error(`no task named ${title}`);
+        return task;
     }
 
     /** The names of the initiatives on the board in the column, from the top. */
@@ -411,6 +651,20 @@ export class FakeRoadmapBackend {
         return initiative;
     }
 
+    private task(id: unknown): StoredTask {
+        const task = this.tasks.find((t) => t.id === id);
+        if (!task) throw `task ${String(id)} not found`;
+        return task;
+    }
+
+    /** Returns the initiative, and throws if it does not exist or is deleted. */
+    private activeInitiative(id: unknown): StoredInitiative {
+        const initiative = this.initiative(id);
+        if (initiative.deletedAt !== null)
+            throw `initiative ${String(id)} is deleted`;
+        return initiative;
+    }
+
     private meeting(id: unknown): StoredMeeting {
         const meeting = this.meetings.find((m) => m.id === id);
         if (!meeting) throw `meeting ${String(id)} not found`;
@@ -425,6 +679,28 @@ export class FakeRoadmapBackend {
         };
         delete result.deletedAt;
         return result;
+    }
+
+    /** Stores a new task in the Icebox and returns a copy of it. */
+    private addTask(
+        fields: Pick<
+            StoredTask,
+            "meetingId" | "title" | "description" | "projectId" | "initiativeId"
+        >,
+    ): StoredTask {
+        const now = this.now();
+        const task: StoredTask = {
+            id: this.nextTaskId++,
+            ...fields,
+            rank: null,
+            createdAt: now,
+            updatedAt: now,
+            startedAt: null,
+            completedAt: null,
+            deletedAt: null,
+        };
+        this.tasks.push(task);
+        return { ...task };
     }
 
     private checkFailure(command: string) {
@@ -455,7 +731,159 @@ export class FakeRoadmapBackend {
                 return meeting ? this.meetingResult(meeting) : null;
             }
             case "list_meeting_tasks":
-                return [];
+                return this.tasks
+                    .filter(
+                        (t) =>
+                            t.meetingId === args.meetingId &&
+                            t.deletedAt === null,
+                    )
+                    .sort(
+                        (a, b) =>
+                            a.createdAt.localeCompare(b.createdAt) ||
+                            a.id - b.id,
+                    )
+                    .map((t) => ({ ...t }));
+            case "list_tasks":
+                // The order is on purpose not the order of the board, because the
+                // frontend sorts the tasks.
+                return [...this.tasks]
+                    .reverse()
+                    .filter((t) => t.deletedAt === null)
+                    .map((t) => ({ ...t }));
+            case "get_task": {
+                const task = this.tasks.find((t) => t.id === args.id);
+                return task ? { ...task } : null;
+            }
+            case "create_task": {
+                let projectId = args.projectId as number | null;
+                const initiativeId = args.initiativeId as number | null;
+                if (initiativeId !== null) {
+                    projectId = this.activeInitiative(initiativeId).projectId;
+                } else if (projectId !== null) {
+                    this.activeProject(projectId);
+                }
+                return this.addTask({
+                    meetingId: null,
+                    title: (args.title as string).trim(),
+                    description: args.description as string,
+                    projectId,
+                    initiativeId,
+                });
+            }
+            case "create_meeting_task": {
+                const meeting = this.meeting(args.meetingId);
+                const covered = meeting.initiativeIds.filter(
+                    (id) => this.initiative(id).deletedAt === null,
+                );
+                return this.addTask({
+                    meetingId: meeting.id,
+                    title: args.title as string,
+                    description: "",
+                    projectId:
+                        meeting.projectId !== null &&
+                        this.project(meeting.projectId).deletedAt === null
+                            ? meeting.projectId
+                            : null,
+                    initiativeId: covered.length === 1 ? covered[0] : null,
+                });
+            }
+            case "update_task_title": {
+                const task = this.task(args.id);
+                task.title = args.title as string;
+                task.updatedAt = this.now();
+                return { ...task };
+            }
+            case "update_task_description": {
+                const task = this.task(args.id);
+                task.description = args.description as string;
+                task.updatedAt = this.now();
+                return { ...task };
+            }
+            case "set_task_project": {
+                const task = this.task(args.id);
+                const projectId = args.projectId as number | null;
+                if (projectId === null) {
+                    task.projectId = null;
+                    task.initiativeId = null;
+                } else {
+                    this.activeProject(projectId);
+                    task.projectId = projectId;
+                    if (
+                        task.initiativeId !== null &&
+                        this.initiative(task.initiativeId).projectId !==
+                            projectId
+                    ) {
+                        task.initiativeId = null;
+                    }
+                }
+                task.updatedAt = this.now();
+                return { ...task };
+            }
+            case "set_task_initiative": {
+                const task = this.task(args.id);
+                const initiativeId = args.initiativeId as number | null;
+                if (initiativeId !== null) {
+                    task.projectId =
+                        this.activeInitiative(initiativeId).projectId;
+                }
+                task.initiativeId = initiativeId;
+                task.updatedAt = this.now();
+                return { ...task };
+            }
+            case "move_task": {
+                const task = this.task(args.id);
+                if (task.deletedAt !== null) {
+                    throw `task ${String(task.id)} is deleted`;
+                }
+                if (task.completedAt !== null) {
+                    throw `task ${String(task.id)} is completed`;
+                }
+                const destination = args.destination as TaskStage;
+                if (destination === "done") {
+                    task.completedAt = this.now();
+                } else if (destination === "icebox") {
+                    task.rank = null;
+                    task.startedAt = null;
+                } else {
+                    this.placeTask(task, destination, args.index as number);
+                    task.startedAt =
+                        destination === "current"
+                            ? (task.startedAt ?? this.now())
+                            : null;
+                }
+                return { ...task };
+            }
+            case "start_task": {
+                const task = this.task(args.id);
+                if (this.stageOf(task) !== "backlog") {
+                    throw `task ${String(task.id)} is not in the backlog`;
+                }
+                task.startedAt = this.now();
+                return { ...task };
+            }
+            case "set_task_completed": {
+                const task = this.task(args.id);
+                if (args.completed === true) {
+                    task.completedAt ??= this.now();
+                } else if (task.completedAt !== null) {
+                    task.completedAt = null;
+                    if (task.deletedAt === null) this.keepTaskPlace(task);
+                }
+                return { ...task };
+            }
+            case "delete_task": {
+                const task = this.task(args.id);
+                task.deletedAt ??= this.now();
+                return null;
+            }
+            case "restore_task": {
+                const task = this.task(args.id);
+                if (task.deletedAt !== null) {
+                    task.deletedAt = null;
+                    if (task.completedAt === null) this.keepTaskPlace(task);
+                }
+                return { ...task };
+            }
             case "update_meeting": {
                 const meeting = this.meeting(args.id);
                 Object.assign(meeting, {
@@ -573,6 +1001,14 @@ export class FakeRoadmapBackend {
                 ) {
                     return { status: "hasInitiatives" };
                 }
+                if (
+                    this.tasks.some(
+                        (t) =>
+                            t.projectId === project.id && t.deletedAt === null,
+                    )
+                ) {
+                    return { status: "hasTasks" };
+                }
                 project.deletedAt ??= this.now();
                 return { status: "deleted" };
             }
@@ -594,6 +1030,12 @@ export class FakeRoadmapBackend {
                 }
                 initiative.projectId = project.id;
                 initiative.updatedAt = this.now();
+                // The tasks of the initiative follow it, also completed and deleted ones.
+                for (const task of this.tasks) {
+                    if (task.initiativeId === initiative.id) {
+                        task.projectId = project.id;
+                    }
+                }
                 // A meeting follows the initiative only when it covers no other initiative.
                 // Otherwise it stays in its project and no longer covers the initiative.
                 for (const meeting of this.meetings) {

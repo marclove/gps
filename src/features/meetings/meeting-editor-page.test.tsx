@@ -13,6 +13,7 @@ import { Toaster } from "@/components/toaster";
 import { toast } from "@/components/ui/toast";
 import { DeleteProvider } from "@/components/delete-provider";
 import type { Meeting } from "@/lib/meetings";
+import { FakeBackend } from "@/test/fake-backend";
 import { MeetingEditorPage } from "./meeting-editor-page";
 
 /** Shows the Meetings list route the editor page opens after a delete. */
@@ -317,5 +318,40 @@ describe("MeetingEditorPage", () => {
         expect(
             screen.getByRole("region", { name: "Action items" }),
         ).toContainElement(document.activeElement as HTMLElement);
+    });
+
+    it("moves the focus to the next action item after its task is deleted in the task sheet", async () => {
+        const backend = new FakeBackend();
+        const sync = backend.seedMeeting("Weekly sync");
+        backend.seedTask({ meeting: sync, title: "Send the deck" });
+        backend.seedTask({ meeting: sync, title: "Book a room" });
+        backend.seedTask({ meeting: sync, title: "Call Sam" });
+        invoke.mockImplementation(backend.handle);
+        const user = userEvent.setup();
+        renderPage(`/meetings/${sync.id}`);
+
+        await user.click(
+            await screen.findByRole("button", { name: 'Open "Book a room"' }),
+        );
+        const sheet = await screen.findByRole("dialog", {
+            name: "Book a room",
+        });
+        await waitFor(() =>
+            expect(
+                within(sheet).getByRole("textbox", { name: "Task title" }),
+            ).toBeEnabled(),
+        );
+        await user.click(within(sheet).getByRole("button", { name: "Delete" }));
+
+        await waitFor(() =>
+            expect(
+                screen.queryByRole("dialog", { name: "Book a room" }),
+            ).not.toBeInTheDocument(),
+        );
+        const fields = screen.getAllByRole("textbox", { name: "Action item" });
+        expect(
+            fields.map((field) => (field as HTMLInputElement).value),
+        ).toEqual(["Send the deck", "Call Sam"]);
+        await waitFor(() => expect(fields[1]).toHaveFocus());
     });
 });

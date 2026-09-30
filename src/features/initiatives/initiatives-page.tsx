@@ -1,5 +1,6 @@
 import { PlusIcon } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { columnOf, moveCard } from "@/components/board/cards";
 import { PageHeader } from "@/components/page-header";
 import { useDelete, type RestoredItem } from "@/components/use-delete";
 import { useFailureToast } from "@/components/use-failure-toast";
@@ -23,17 +24,16 @@ import {
 import {
     addCard,
     buildBoard,
-    columnOf,
     emptyBoard,
     filterBoard,
     fullIndex,
-    moveCard,
     removeCard,
     replaceCard,
     type Board,
 } from "./board";
 import { InitiativeSheet } from "./initiative-sheet";
 import { RoadmapBoard } from "./roadmap-board";
+import { useTaskSheet } from "@/features/work/use-task-sheet";
 import { useInitiativeSheet } from "./use-initiative-sheet";
 
 type BoardState =
@@ -67,6 +67,10 @@ function nameOnBoard(board: Board, id: number): string | null {
  * cards that the user sees, and the cards of other projects keep their places. A draft starts
  * in the project of the filter. A card whose initiative moves to another project leaves a
  * filtered roadmap.
+ *
+ * A click on a row of the list "Tasks" in the sheet of an initiative closes that sheet and
+ * opens the task sheet in its place. The page shows no tasks, so it ignores the saves of the
+ * task sheet. After the task is deleted in the task sheet, the focus goes to "New initiative".
  */
 export function InitiativesPage() {
     const [state, setState] = useState<BoardState>({ kind: "loading" });
@@ -83,7 +87,10 @@ export function InitiativesPage() {
                         ? { ...current, board: removeCard(current.board, id) }
                         : current,
                 ),
+            onOpenTask: (id, title) => taskSheet.openTask(id, title),
         });
+    // The row that opened the task sheet was in the sheet of the initiative, which is closed.
+    const taskSheet = useTaskSheet({ focusAfterDelete: newButton });
     const boardArea = useRef<HTMLDivElement>(null);
     // The restored item that the page already focused, or that was restored before the page
     // opened. The page does not focus it again.
@@ -144,8 +151,9 @@ export function InitiativesPage() {
         ) {
             return;
         }
+        // The first button of a card is its open button.
         const card = boardArea.current?.querySelector<HTMLElement>(
-            `[data-initiative-id="${restored.id}"]`,
+            `[data-card-id="${restored.id}"] button`,
         );
         if (card) {
             card.focus();
@@ -283,6 +291,7 @@ export function InitiativesPage() {
                 name={openName}
                 onSaved={showSaved}
             />
+            {taskSheet.sheet}
         </div>
     );
 }

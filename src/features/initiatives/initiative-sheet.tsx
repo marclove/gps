@@ -14,9 +14,9 @@ import {
 } from "@/lib/initiatives";
 import {
     FIELD_LABEL_CLASSES,
-    InitiativeForm,
     NAME_FIELD_CLASSES,
-} from "./initiative-form";
+} from "@/components/form-field-classes";
+import { InitiativeForm } from "./initiative-form";
 
 /** What the sheet shows: the identifier of an initiative, or "new" for a draft. */
 export type SheetTarget = number | "new";
@@ -45,6 +45,9 @@ type LoadState =
  *   are saved. It receives the identifier and the saved name of the initiative.
  * - `finalFocus` receives the focus when the sheet closes. If it is not given, the focus
  *   goes back to the element that opened the sheet.
+ * - `onOpenTask` is called when the user clicks a row of the list "Tasks" of a saved
+ *   initiative, after the changes that were waiting are saved. It receives the identifier and
+ *   the title of the task. The sheet shows the list only when `onOpenTask` is given.
  */
 export function InitiativeSheet({
     id,
@@ -55,6 +58,7 @@ export function InitiativeSheet({
     onCreated,
     onDelete,
     finalFocus,
+    onOpenTask,
 }: {
     id: SheetTarget | null;
     draftProjectId: number | null;
@@ -64,6 +68,7 @@ export function InitiativeSheet({
     onCreated: (id: number) => void;
     onDelete: (id: number, savedName: string) => Promise<void>;
     finalFocus?: RefObject<HTMLElement | null>;
+    onOpenTask?: (id: number, title: string) => void;
 }) {
     // While the sheet closes, it keeps the last initiative that it showed.
     const [shown, setShown] = useState({ id, name });
@@ -125,6 +130,7 @@ export function InitiativeSheet({
                         onCreated={onCreated}
                         onDelete={onDelete}
                         onClose={onClose}
+                        onOpenTask={onOpenTask}
                     />
                 )}
             </SheetContent>
@@ -145,6 +151,7 @@ function SheetBody({
     onCreated,
     onDelete,
     onClose,
+    onOpenTask,
 }: {
     id: SheetTarget;
     draftProjectId: number | null;
@@ -153,6 +160,7 @@ function SheetBody({
     onCreated: (id: number) => void;
     onDelete: (id: number, savedName: string) => Promise<void>;
     onClose: () => void;
+    onOpenTask?: (id: number, title: string) => void;
 }) {
     // The initiative that the body loads, or `null` for a body that starts as a draft. Such a
     // body never loads, because its form has the saved values.
@@ -198,6 +206,7 @@ function SheetBody({
                     return onDelete(id, savedName);
                 }}
                 onSave={onClose}
+                onOpenTask={onOpenTask}
                 nameRef={nameRef}
             />
         );

@@ -19,6 +19,7 @@ import {
     restoreProject,
     type RestoreProjectResult,
 } from "@/lib/projects";
+import { deleteTask, restoreTask, taskTitle } from "@/lib/tasks";
 import {
     DeleteContext,
     DeleteRefusedError,
@@ -91,11 +92,18 @@ const KINDS: Record<DeleteKind, KindActions> = {
     project: {
         remove: async (id, shownName) => {
             const result = await deleteProject(id);
-            return result.status === "hasInitiatives"
-                ? {
-                      refusedText: `Couldn't delete "${shownName}" because it still has initiatives.`,
-                  }
-                : null;
+            switch (result.status) {
+                case "hasInitiatives":
+                    return {
+                        refusedText: `Couldn't delete "${shownName}" because it still has initiatives.`,
+                    };
+                case "hasTasks":
+                    return {
+                        refusedText: `Couldn't delete "${shownName}" because it still has tasks.`,
+                    };
+                case "deleted":
+                    return null;
+            }
         },
         restore: restoreProject,
         displayName: projectDisplayName,
@@ -104,6 +112,17 @@ const KINDS: Record<DeleteKind, KindActions> = {
         nameTakenText: (shownName) =>
             `Couldn't restore "${shownName}" because another project has that name.`,
         projectDeletedText: () => "Couldn't restore the project. Try again.",
+    },
+    task: {
+        remove: (id) => deleteTask(id).then(() => null),
+        // The backend always restores a task, so the texts for a refused restore are
+        // never shown.
+        restore: (id) => restoreTask(id).then(() => ({ status: "restored" })),
+        displayName: (name) => taskTitle({ title: name }),
+        deletedText: (shownName) => `Deleted "${shownName}".`,
+        restoreFailedText: "Couldn't restore the task. Try again.",
+        nameTakenText: () => "Couldn't restore the task. Try again.",
+        projectDeletedText: () => "Couldn't restore the task. Try again.",
     },
 };
 

@@ -2,7 +2,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { userEvent } from "vitest/browser";
 import App from "@/App";
-import { FakeRoadmapBackend, type Horizon } from "@/test/fake-roadmap-backend";
+import { FakeBackend, type Horizon } from "@/test/fake-backend";
 import {
     center,
     nextFrame,
@@ -18,11 +18,11 @@ const invoke = vi.hoisted(() => vi.fn());
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke }));
 
-let backend: FakeRoadmapBackend;
+let backend: FakeBackend;
 
 beforeEach(() => {
     invoke.mockReset();
-    backend = new FakeRoadmapBackend();
+    backend = new FakeBackend();
     invoke.mockImplementation(backend.handle);
 });
 

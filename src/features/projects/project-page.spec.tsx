@@ -2,10 +2,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "@/App";
-import {
-    FakeRoadmapBackend,
-    type StoredProject,
-} from "@/test/fake-roadmap-backend";
+import { FakeBackend, type StoredProject } from "@/test/fake-backend";
 
 // Feature spec for the project page and the initiatives and meetings of a project in
 // docs/specs/0008-projects.md.
@@ -16,13 +13,13 @@ const invoke = vi.hoisted(() => vi.fn());
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke }));
 
-let backend: FakeRoadmapBackend;
+let backend: FakeBackend;
 let checkout: StoredProject;
 let billing: StoredProject;
 
 beforeEach(() => {
     invoke.mockReset();
-    backend = new FakeRoadmapBackend();
+    backend = new FakeBackend();
     checkout = backend.seedProject("Checkout", {
         description: "Payments and **refunds**",
     });

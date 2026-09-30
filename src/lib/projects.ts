@@ -34,7 +34,9 @@ export type RenameProjectResult =
 
 /** The answer of the backend to a delete. */
 export type DeleteProjectResult =
-    { status: "deleted" } | { status: "hasInitiatives" };
+    | { status: "deleted" }
+    | { status: "hasInitiatives" }
+    | { status: "hasTasks" };
 
 /** The answer of the backend to a restore of a deleted project. */
 export type RestoreProjectResult =
@@ -112,7 +114,8 @@ export function updateProject(
 
 /**
  * Deletes a project, so it no longer appears in the list. The user can restore it. The result
- * is "hasInitiatives" if the project still has initiatives that are not deleted, and then
+ * is "hasInitiatives" if the project still has initiatives that are not deleted. Else, the
+ * result is "hasTasks" if the project still has tasks that are not deleted. In both cases,
  * nothing changes.
  */
 export function deleteProject(id: number): Promise<DeleteProjectResult> {

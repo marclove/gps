@@ -570,4 +570,74 @@ describe("DeleteProvider", () => {
             within(notifications()).getByText('Deleted "Untitled project".'),
         ).toBeInTheDocument();
     });
+    it("deletes a task and restores it on Undo", async () => {
+        const harness = renderHarness();
+
+        await act(() =>
+            harness.deleteItem({ kind: "task", id: 1, name: "Send the deck" }),
+        );
+
+        expect(invoke).toHaveBeenCalledWith("delete_task", { id: 1 });
+        expect(
+            within(notifications()).getByText('Deleted "Send the deck".'),
+        ).toBeInTheDocument();
+
+        await act(() => fireEvent.click(undoButton()));
+
+        await waitFor(() => expect(harness.restoredKind()).toBe("task"));
+        expect(harness.restoredId()).toBe("1");
+        expect(invoke).toHaveBeenCalledWith("restore_task", { id: 1 });
+    });
+
+    it("says that a project still has tasks", async () => {
+        invoke.mockImplementation((command: string) =>
+            command === "delete_project"
+                ? Promise.resolve({ status: "hasTasks" })
+                : succeed(command),
+        );
+        const harness = renderHarness();
+
+        let error: unknown;
+        await act(() =>
+            harness
+                .deleteItem({ kind: "project", id: 1, name: "Checkout" })
+                .catch((e: unknown) => {
+                    error = e;
+                }),
+        );
+
+        expect(error).toBeInstanceOf(DeleteRefusedError);
+        expect((error as Error).message).toBe(
+            'Couldn\'t delete "Checkout" because it still has tasks.',
+        );
+        expect(
+            screen.queryByText('Deleted "Checkout".'),
+        ).not.toBeInTheDocument();
+        expect(harness.version()).toBe(0);
+    });
+
+    it("keeps Undo when a task cannot be restored", async () => {
+        invoke.mockImplementation((command: string) =>
+            command === "restore_task"
+                ? Promise.reject(new Error("boom"))
+                : succeed(command),
+        );
+        const harness = renderHarness();
+        await act(() =>
+            harness.deleteItem({ kind: "task", id: 1, name: "Send the deck" }),
+        );
+
+        await act(() => fireEvent.click(undoButton()));
+
+        const toasts = notifications();
+        expect(
+            await within(toasts).findByText(
+                "Couldn't restore the task. Try again.",
+            ),
+        ).toBeInTheDocument();
+        expect(
+            within(toasts).getByRole("button", { name: "Undo" }),
+        ).toBeInTheDocument();
+        expect(harness.restoredId()).toBe("none");
+    });
 });

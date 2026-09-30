@@ -1,4 +1,5 @@
 import { Trash2Icon } from "lucide-react";
+import { FIELD_LABEL_CLASSES } from "@/components/form-field-classes";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useNavigate } from "react-router";
 import { MarkdownEditor } from "@/components/markdown-editor/markdown-editor";
@@ -16,7 +17,12 @@ import {
     type Meeting,
     type MeetingChanges,
 } from "@/lib/meetings";
-import { ActionItemsPanel } from "@/features/tasks/action-items-panel";
+import {
+    ActionItemsPanel,
+    type ActionItemsPanelHandle,
+} from "@/features/tasks/action-items-panel";
+import { useTaskSheet } from "@/features/work/use-task-sheet";
+import type { Task } from "@/lib/tasks";
 import { MeetingDetailsSidebar } from "./meeting-details-sidebar";
 import type { MeetingsPageState } from "./meetings-page";
 import { useDelete } from "@/components/use-delete";
@@ -29,6 +35,7 @@ const COMPLETE_DATE = /^\d{4}-\d{2}-\d{2}$/;
 /**
  * The editor for one meeting: its name and its notes at the left, and a sidebar with
  * its date, its project, its initiatives, the Delete button, and its action items at the right.
+ * The Open button of an action item opens the task sheet over the editor.
  * Changes are saved automatically. If `isNew` is true, the name field gets the focus
  * and its text is selected.
  */
@@ -61,6 +68,19 @@ export function MeetingEditor({
     const { deleteItem: deleteInProvider } = useDelete();
     const [deleting, setDeleting] = useState(false);
     const failureToast = useFailureToast();
+    // The task that the task sheet saved last, which the action items panel shows.
+    const [savedTask, setSavedTask] = useState<Task>();
+    const actionItems = useRef<ActionItemsPanelHandle>(null);
+    // The element that gets the focus after a task is deleted in the task sheet, because
+    // the Open button that opened the sheet is gone.
+    const focusAfterDelete = useRef<HTMLElement | null>(null);
+    const taskSheet = useTaskSheet({
+        onSaved: setSavedTask,
+        onDeleted: (id) => {
+            focusAfterDelete.current = actionItems.current?.deleted(id) ?? null;
+        },
+        focusAfterDelete,
+    });
 
     useEffect(() => {
         if (!isNew) return;
@@ -130,10 +150,10 @@ export function MeetingEditor({
             <MeetingDetailsSidebar
                 properties={
                     <>
-                        <div className="flex items-center justify-between gap-2">
+                        <div className="flex flex-col items-start gap-1.5">
                             <label
                                 htmlFor={dateId}
-                                className="text-sm font-medium"
+                                className={FIELD_LABEL_CLASSES}
                             >
                                 Date
                             </label>
@@ -154,9 +174,7 @@ export function MeetingEditor({
                                         date,
                                     }));
                                 }}
-                                // The base Input has `min-w-0`, so without `shrink-0` the
-                                // label squeezes this field and cuts off the year.
-                                className="w-auto shrink-0"
+                                className="w-auto"
                             />
                         </div>
                         <MeetingProjectSelect
@@ -188,8 +206,16 @@ export function MeetingEditor({
                         Delete
                     </Button>
                 }
-                lists={<ActionItemsPanel meetingId={meeting.id} />}
+                lists={
+                    <ActionItemsPanel
+                        ref={actionItems}
+                        meetingId={meeting.id}
+                        onOpen={taskSheet.openTask}
+                        savedTask={savedTask}
+                    />
+                }
             />
+            {taskSheet.sheet}
         </div>
     );
 }

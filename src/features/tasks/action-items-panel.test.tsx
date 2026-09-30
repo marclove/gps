@@ -8,6 +8,7 @@ import {
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { DeleteProvider } from "@/components/delete-provider";
 import { FailureToastProvider } from "@/components/failure-toast-provider";
 import { Toaster } from "@/components/toaster";
 import { toast } from "@/components/ui/toast";
@@ -23,16 +24,24 @@ function task(id: number, title: string): Task {
         id,
         meetingId: 1,
         title,
+        description: "",
+        projectId: null,
+        initiativeId: null,
+        rank: null,
         createdAt: "2026-09-24T10:00:00.000Z",
         updatedAt: "2026-09-24T10:00:00.000Z",
+        startedAt: null,
         completedAt: null,
+        deletedAt: null,
     };
 }
 
 /**
- * Answers the task commands. `create` answers `create_task`, `complete` answers
+ * Answers the task commands. `create` answers `create_meeting_task`, `complete` answers
  * `set_task_completed`, `update` answers `update_task_title`, and `remove`
- * answers `delete_task`.
+ * answers `delete_task`. `list_meeting_tasks` answers the tasks that are not deleted, in
+ * the order of `tasks`. A delete that succeeds marks the task as deleted, `restore_task`
+ * brings it back, and an update that succeeds stores the new title.
  */
 function answer({
     tasks = [],
@@ -48,22 +57,32 @@ function answer({
     update?: (id: number, title: string) => Promise<Task>;
     remove?: (id: number) => Promise<void>;
 } = {}) {
+    let stored = tasks;
+    const deleted = new Set<number>();
     invoke.mockImplementation(
         async (command: string, args: Record<string, unknown> = {}) => {
+            const id = args.id as number;
             switch (command) {
                 case "list_meeting_tasks":
-                    return tasks;
-                case "create_task":
+                    return stored.filter((each) => !deleted.has(each.id));
+                case "create_meeting_task":
                     return create(args.title as string);
                 case "set_task_completed":
-                    return complete(
-                        args.id as number,
-                        args.completed as boolean,
+                    return complete(id, args.completed as boolean);
+                case "update_task_title": {
+                    const updated = await update(id, args.title as string);
+                    stored = stored.map((each) =>
+                        each.id === id ? updated : each,
                     );
-                case "update_task_title":
-                    return update(args.id as number, args.title as string);
+                    return updated;
+                }
                 case "delete_task":
-                    return remove(args.id as number);
+                    await remove(id);
+                    deleted.add(id);
+                    return null;
+                case "restore_task":
+                    deleted.delete(id);
+                    return null;
                 default:
                     throw `unexpected command ${command}`;
             }
@@ -71,15 +90,33 @@ function answer({
     );
 }
 
-/** Renders the panel inside the providers of the toasts that report its failures. */
-function renderPanel() {
-    render(
+/**
+ * Renders the panel inside the providers of the toasts that report its failures and of
+ * the delete action. `onOpen` gets the calls of the Open buttons. `rerender` gives the
+ * panel the task that the sheet saved last.
+ */
+function renderPanel(onOpen: (id: number, title: string) => void = () => {}) {
+    const panel = (savedTask?: Task) => (
         <Toaster toastManager={toast}>
             <FailureToastProvider>
-                <ActionItemsPanel meetingId={1} />
+                <DeleteProvider>
+                    <ActionItemsPanel
+                        meetingId={1}
+                        onOpen={onOpen}
+                        savedTask={savedTask}
+                    />
+                </DeleteProvider>
             </FailureToastProvider>
-        </Toaster>,
+        </Toaster>
     );
+    const { rerender } = render(panel());
+    return {
+        rerender: (savedTask: Task) => rerender(panel(savedTask)),
+    };
+}
+
+function notifications() {
+    return screen.getByRole("region", { name: "Notifications" });
 }
 
 /** The texts of the failure toasts that are open. */
@@ -117,7 +154,9 @@ function updateCalls() {
 }
 
 function createCalls() {
-    return invoke.mock.calls.filter(([command]) => command === "create_task");
+    return invoke.mock.calls.filter(
+        ([command]) => command === "create_meeting_task",
+    );
 }
 
 beforeEach(() => {
@@ -174,8 +213,8 @@ describe("ActionItemsPanel", () => {
         await user.click(addField());
         await user.keyboard("First{Enter}Second{Enter}");
         expect(createCalls()).toEqual([
-            ["create_task", { meetingId: 1, title: "First" }],
-            ["create_task", { meetingId: 1, title: "Second" }],
+            ["create_meeting_task", { meetingId: 1, title: "First" }],
+            ["create_meeting_task", { meetingId: 1, title: "Second" }],
         ]);
 
         pending[0](task(1, "First"));
@@ -498,5 +537,205 @@ describe("ActionItemsPanel", () => {
         await act(async () => calls[0].reject("database is locked"));
 
         expect(failureToasts()).toEqual([]);
+    });
+    it("saves a waiting text change before it opens the sheet", async () => {
+        let resolveUpdate: () => void = () => {};
+        answer({
+            tasks: [task(1, "Send the deck")],
+            update: (id, title) =>
+                new Promise<Task>((resolve) => {
+                    resolveUpdate = () => resolve(task(id, title));
+                }),
+        });
+        const onOpen = vi.fn();
+        const user = userEvent.setup();
+        renderPanel(onOpen);
+        const field = await screen.findByRole("textbox", {
+            name: "Action item",
+        });
+
+        await user.click(field);
+        await user.keyboard("{End} to Alex");
+        await user.click(
+            screen.getByRole("button", {
+                name: 'Open "Send the deck to Alex"',
+            }),
+        );
+
+        expect(updateCalls()).toEqual([
+            ["update_task_title", { id: 1, title: "Send the deck to Alex" }],
+        ]);
+        expect(onOpen).not.toHaveBeenCalled();
+        await act(async () => resolveUpdate());
+        await waitFor(() =>
+            expect(onOpen).toHaveBeenCalledWith(1, "Send the deck to Alex"),
+        );
+    });
+
+    it("does not open an item that is removed while its text is saved", async () => {
+        let resolveUpdate: () => void = () => {};
+        answer({
+            tasks: [task(1, "Send the deck")],
+            update: (id, title) =>
+                new Promise<Task>((resolve) => {
+                    resolveUpdate = () => resolve(task(id, title));
+                }),
+        });
+        const onOpen = vi.fn();
+        const user = userEvent.setup();
+        renderPanel(onOpen);
+        const field = await screen.findByRole("textbox", {
+            name: "Action item",
+        });
+
+        await user.click(field);
+        await user.keyboard("{End} to Alex");
+        await user.click(
+            screen.getByRole("button", {
+                name: 'Open "Send the deck to Alex"',
+            }),
+        );
+        await user.click(
+            screen.getByRole("button", {
+                name: 'Remove "Send the deck to Alex"',
+            }),
+        );
+        await waitFor(() => expect(itemValues()).toEqual([]));
+        await act(async () => resolveUpdate());
+
+        expect(onOpen).not.toHaveBeenCalled();
+    });
+
+    it("drops a waiting text change when the item is removed, and Undo brings back the saved title", async () => {
+        answer({ tasks: [task(1, "Send the deck"), task(2, "Book a room")] });
+        const user = userEvent.setup();
+        renderPanel();
+        await waitFor(() =>
+            expect(itemValues()).toEqual(["Send the deck", "Book a room"]),
+        );
+
+        await user.click(
+            screen.getAllByRole("textbox", { name: "Action item" })[1],
+        );
+        await user.keyboard("{End} for Friday");
+        await user.click(
+            screen.getByRole("button", {
+                name: 'Remove "Book a room for Friday"',
+            }),
+        );
+
+        expect(
+            await within(notifications()).findByText(
+                'Deleted "Book a room for Friday".',
+            ),
+        ).toBeInTheDocument();
+        await waitFor(() => expect(itemValues()).toEqual(["Send the deck"]));
+        // Wait longer than the pause before an automatic save.
+        await new Promise((resolve) => setTimeout(resolve, 800));
+        expect(updateCalls()).toEqual([]);
+
+        await user.click(
+            within(notifications()).getByRole("button", { name: "Undo" }),
+        );
+
+        await waitFor(() =>
+            expect(itemValues()).toEqual(["Send the deck", "Book a room"]),
+        );
+        expect(failureToasts()).toEqual([]);
+    });
+
+    it("shows the new title after the sheet saves", async () => {
+        answer({ tasks: [task(1, "Send the deck"), task(2, "Call Sam")] });
+        const { rerender } = renderPanel();
+        await waitFor(() =>
+            expect(itemValues()).toEqual(["Send the deck", "Call Sam"]),
+        );
+
+        rerender(task(1, "Send the deck today"));
+
+        expect(itemValues()).toEqual(["Send the deck today", "Call Sam"]);
+        expect(
+            screen.getByRole("checkbox", {
+                name: 'Complete "Send the deck today"',
+            }),
+        ).toBeInTheDocument();
+        // The title is saved already, so the item does not save it again.
+        await new Promise((resolve) => setTimeout(resolve, 800));
+        expect(updateCalls()).toEqual([]);
+    });
+
+    it("saves the title that the sheet saved when it is typed again after a remove and Undo", async () => {
+        answer({ tasks: [task(1, "Send the deck")] });
+        const user = userEvent.setup();
+        const { rerender } = renderPanel();
+        await waitFor(() => expect(itemValues()).toEqual(["Send the deck"]));
+
+        rerender(task(1, "Y"));
+        const field = screen.getByRole("textbox", { name: "Action item" });
+        await user.clear(field);
+        await user.keyboard("Z");
+        await waitFor(() =>
+            expect(updateCalls()).toEqual([
+                ["update_task_title", { id: 1, title: "Z" }],
+            ]),
+        );
+
+        await user.click(screen.getByRole("button", { name: 'Remove "Z"' }));
+        await waitFor(() => expect(itemValues()).toEqual([]));
+        await user.click(
+            await within(notifications()).findByRole("button", {
+                name: "Undo",
+            }),
+        );
+        await waitFor(() => expect(itemValues()).toEqual(["Z"]));
+
+        await user.clear(screen.getByRole("textbox", { name: "Action item" }));
+        await user.keyboard("Y");
+
+        await waitFor(() =>
+            expect(updateCalls()).toEqual([
+                ["update_task_title", { id: 1, title: "Z" }],
+                ["update_task_title", { id: 1, title: "Y" }],
+            ]),
+        );
+    });
+
+    it("comes back at its place after Undo", async () => {
+        answer({
+            tasks: [
+                task(1, "Send the deck"),
+                task(2, "Book a room"),
+                task(3, "Call Sam"),
+            ],
+        });
+        const user = userEvent.setup();
+        renderPanel();
+        await waitFor(() =>
+            expect(itemValues()).toEqual([
+                "Send the deck",
+                "Book a room",
+                "Call Sam",
+            ]),
+        );
+
+        await user.click(
+            screen.getByRole("button", { name: 'Remove "Book a room"' }),
+        );
+        await waitFor(() =>
+            expect(itemValues()).toEqual(["Send the deck", "Call Sam"]),
+        );
+        await user.click(
+            await within(notifications()).findByRole("button", {
+                name: "Undo",
+            }),
+        );
+
+        await waitFor(() =>
+            expect(itemValues()).toEqual([
+                "Send the deck",
+                "Book a room",
+                "Call Sam",
+            ]),
+        );
     });
 });

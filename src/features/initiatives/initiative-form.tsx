@@ -1,5 +1,9 @@
 import { Trash2Icon } from "lucide-react";
 import {
+    FIELD_LABEL_CLASSES,
+    NAME_FIELD_CLASSES,
+} from "@/components/form-field-classes";
+import {
     useCallback,
     useEffect,
     useId,
@@ -38,6 +42,7 @@ import {
     type Project,
 } from "@/lib/projects";
 import { cn } from "@/lib/utils";
+import { TaskList } from "@/features/work/task-list";
 
 /**
  * The fields of an initiative that the form saves automatically. `projectId` is used only
@@ -96,21 +101,9 @@ function completionDate(completedAt: string): string {
 }
 
 /**
- * The classes of the name field. The name is larger than the text of the other fields.
- * The input sets a smaller size for wide windows (`md:text-sm`), so this sets it again.
- */
-export const NAME_FIELD_CLASSES = "h-10 text-lg font-semibold md:text-lg";
-
-/**
- * The classes of a label above a field. The label starts where the text inside the field
- * starts: after the border (1px) and the left padding of the field.
- */
-export const FIELD_LABEL_CLASSES = "pl-[calc(--spacing(2.5)+1px)] text-xs";
-
-/**
  * The fields of one initiative: its name with the save status, its role, its project, the
- * date of completion if it is completed, its description, a "Delete" button, and a "Save"
- * button.
+ * date of completion if it is completed, its description, the list "Tasks" of a saved
+ * initiative when `onOpenTask` is given, a "Delete" button, and a "Save" button.
  * Changes are saved automatically. "Save" only calls `onSave`, which closes the sheet, and
  * the form then saves the changes that are waiting when it unmounts.
  *
@@ -145,6 +138,12 @@ export const FIELD_LABEL_CLASSES = "pl-[calc(--spacing(2.5)+1px)] text-xs";
  * "Couldn't delete the initiative. Try again." The form must be in a `FailureToastProvider`.
  * The button is disabled until the promise of `onDelete` settles. `nameRef` receives the
  * name field.
+ *
+ * The list "Tasks" shows the open tasks of the initiative. When the user clicks a row, the
+ * form first saves the changes that are waiting, and then calls `onOpenTask` with the
+ * identifier and the title of the task. If a change cannot be saved, the form does not call
+ * `onOpenTask`, and the save status shows "Couldn't save" with "Retry". The list must be in a
+ * `DeleteProvider`.
  */
 export function InitiativeForm({
     initiative,
@@ -153,6 +152,7 @@ export function InitiativeForm({
     onCreated,
     onDelete,
     onSave,
+    onOpenTask,
     nameRef,
 }: {
     initiative: Initiative | null;
@@ -161,6 +161,7 @@ export function InitiativeForm({
     onCreated?: (id: number) => void;
     onDelete: (savedName: string) => Promise<void>;
     onSave: () => void;
+    onOpenTask?: (id: number, title: string) => void;
     nameRef?: Ref<HTMLInputElement>;
 }) {
     const [draft, setDraft] = useState<Draft>(
@@ -338,7 +339,16 @@ export function InitiativeForm({
         }
     }
 
+    // The page closes the sheet and opens the task sheet only after the changes that wait are
+    // saved. If they cannot be saved, the sheet stays open and shows "Couldn't save". If the
+    // sheet closes while they are saved, the task sheet does not open.
+    async function openTask(taskId: number, title: string) {
+        if (!(await flush()) || !mounted.current) return;
+        onOpenTask?.(taskId, title);
+    }
+
     const completedAt = initiative?.completedAt ?? null;
+    const showsTasks = id !== null && onOpenTask !== undefined;
 
     // A draft with content but no project cannot be saved, so "Save" does not close the sheet.
     const unsaveable =
@@ -372,8 +382,12 @@ export function InitiativeForm({
             className={cn(
                 "grid min-h-0 flex-1",
                 completedAt === null
-                    ? "grid-rows-[auto_auto_minmax(0,1fr)_auto]"
-                    : "grid-rows-[auto_auto_auto_minmax(0,1fr)_auto]",
+                    ? showsTasks
+                        ? "grid-rows-[auto_auto_minmax(0,1fr)_auto_auto]"
+                        : "grid-rows-[auto_auto_minmax(0,1fr)_auto]"
+                    : showsTasks
+                      ? "grid-rows-[auto_auto_auto_minmax(0,1fr)_auto_auto]"
+                      : "grid-rows-[auto_auto_auto_minmax(0,1fr)_auto]",
             )}
         >
             {/* The right padding keeps the close button of the sheet clear of the save status. */}
@@ -415,7 +429,7 @@ export function InitiativeForm({
                     </div>
                 </div>
             </div>
-            <div className="flex items-start gap-4 px-6 pb-4">
+            <div className="flex flex-col items-stretch gap-4 px-6 pb-4">
                 <div className="flex flex-col items-start gap-1.5">
                     <label htmlFor={roleId} className={FIELD_LABEL_CLASSES}>
                         Role
@@ -485,6 +499,13 @@ export function InitiativeForm({
                 onChange={changeDescription}
                 label="Description"
             />
+            {showsTasks && (
+                <TaskList
+                    filter={(task) => task.initiativeId === id}
+                    onOpen={(taskId, title) => void openTask(taskId, title)}
+                    className="max-h-60 border-t pt-4"
+                />
+            )}
             <div className="flex items-center justify-between border-t px-6 py-4">
                 {id !== null ? (
                     <Button

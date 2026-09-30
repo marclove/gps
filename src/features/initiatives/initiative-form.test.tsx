@@ -2,6 +2,7 @@ import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { DeleteProvider } from "@/components/delete-provider";
 import { FailureToastProvider } from "@/components/failure-toast-provider";
 import { Toaster } from "@/components/toaster";
 import { toast } from "@/components/ui/toast";
@@ -13,6 +14,7 @@ import type {
     RenameResult,
 } from "@/lib/initiatives";
 import type { Project } from "@/lib/projects";
+import type { Task } from "@/lib/tasks";
 import { InitiativeForm } from "./initiative-form";
 
 const invoke = vi.hoisted(() => vi.fn());
@@ -100,6 +102,7 @@ afterEach(() => {
 async function renderForm(
     initiative: Initiative | null = PILOT,
     draftProjectId: number | null = null,
+    onOpenTask?: (id: number, title: string) => void,
 ) {
     const onSaved = vi.fn();
     const onCreated = vi.fn();
@@ -111,16 +114,19 @@ async function renderForm(
     const view = render(
         <MemoryRouter>
             <Toaster toastManager={toast}>
-                <FailureToastProvider>
-                    <InitiativeForm
-                        initiative={initiative}
-                        draftProjectId={draftProjectId}
-                        onSaved={onSaved}
-                        onCreated={onCreated}
-                        onDelete={onDelete}
-                        onSave={onSave}
-                    />
-                </FailureToastProvider>
+                <DeleteProvider>
+                    <FailureToastProvider>
+                        <InitiativeForm
+                            initiative={initiative}
+                            draftProjectId={draftProjectId}
+                            onSaved={onSaved}
+                            onCreated={onCreated}
+                            onDelete={onDelete}
+                            onSave={onSave}
+                            onOpenTask={onOpenTask}
+                        />
+                    </FailureToastProvider>
+                </DeleteProvider>
             </Toaster>
         </MemoryRouter>,
     );
@@ -910,6 +916,122 @@ describe("InitiativeForm", () => {
 
             expect(onSave).not.toHaveBeenCalled();
             expect(screen.getByRole("button", { name: "Retry" })).toHaveFocus();
+        });
+    });
+
+    describe("the list Tasks", () => {
+        const DECK: Task = {
+            id: 11,
+            meetingId: null,
+            title: "Send the deck",
+            description: "",
+            projectId: CHECKOUT.id,
+            initiativeId: PILOT.id,
+            rank: null,
+            createdAt: "2026-09-01T10:00:00Z",
+            updatedAt: "2026-09-01T10:00:00Z",
+            startedAt: null,
+            completedAt: null,
+            deletedAt: null,
+        };
+
+        it("saves the change that waits, and then opens the task", async () => {
+            mockBackend((command: string, args) => {
+                if (command === "list_tasks") return Promise.resolve([DECK]);
+                if (command === "update_initiative")
+                    return Promise.resolve({
+                        ...PILOT,
+                        raciRole: args.raciRole,
+                    });
+                return Promise.reject(new Error(`Unexpected ${command}`));
+            });
+            const onOpenTask = vi.fn();
+            const user = userEvent.setup();
+            await renderForm(PILOT, null, onOpenTask);
+            const list = screen.getByRole("region", { name: "Tasks" });
+            const row = await within(list).findByRole("button", {
+                name: "Send the deck",
+            });
+
+            await user.selectOptions(
+                screen.getByRole("combobox", { name: "RACI role" }),
+                "Informed",
+            );
+            await user.click(row);
+
+            await waitFor(() =>
+                expect(onOpenTask).toHaveBeenCalledWith(11, "Send the deck"),
+            );
+            expect(callsOf("update_initiative")).toHaveLength(1);
+        });
+
+        it("keeps the sheet open when the change cannot be saved before a task opens", async () => {
+            mockBackend((command: string) => {
+                if (command === "list_tasks") return Promise.resolve([DECK]);
+                if (command === "update_initiative")
+                    return Promise.reject(new Error("Disk full"));
+                return Promise.reject(new Error(`Unexpected ${command}`));
+            });
+            const onOpenTask = vi.fn();
+            const user = userEvent.setup();
+            await renderForm(PILOT, null, onOpenTask);
+            const list = screen.getByRole("region", { name: "Tasks" });
+            const row = await within(list).findByRole("button", {
+                name: "Send the deck",
+            });
+
+            await user.selectOptions(
+                screen.getByRole("combobox", { name: "RACI role" }),
+                "Informed",
+            );
+            await user.click(row);
+
+            expect(
+                await screen.findByText("Couldn't save"),
+            ).toBeInTheDocument();
+            expect(callsOf("update_initiative")).toHaveLength(1);
+            expect(onOpenTask).not.toHaveBeenCalled();
+        });
+
+        it("does not open the task when the sheet closes while the change that waits is saved", async () => {
+            let resolveUpdate: () => void = () => {};
+            mockBackend((command: string, args) => {
+                if (command === "list_tasks") return Promise.resolve([DECK]);
+                if (command === "update_initiative")
+                    return new Promise((resolve) => {
+                        resolveUpdate = () =>
+                            resolve({ ...PILOT, raciRole: args.raciRole });
+                    });
+                return Promise.reject(new Error(`Unexpected ${command}`));
+            });
+            const onOpenTask = vi.fn();
+            const user = userEvent.setup();
+            const { unmount } = await renderForm(PILOT, null, onOpenTask);
+            const list = screen.getByRole("region", { name: "Tasks" });
+            const row = await within(list).findByRole("button", {
+                name: "Send the deck",
+            });
+
+            await user.selectOptions(
+                screen.getByRole("combobox", { name: "RACI role" }),
+                "Informed",
+            );
+            await user.click(row);
+            expect(callsOf("update_initiative")).toHaveLength(1);
+            // Escape closes the sheet, which unmounts the form.
+            unmount();
+            await act(async () => resolveUpdate());
+
+            expect(onOpenTask).not.toHaveBeenCalled();
+        });
+
+        it("is not shown in a draft", async () => {
+            const onOpenTask = vi.fn();
+            await renderForm(null, CHECKOUT.id, onOpenTask);
+
+            expect(
+                screen.queryByRole("region", { name: "Tasks" }),
+            ).not.toBeInTheDocument();
         });
     });
 });

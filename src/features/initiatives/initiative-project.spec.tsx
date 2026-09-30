@@ -2,7 +2,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "@/App";
-import { FakeRoadmapBackend } from "@/test/fake-roadmap-backend";
+import { FakeBackend } from "@/test/fake-backend";
 
 // Feature spec for the project of an initiative, creating an initiative, and the roadmap in
 // docs/specs/0008-projects.md, with the changes of
@@ -15,11 +15,11 @@ const invoke = vi.hoisted(() => vi.fn());
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke }));
 
-let backend: FakeRoadmapBackend;
+let backend: FakeBackend;
 
 beforeEach(() => {
     invoke.mockReset();
-    backend = new FakeRoadmapBackend();
+    backend = new FakeBackend();
     invoke.mockImplementation(backend.handle);
 });
 

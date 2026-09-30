@@ -43,13 +43,19 @@ function applySaved(
  * the sheet saves, moves to another project, or deletes an initiative, the list changes to
  * match. The list loads again after each delete and restore.
  *
+ * When the page gives `onOpenTask`, the sheet of an initiative shows the list "Tasks". A
+ * click on a row of that list closes the sheet and calls `onOpenTask` with the identifier and the title of the task, so that the page opens
+ * the task sheet in its place.
+ *
  * When `projectId` is `null`, the project is a draft. Then the list is empty and "New
  * initiative" is disabled, because an initiative needs a saved project.
  */
 export function ProjectInitiatives({
     projectId,
+    onOpenTask,
 }: {
     projectId: number | null;
+    onOpenTask?: (id: number, title: string) => void;
 }) {
     const [list, setList] = useState<ListState>({ kind: "loading" });
     const [attempt, setAttempt] = useState(0);
@@ -67,6 +73,7 @@ export function ProjectInitiatives({
                           }
                         : current,
                 ),
+            onOpenTask,
         });
     const headingId = useId();
     // The initiative of the last save, with its name. The open sheet keeps this name after its

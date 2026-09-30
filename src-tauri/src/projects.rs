@@ -67,6 +67,8 @@ pub enum DeleteOutcome {
     /// The project has initiatives that are not deleted, also completed ones. Nothing was
     /// changed.
     HasInitiatives,
+    /// The project has tasks that are not deleted, also completed ones. Nothing was changed.
+    HasTasks,
 }
 
 /// The result of a restore of a deleted project.
@@ -208,7 +210,8 @@ pub fn update(connection: &Connection, id: i64, description: &str) -> Result<Pro
 /// was recorded first. Does not change `updated_at` or the meetings of the project.
 ///
 /// If the project has an initiative that is not deleted, also a completed one, returns
-/// `DeleteOutcome::HasInitiatives` and changes nothing.
+/// `DeleteOutcome::HasInitiatives` and changes nothing. Else, if the project has a task that is
+/// not deleted, also a completed one, returns `DeleteOutcome::HasTasks` and changes nothing.
 pub fn delete(connection: &Connection, id: i64) -> Result<DeleteOutcome, Error> {
     let transaction = connection.unchecked_transaction()?;
     let has_initiatives: bool = transaction.query_row(
@@ -220,6 +223,14 @@ pub fn delete(connection: &Connection, id: i64) -> Result<DeleteOutcome, Error> 
     )?;
     if has_initiatives {
         return Ok(DeleteOutcome::HasInitiatives);
+    }
+    let has_tasks: bool = transaction.query_row(
+        "SELECT EXISTS(SELECT 1 FROM tasks WHERE project_id = ?1 AND deleted_at IS NULL)",
+        params![id],
+        |row| row.get(0),
+    )?;
+    if has_tasks {
+        return Ok(DeleteOutcome::HasTasks);
     }
     let changed = transaction.execute(
         &format!("UPDATE projects SET deleted_at = coalesce(deleted_at, {NOW}) WHERE id = ?1"),
@@ -591,5 +602,55 @@ mod tests {
             DeleteOutcome::Deleted
         ));
         assert!(fetch(&connection, project.id).deleted_at.is_some());
+    }
+
+    #[test]
+    fn delete_refuses_a_project_with_tasks() {
+        let connection = open_in_memory();
+        let project = created(&connection, "Checkout", "");
+        let new_task = |title: &str| {
+            crate::tasks::create(&connection, title, "", Some(project.id), None)
+                .unwrap()
+                .id
+        };
+        let completed = new_task("Completed");
+        crate::tasks::set_completed(&connection, completed, true).unwrap();
+        let deleted = new_task("Deleted");
+        crate::tasks::delete(&connection, deleted).unwrap();
+
+        assert_eq!(
+            delete(&connection, project.id).unwrap(),
+            DeleteOutcome::HasTasks
+        );
+        assert_eq!(fetch(&connection, project.id), project);
+
+        crate::tasks::delete(&connection, completed).unwrap();
+        assert_eq!(
+            delete(&connection, project.id).unwrap(),
+            DeleteOutcome::Deleted
+        );
+        assert!(fetch(&connection, project.id).deleted_at.is_some());
+    }
+
+    #[test]
+    fn delete_answers_has_initiatives_first() {
+        let connection = open_in_memory();
+        let project = created(&connection, "Checkout", "");
+        crate::initiatives::create(&connection, project.id, "Launch", "", None).unwrap();
+        crate::tasks::create(&connection, "Send the deck", "", Some(project.id), None).unwrap();
+
+        assert_eq!(
+            delete(&connection, project.id).unwrap(),
+            DeleteOutcome::HasInitiatives
+        );
+        assert_eq!(fetch(&connection, project.id), project);
+    }
+
+    #[test]
+    fn delete_outcome_has_tasks_is_sent_as_its_status() {
+        assert_eq!(
+            serde_json::to_value(DeleteOutcome::HasTasks).unwrap(),
+            serde_json::json!({ "status": "hasTasks" })
+        );
     }
 }

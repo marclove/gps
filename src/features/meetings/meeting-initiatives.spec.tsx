@@ -2,10 +2,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import App from "@/App";
-import {
-    FakeRoadmapBackend,
-    type StoredProject,
-} from "@/test/fake-roadmap-backend";
+import { FakeBackend, type StoredProject } from "@/test/fake-backend";
 
 // Feature spec for the initiatives of a meeting in
 // docs/specs/0009-meetings-cover-several-initiatives.md.
@@ -16,12 +13,12 @@ const invoke = vi.hoisted(() => vi.fn());
 
 vi.mock("@tauri-apps/api/core", () => ({ invoke }));
 
-let backend: FakeRoadmapBackend;
+let backend: FakeBackend;
 let checkout: StoredProject;
 
 beforeEach(() => {
     invoke.mockReset();
-    backend = new FakeRoadmapBackend();
+    backend = new FakeBackend();
     // The popover offers only the initiatives of the meeting's project, so the initiatives of
     // these specs are in this project unless a spec says otherwise.
     checkout = backend.seedProject("Checkout");

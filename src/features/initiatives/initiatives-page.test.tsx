@@ -7,7 +7,7 @@ import { FailureToastProvider } from "@/components/failure-toast-provider";
 import { Toaster } from "@/components/toaster";
 import { toast } from "@/components/ui/toast";
 import { COLUMNS, type Column } from "@/lib/initiatives";
-import { FakeRoadmapBackend } from "@/test/fake-roadmap-backend";
+import { FakeBackend } from "@/test/fake-backend";
 import type { Board } from "./board";
 import { InitiativesPage } from "./initiatives-page";
 
@@ -44,7 +44,7 @@ vi.mock("./roadmap-board", () => ({
     ),
 }));
 
-let backend: FakeRoadmapBackend;
+let backend: FakeBackend;
 
 /** A move that waits until the test settles it. */
 type HeldMove = {
@@ -57,7 +57,7 @@ let heldMoves: HeldMove[];
 
 beforeEach(() => {
     invoke.mockReset();
-    backend = new FakeRoadmapBackend();
+    backend = new FakeBackend();
     heldMoves = [];
     invoke.mockImplementation(
         (command: string, args: Record<string, unknown> = {}) => {
