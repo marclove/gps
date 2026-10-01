@@ -5,7 +5,6 @@ import {
     type SortingStrategy,
 } from "@dnd-kit/sortable";
 import type { ReactNode } from "react";
-import { cn } from "@/lib/utils";
 import { BoardCard } from "./board-card";
 import type { BoardColumnDef, ListData } from "./drop-target";
 
@@ -14,10 +13,9 @@ const keepInPlace: SortingStrategy = () => null;
 
 /**
  * A column of a board. It is a region named after the title of `column`, with a heading that
- * shows the title and the number of cards, the `header` of the column if it has one, and a
- * list of the cards `cards` below. Only the list scrolls. The whole list area, also when it is
- * empty, is a place to drop a card. An empty column shows the `emptyText` of the column. The
- * column must be in a `DndContext`.
+ * shows the title and the number of cards, and a list of the cards `cards` below. Only the
+ * list scrolls. The whole list area, also when it is empty, is a place to drop a card. An
+ * empty column shows the `emptyText` of the column. The column must be in a `DndContext`.
  *
  * Each card shows `renderContent` in its open button and `renderActions` beside it. A click on
  * a card calls `onOpen` with its identifier. While `loading` is true, the column shows no cards
@@ -44,20 +42,12 @@ export function BoardColumn<C extends { id: number }, K extends string>({
     return (
         <section
             aria-label={column.title}
-            className={cn(
-                "grid min-h-0 rounded-xl bg-muted/50",
-                column.header === undefined
-                    ? "grid-rows-[auto_minmax(0,1fr)]"
-                    : "grid-rows-[auto_auto_minmax(0,1fr)]",
-            )}
+            className="grid min-h-0 grid-rows-[auto_minmax(0,1fr)] rounded-xl bg-muted/50"
         >
             <h2 className="flex items-baseline gap-2 px-3 pt-3 pb-2 text-sm font-medium">
                 {column.title}
                 <span className="text-muted-foreground">{cards.length}</span>
             </h2>
-            {column.header !== undefined && (
-                <div className="px-2 pb-1">{column.header}</div>
-            )}
             {/* The padding leaves room for the focus ring of the cards, which the scrolling
                 area would cut off. The list area has no padding at its sides, because the
                 keyboard moves a card to the next column by the left edges of the cards and

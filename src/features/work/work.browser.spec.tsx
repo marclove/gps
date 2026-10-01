@@ -425,7 +425,7 @@ describe("Dragging cards with the keyboard", () => {
 });
 
 describe("The board", () => {
-    it("scrolls only a long column, while the header, the column headings, and the Add task field stay in place", async () => {
+    it("scrolls only a long column, while the header and the column headings stay in place", async () => {
         seed(
             "icebox",
             Array.from({ length: 60 }, (_, i) => `Task ${i + 1}`),
@@ -442,7 +442,6 @@ describe("The board", () => {
             screen.getByRole("navigation", { name: "breadcrumb" }),
             screen.getByRole("button", { name: "New task" }),
             ...COLUMNS.map((name) => within(column(name)).getByRole("heading")),
-            within(icebox).getByRole("textbox", { name: "Add task" }),
         ];
         const before = positions(chrome);
 

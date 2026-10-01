@@ -1,5 +1,4 @@
 import type { Active, Over, UniqueIdentifier } from "@dnd-kit/core";
-import type { ReactNode } from "react";
 
 /**
  * A column of a board, with cards of the type `C`. `K` is the type of the identifiers of the
@@ -14,8 +13,6 @@ export type BoardColumnDef<C, K extends string = string> = {
     draggable: boolean;
     /** The text that the column shows when it has no cards. */
     emptyText: string;
-    /** An element above the cards, such as a text field. */
-    header?: ReactNode;
     /**
      * For a column that is not ordered: returns the place of `card` among `others`, counted
      * from 0. `others` are the cards of the column without `card`, from the top.
