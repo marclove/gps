@@ -86,14 +86,6 @@ function card(name: ColumnName, title: string) {
     });
 }
 
-function addTaskField() {
-    return within(column("Icebox")).getByRole("textbox", { name: "Add task" });
-}
-
-function createCalls() {
-    return invoke.mock.calls.filter(([command]) => command === "create_task");
-}
-
 describe("Work section", () => {
     it("has a link at the top with an icon and a tooltip, and the application still opens on Meetings", async () => {
         const user = userEvent.setup();
@@ -422,78 +414,6 @@ describe("Board", () => {
             expect(cardTitles("Backlog")).toEqual(["A", "B", "C"]),
         );
         expect(backend.workColumn("backlog")).toEqual(["A", "B", "C"]);
-    });
-});
-
-describe("Adding a task in the Icebox", () => {
-    it("adds the text as a new task at the top of the Icebox, without spaces at its ends", async () => {
-        backend.seedTask({ title: "Old idea" });
-        const user = await openWorkPage();
-        await waitFor(() => expect(cardTitles("Icebox")).toEqual(["Old idea"]));
-
-        await user.type(addTaskField(), "  Write report  {Enter}");
-
-        await waitFor(() =>
-            expect(cardTitles("Icebox")).toEqual(["Write report", "Old idea"]),
-        );
-        expect(backend.workColumn("icebox")).toEqual([
-            "Write report",
-            "Old idea",
-        ]);
-        expect(backend.findTask("Write report")).toMatchObject({
-            description: "",
-            projectId: null,
-            initiativeId: null,
-            meetingId: null,
-        });
-    });
-
-    it("empties the field and keeps the focus, so the next task can be typed at once", async () => {
-        const user = await openWorkPage();
-
-        await user.type(addTaskField(), "Write report{Enter}");
-
-        await waitFor(() =>
-            expect(cardTitles("Icebox")).toEqual(["Write report"]),
-        );
-        expect(addTaskField()).toHaveValue("");
-        expect(addTaskField()).toHaveFocus();
-
-        await user.keyboard("Plan offsite{Enter}");
-
-        await waitFor(() =>
-            expect(cardTitles("Icebox")).toEqual([
-                "Plan offsite",
-                "Write report",
-            ]),
-        );
-    });
-
-    it("does nothing when Enter is pressed in an empty field or a field with only spaces", async () => {
-        const user = await openWorkPage();
-
-        await user.type(addTaskField(), "{Enter}");
-        await user.type(addTaskField(), "   {Enter}");
-
-        expect(cardTitles("Icebox")).toEqual([]);
-        expect(createCalls()).toHaveLength(0);
-        expect(backend.tasks).toHaveLength(0);
-    });
-
-    it("puts the text back in the field and shows a failure toast when the task cannot be added", async () => {
-        backend.failing.add("create_task");
-        const user = await openWorkPage();
-
-        await user.type(addTaskField(), "Write report{Enter}");
-
-        expect(
-            await within(notifications()).findByText(
-                "Couldn't add the task. Try again.",
-            ),
-        ).toBeInTheDocument();
-        expect(addTaskField()).toHaveValue("Write report");
-        expect(cardTitles("Icebox")).toEqual([]);
-        expect(backend.tasks).toHaveLength(0);
     });
 });
 

@@ -1,6 +1,6 @@
 import { PlusIcon } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
-import { Board, type BoardColumnDef } from "@/components/board/board";
+import { useEffect, useRef, useState } from "react";
+import { Board } from "@/components/board/board";
 import { moveCard } from "@/components/board/cards";
 import { PageHeader } from "@/components/page-header";
 import { useDelete } from "@/components/use-delete";
@@ -8,7 +8,6 @@ import { useFailureToast } from "@/components/use-failure-toast";
 import { Button } from "@/components/ui/button";
 import { listProjects, projectDisplayName } from "@/lib/projects";
 import {
-    createTask,
     listTasks,
     moveTask,
     setTaskCompleted,
@@ -16,7 +15,6 @@ import {
     type Task,
     type TaskStage,
 } from "@/lib/tasks";
-import { AddTaskField } from "./add-task-field";
 import { TaskCardActions, TaskCardContent, TaskCardCopy } from "./task-card";
 import {
     buildWorkBoard,
@@ -43,8 +41,7 @@ type BoardState =
 
 /**
  * The page that shows the tasks that are not deleted on a board with the columns Current,
- * Backlog, Icebox, and Done. The "Add task" field above the Icebox adds a task at the top of
- * the Icebox.
+ * Backlog, Icebox, and Done.
  *
  * A dragged card moves on the board at once, and so does a card whose "Start" button the user
  * clicks. A card whose "Reopen" button the user clicks moves when the backend answers, because
@@ -186,46 +183,6 @@ export function WorkPage() {
         }
     }
 
-    async function add(title: string): Promise<boolean> {
-        startedChanges.current += 1;
-        try {
-            const task = await createTask({
-                title,
-                description: "",
-                projectId: null,
-                initiativeId: null,
-            });
-            changeBoard((board) => placeTask(board, task));
-            return true;
-        } catch {
-            failureToast.show("Couldn't add the task. Try again.");
-            return false;
-        }
-    }
-
-    // The latest `add`, so that the columns keep their identity between renders, and the
-    // announcements of the board are not made again on each render.
-    const addRef = useRef(add);
-    useEffect(() => {
-        addRef.current = add;
-    });
-    const columns = useMemo<readonly BoardColumnDef<Task, TaskStage>[]>(
-        () =>
-            WORK_COLUMNS.map((column) =>
-                column.id === "icebox"
-                    ? {
-                          ...column,
-                          header: (
-                              <AddTaskField
-                                  onAdd={(title) => addRef.current(title)}
-                              />
-                          ),
-                      }
-                    : column,
-            ),
-        [],
-    );
-
     const board = state.kind === "loaded" ? state.board : emptyWorkBoard();
 
     function open(id: number) {
@@ -258,7 +215,7 @@ export function WorkPage() {
             ) : (
                 <div className="grid min-h-0 grid-rows-[minmax(0,1fr)]">
                     <Board
-                        columns={columns}
+                        columns={WORK_COLUMNS}
                         cards={board}
                         renderContent={(task, stage) => (
                             <TaskCardContent

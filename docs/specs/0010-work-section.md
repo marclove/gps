@@ -40,20 +40,12 @@ The terms "meeting" and "editor page" are defined in [Spec 0001](0001-take-meeti
 - Below the header, the board fills the rest of the main area. It has four columns of equal width, from left to right: Current, Backlog, Icebox, and Done. Each column is a region named after the column, with a heading that shows the name and the number of cards in the column, such as "Backlog 3".
 - The board shows every task that is not deleted, also the tasks of deleted meetings.
 - Current and Backlog show their cards in the order of the list, from the top. The Icebox shows its cards by the time they were created, the newest at the top. Done shows its cards by the time of completion, the task completed last at the top.
-- The Icebox has a text field named "Add task" above its cards.
 - A column with no cards says "No tasks".
 - Each card shows the shown title, and the name of its project, or "Untitled project", when the task has a project. A card in Done also shows a check mark, and its text is muted.
 - Each card has a button whose accessible name starts with the shown title. Clicking it, or pressing Enter while it has keyboard focus, opens the task sheet.
 - Each card in the Backlog has a button named `Start "<shown title>"`. Each card in Done has a button named `Reopen "<shown title>"`. Cards in Current and in the Icebox have neither.
 - While the tasks load, the columns show their headings and no cards. If they cannot be loaded, the board is replaced by the text "Couldn't load tasks" and a "Retry" button that loads them again.
-- When a column has more cards than fit in the window, only that column's cards scroll. The page header, the headings of the columns, and the "Add task" field stay in place, and the window does not scroll.
-
-### Adding a task in the Icebox
-
-- When the user types text in the "Add task" field and presses Enter, a new task with that text as its title appears at the top of the Icebox. The field becomes empty and keeps the focus, so the user can type the next task at once.
-- Spaces at the start and at the end of the text are removed. When the field is empty or has only spaces, Enter does nothing.
-- The new task has no description, no project, no initiative, and no meeting.
-- If the task cannot be added, the text is put back in the field, and a failure toast says "Couldn't add the task. Try again."
+- When a column has more cards than fit in the window, only that column's cards scroll. The page header and the headings of the columns stay in place, and the window does not scroll.
 
 ### Creating a task in the sheet
 
