@@ -68,7 +68,7 @@ function cardTexts(
     return within(column(name, { hidden }))
         .queryAllByRole("button", {
             hidden,
-            name: (accessibleName) => !/^(Start|Reopen) "/.test(accessibleName),
+            name: (accessibleName) => !/^Reopen "/.test(accessibleName),
         })
         .map((card) => backend.cardText(card).trim());
 }

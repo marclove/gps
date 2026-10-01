@@ -52,11 +52,11 @@ function column(name: ColumnName) {
     return screen.getByRole("region", { name: new RegExp(`^${name}`) });
 }
 
-/** The card buttons of the column, without the "Start" and "Reopen" buttons. */
+/** The card buttons of the column, without the "Reopen" buttons. */
 function cards(name: ColumnName): HTMLElement[] {
     const region = column(name);
     const actions = within(region).queryAllByRole("button", {
-        name: /^(Start|Reopen) "/,
+        name: /^Reopen "/,
     });
     return within(region)
         .queryAllByRole("button")

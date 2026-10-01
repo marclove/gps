@@ -58,17 +58,17 @@ function column(name: ColumnName, { hidden = false }: BoardQuery = {}) {
     return screen.getByRole("region", { name, hidden });
 }
 
-/** Tells if the button is the "Start" or the "Reopen" button of a card. */
-function isStageButton(button: HTMLElement): boolean {
+/** Tells if the button is the "Reopen" button of a card. */
+function isReopenButton(button: HTMLElement): boolean {
     const label = button.getAttribute("aria-label") ?? button.textContent ?? "";
-    return /^(Start|Reopen)\b/.test(label.trim());
+    return /^Reopen\b/.test(label.trim());
 }
 
 /** The buttons of the cards in the column that open the task sheet, from the top. */
 function cards(name: ColumnName, { hidden = false }: BoardQuery = {}) {
     return within(column(name, { hidden }))
         .queryAllByRole("button", { hidden })
-        .filter((button) => !isStageButton(button));
+        .filter((button) => !isReopenButton(button));
 }
 
 /** The shown title of each card in the column, from the top, without its project. */
@@ -255,7 +255,7 @@ describe("Board", () => {
         expect(plain).not.toContain("Untitled project");
     });
 
-    it("has a Start button on Backlog cards only, and a Reopen button on Done cards only", async () => {
+    it("has a Reopen button on Done cards only", async () => {
         backend.seedTask({ title: "Now", stage: "current" });
         backend.seedTask({ title: "Next", stage: "backlog" });
         backend.seedTask({ title: "Someday", stage: "icebox" });
@@ -264,35 +264,24 @@ describe("Board", () => {
 
         await waitFor(() => expect(cardTitles("Backlog")).toEqual(["Next"]));
         expect(
-            within(column("Backlog")).getByRole("button", {
-                name: 'Start "Next"',
-            }),
-        ).toBeInTheDocument();
-        expect(
             within(column("Done")).getByRole("button", {
                 name: 'Reopen "Shipped"',
             }),
         ).toBeInTheDocument();
-        for (const name of ["Current", "Icebox"] as const) {
-            expect(
-                within(column(name)).queryByRole("button", {
-                    name: /^Start "/,
-                }),
-            ).not.toBeInTheDocument();
+        for (const name of ["Current", "Backlog", "Icebox"] as const) {
             expect(
                 within(column(name)).queryByRole("button", {
                     name: /^Reopen "/,
                 }),
             ).not.toBeInTheDocument();
         }
-        expect(
-            within(column("Backlog")).queryByRole("button", {
-                name: /^Reopen "/,
-            }),
-        ).not.toBeInTheDocument();
-        expect(
-            within(column("Done")).queryByRole("button", { name: /^Start "/ }),
-        ).not.toBeInTheDocument();
+        for (const name of ["Current", "Backlog", "Icebox", "Done"] as const) {
+            expect(
+                within(column(name)).queryByRole("button", {
+                    name: /^Start "/,
+                }),
+            ).not.toBeInTheDocument();
+        }
     });
 
     it("shows the headings of the columns and no cards while the tasks load", async () => {
@@ -414,51 +403,6 @@ describe("Board", () => {
             expect(cardTitles("Backlog")).toEqual(["A", "B", "C"]),
         );
         expect(backend.workColumn("backlog")).toEqual(["A", "B", "C"]);
-    });
-});
-
-describe("Starting a task", () => {
-    it("moves the card to Current at its place in the list", async () => {
-        backend.seedTask({ title: "A", stage: "current" });
-        backend.seedTask({ title: "B", stage: "backlog" });
-        backend.seedTask({ title: "C", stage: "current" });
-        const user = await openWorkPage();
-        await waitFor(() => expect(cardTitles("Current")).toEqual(["A", "C"]));
-
-        await user.click(
-            within(column("Backlog")).getByRole("button", {
-                name: 'Start "B"',
-            }),
-        );
-
-        await waitFor(() =>
-            expect(cardTitles("Current")).toEqual(["A", "B", "C"]),
-        );
-        expect(cardTitles("Backlog")).toEqual([]);
-        expect(backend.workColumn("current")).toEqual(["A", "B", "C"]);
-    });
-
-    it("puts the card back in the Backlog and shows a failure toast when the task cannot be started", async () => {
-        backend.seedTask({ title: "A", stage: "current" });
-        backend.seedTask({ title: "B", stage: "backlog" });
-        backend.failing.add("start_task");
-        const user = await openWorkPage();
-        await waitFor(() => expect(cardTitles("Backlog")).toEqual(["B"]));
-
-        await user.click(
-            within(column("Backlog")).getByRole("button", {
-                name: 'Start "B"',
-            }),
-        );
-
-        expect(
-            await within(notifications()).findByText(
-                "Couldn't start the task. Try again.",
-            ),
-        ).toBeInTheDocument();
-        await waitFor(() => expect(cardTitles("Backlog")).toEqual(["B"]));
-        expect(cardTitles("Current")).toEqual(["A"]);
-        expect(backend.stageOf(backend.findTask("B"))).toBe("backlog");
     });
 });
 

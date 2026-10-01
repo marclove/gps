@@ -11,15 +11,13 @@ import {
     listTasks,
     moveTask,
     setTaskCompleted,
-    startTask,
     type Task,
     type TaskStage,
 } from "@/lib/tasks";
-import { TaskCardActions, TaskCardContent, TaskCardCopy } from "./task-card";
+import { TaskCardContent, TaskCardCopy, TaskReopenButton } from "./task-card";
 import {
     buildWorkBoard,
     emptyWorkBoard,
-    hasTaskAction,
     placeTask,
     removeTask,
     replaceTask,
@@ -167,12 +165,6 @@ export function WorkPage() {
         );
     }
 
-    function start(task: Task) {
-        const startedAt = new Date().toISOString();
-        changeBoard((board) => placeTask(board, { ...task, startedAt }));
-        void save(startTask(task.id), "Couldn't start the task. Try again.");
-    }
-
     async function reopen(task: Task) {
         startedChanges.current += 1;
         try {
@@ -222,7 +214,7 @@ export function WorkPage() {
                                 task={task}
                                 projectName={projectName(task)}
                                 done={stage === "done"}
-                                withActions={hasTaskAction(stage)}
+                                withActions={stage === "done"}
                             />
                         )}
                         renderCopy={(task, stage) => (
@@ -233,11 +225,9 @@ export function WorkPage() {
                             />
                         )}
                         renderActions={(task, stage) =>
-                            hasTaskAction(stage) ? (
-                                <TaskCardActions
+                            stage === "done" ? (
+                                <TaskReopenButton
                                     task={task}
-                                    stage={stage}
-                                    onStart={start}
                                     onReopen={(card) => void reopen(card)}
                                 />
                             ) : null

@@ -1,4 +1,4 @@
-import { CheckIcon, PlayIcon, RotateCcwIcon } from "lucide-react";
+import { CheckIcon, RotateCcwIcon } from "lucide-react";
 import { BoardCardCopy } from "@/components/board/board-card";
 import { Button } from "@/components/ui/button";
 import { taskTitle, type Task, type TaskStage } from "@/lib/tasks";
@@ -77,44 +77,24 @@ export function TaskCardCopy({
 }
 
 /**
- * The action button of a card in `stage`: `Start "<shown title>"` in the Backlog, which
- * calls `onStart`, and `Reopen "<shown title>"` in Done, which calls `onReopen`. Cards in
- * other columns have no action, and the function returns `null`.
+ * The action button of a card in Done, named `Reopen "<shown title>"`, which calls
+ * `onReopen`.
  */
-export function TaskCardActions({
+export function TaskReopenButton({
     task,
-    stage,
-    onStart,
     onReopen,
 }: {
     task: Task;
-    stage: TaskStage;
-    onStart: (task: Task) => void;
     onReopen: (task: Task) => void;
 }) {
-    if (stage === "backlog") {
-        return (
-            <Button
-                variant="ghost"
-                size="icon-xs"
-                aria-label={`Start "${taskTitle(task)}"`}
-                onClick={() => onStart(task)}
-            >
-                <PlayIcon />
-            </Button>
-        );
-    }
-    if (stage === "done") {
-        return (
-            <Button
-                variant="ghost"
-                size="icon-xs"
-                aria-label={`Reopen "${taskTitle(task)}"`}
-                onClick={() => onReopen(task)}
-            >
-                <RotateCcwIcon />
-            </Button>
-        );
-    }
-    return null;
+    return (
+        <Button
+            variant="ghost"
+            size="icon-xs"
+            aria-label={`Reopen "${taskTitle(task)}"`}
+            onClick={() => onReopen(task)}
+        >
+            <RotateCcwIcon />
+        </Button>
+    );
 }

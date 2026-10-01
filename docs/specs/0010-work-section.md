@@ -6,7 +6,7 @@ Executable specs: `src/features/work/work.spec.tsx`, `src/features/work/task-she
 
 ## Summary
 
-The user keeps every task that they must do in one place, the Work section. A new task waits in the Icebox until the user prioritizes it. Prioritized tasks form one ordered list: the started ones are in Current and the others in the Backlog, and the task at the top of the Backlog is the next piece of work to start. Completed tasks are in Done. The user moves tasks between these stages by dragging them, and with the "Start" and "Reopen" buttons. Each task can have a description, a project, and an initiative, which the user edits in a sheet that opens from every page that shows the task. The action items of a meeting are tasks too.
+The user keeps every task that they must do in one place, the Work section. A new task waits in the Icebox until the user prioritizes it. Prioritized tasks form one ordered list: the started ones are in Current and the others in the Backlog, and the task at the top of the Backlog is the next piece of work to start. Completed tasks are in Done. The user moves tasks between these stages by dragging them, and with the "Reopen" button. Each task can have a description, a project, and an initiative, which the user edits in a sheet that opens from every page that shows the task. The action items of a meeting are tasks too.
 
 See [ADR 0023](../adrs/0023-store-the-stage-of-a-task-in-its-columns.md) for how tasks, their stages, and their order are stored, [ADR 0024](../adrs/0024-share-one-board-between-the-roadmap-and-the-work-section.md) for the board, and [ADR 0025](../adrs/0025-edit-tasks-in-a-sheet-that-any-page-can-open.md) for the sheet.
 
@@ -43,7 +43,7 @@ The terms "meeting" and "editor page" are defined in [Spec 0001](0001-take-meeti
 - A column with no cards says "No tasks".
 - Each card shows the shown title, and the name of its project, or "Untitled project", when the task has a project. A card in Done also shows a check mark, and its text is muted.
 - Each card has a button whose accessible name starts with the shown title. Clicking it, or pressing Enter while it has keyboard focus, opens the task sheet.
-- Each card in the Backlog has a button named `Start "<shown title>"`. Each card in Done has a button named `Reopen "<shown title>"`. Cards in Current and in the Icebox have neither.
+- Each card in Done has a button named `Reopen "<shown title>"`. Cards in Current, the Backlog, and the Icebox have no such button.
 - While the tasks load, the columns show their headings and no cards. If they cannot be loaded, the board is replaced by the text "Couldn't load tasks" and a "Retry" button that loads them again.
 - When a column has more cards than fit in the window, only that column's cards scroll. The page header and the headings of the columns stay in place, and the window does not scroll.
 
@@ -83,11 +83,6 @@ The terms "meeting" and "editor page" are defined in [Spec 0001](0001-take-meeti
   Positions count from 1. The message after each move is also given while the card is over the Icebox or Done, with the position that the card has there during the drag.
 - Pressing Space on a card in Done does nothing.
 - After a drop, keyboard focus stays on the card in its new place.
-
-### Starting a task
-
-- When the user clicks the "Start" button of a card in the Backlog, the task is started and its card moves to Current. It keeps its place in the list: in Current, it appears below the started tasks that were above it in the list, and above the ones that were below it.
-- If the task cannot be started, the card goes back to the Backlog, and a failure toast says "Couldn't start the task. Try again."
 
 ### Reopening a task
 
