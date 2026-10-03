@@ -392,7 +392,10 @@ mod tests {
 
     #[test]
     fn list_is_empty_for_a_new_database() {
-        assert!(list(&open_in_memory()).unwrap().is_empty());
+        assert_eq!(
+            list(&open_in_memory()).unwrap(),
+            Vec::<MeetingSummary>::new()
+        );
     }
 
     #[test]
@@ -422,7 +425,7 @@ mod tests {
                 "{date} should be rejected"
             );
         }
-        assert!(list(&connection).unwrap().is_empty());
+        assert_eq!(list(&connection).unwrap(), Vec::<MeetingSummary>::new());
     }
 
     #[test]
@@ -603,7 +606,7 @@ mod tests {
     fn a_new_meeting_has_no_initiative() {
         let connection = open_in_memory();
         let meeting = create(&connection, "2026-09-24").unwrap();
-        assert!(meeting.initiative_ids.is_empty());
+        assert_eq!(meeting.initiative_ids, Vec::<i64>::new());
     }
 
     #[test]
@@ -638,7 +641,7 @@ mod tests {
         let moved = set_project(&connection, meeting.id, Some(billing)).unwrap();
 
         assert_eq!(moved.project_id, Some(billing));
-        assert!(moved.initiative_ids.is_empty());
+        assert_eq!(moved.initiative_ids, Vec::<i64>::new());
         assert_ne!(moved.updated_at, OLD_TIME);
         assert_eq!(get(&connection, meeting.id).unwrap(), Some(moved));
 
@@ -878,7 +881,7 @@ mod tests {
 
         set_updated_at(&connection, meeting.id, OLD_TIME);
         let removed = remove_initiative(&connection, meeting.id, second.id).unwrap();
-        assert!(removed.initiative_ids.is_empty());
+        assert_eq!(removed.initiative_ids, Vec::<i64>::new());
         assert_eq!(removed.project_id, Some(billing));
         assert_ne!(removed.updated_at, OLD_TIME);
         assert_eq!(get(&connection, meeting.id).unwrap(), Some(removed));
@@ -893,7 +896,7 @@ mod tests {
 
         let removed = remove_initiative(&connection, meeting.id, deleted.id).unwrap();
 
-        assert!(removed.initiative_ids.is_empty());
+        assert_eq!(removed.initiative_ids, Vec::<i64>::new());
         assert_eq!(removed.project_id, Some(deleted.project_id));
         assert_ne!(removed.updated_at, OLD_TIME);
     }
