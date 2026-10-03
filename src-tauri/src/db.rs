@@ -345,7 +345,10 @@ mod tests {
         std::fs::create_dir_all(&dir).unwrap();
         let path = dir.join("gps.sqlite");
         let connection = open(&path).unwrap();
-        assert!(crate::meetings::list(&connection).unwrap().is_empty());
+        assert_eq!(
+            crate::meetings::list(&connection).unwrap(),
+            Vec::<crate::meetings::MeetingSummary>::new()
+        );
         let meeting = crate::meetings::create(&connection, "2026-09-24").unwrap();
         let task =
             crate::tasks::create_for_meeting(&connection, meeting.id, "Send the deck").unwrap();
@@ -416,7 +419,7 @@ mod tests {
 
         let meeting = crate::meetings::get(&connection, 1).unwrap().unwrap();
         assert_eq!(meeting.name, "Kickoff");
-        assert!(meeting.initiative_ids.is_empty());
+        assert_eq!(meeting.initiative_ids, Vec::<i64>::new());
         let tasks = crate::tasks::list_for_meeting(&connection, 1).unwrap();
         assert_eq!(tasks.len(), 1);
         assert_eq!(tasks[0].title, "Send the deck");
