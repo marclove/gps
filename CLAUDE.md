@@ -10,6 +10,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Package manager is Bun (`bun.lock` is the lockfile; use `bun`, not `npm`/`yarn`/`pnpm`).
 
+The Rust version is pinned in `rust-toolchain.toml`, which rustup reads both locally and in CI. A new stable Rust can add clippy lints that fail `bun run lint:rust`, so update the pin on purpose in its own chore and fix any new warnings in the same change.
+
 - `bun install` — install frontend dependencies
 - `bun run dev` — start the Vite dev server alone (frontend only, port 1420)
 - `bun run tauri dev` — run the full desktop app (spawns the Vite dev server and the Rust/Tauri shell)

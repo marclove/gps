@@ -1597,9 +1597,10 @@ mod tests {
         assert_eq!(deleted.rank.as_deref(), Some("8"));
         assert_eq!(deleted.started_at.as_deref(), Some("s"));
         assert_eq!(deleted.updated_at, OLD_TIME);
-        assert!(list_for_meeting(&connection, meeting.id)
-            .unwrap()
-            .is_empty());
+        assert_eq!(
+            list_for_meeting(&connection, meeting.id).unwrap(),
+            Vec::<Task>::new()
+        );
 
         set_column(&connection, created.id, "deleted_at", OLD_TIME);
         delete(&connection, created.id).unwrap();
