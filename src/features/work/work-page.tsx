@@ -11,15 +11,13 @@ import {
     listTasks,
     moveTask,
     setTaskCompleted,
-    startTask,
     type Task,
     type TaskStage,
 } from "@/lib/tasks";
-import { TaskCardActions, TaskCardContent, TaskCardCopy } from "./task-card";
+import { TaskCardContent, TaskCardCopy, TaskReopenButton } from "./task-card";
 import {
     buildWorkBoard,
     emptyWorkBoard,
-    hasTaskAction,
     placeTask,
     removeTask,
     replaceTask,
@@ -43,11 +41,10 @@ type BoardState =
  * The page that shows the tasks that are not deleted on a board with the columns Current,
  * Backlog, Icebox, and Done.
  *
- * A dragged card moves on the board at once, and so does a card whose "Start" button the user
- * clicks. A card whose "Reopen" button the user clicks moves when the backend answers, because
- * only the backend knows its new place. If the backend cannot save a move or a start, the page
- * shows a failure toast and loads the board again when no other move is waiting for the
- * backend, so that the board shows what the backend has.
+ * A dragged card moves on the board at once. A card whose "Reopen" button the user clicks
+ * moves when the backend answers, because only the backend knows its new place. If the backend
+ * cannot save a move, the page shows a failure toast and loads the board again when no other
+ * move is waiting for the backend, so that the board shows what the backend has.
  *
  * A card, and the "New task" button for a draft, open the task sheet. A saved change shows on
  * the card, which stays in its place. A task that a draft created appears at the top of the
@@ -58,7 +55,7 @@ export function WorkPage() {
     const [state, setState] = useState<BoardState>({ kind: "loading" });
     const [attempt, setAttempt] = useState(0);
     const failureToast = useFailureToast();
-    // The number of moves and starts that wait for the backend.
+    // The number of moves that wait for the backend.
     const pendingMoves = useRef(0);
     // The number of changes that the page started, so that a load can find out that a change
     // started while it waited for the backend.
@@ -133,7 +130,7 @@ export function WorkPage() {
     }
 
     /**
-     * Sends a move or a start to the backend, and shows the answer in place of the card. If
+     * Sends a move to the backend, and shows the answer in place of the card. If
      * the backend refuses it, shows `failure` in a failure toast and loads the board again
      * when no other move waits for the backend.
      */
@@ -165,12 +162,6 @@ export function WorkPage() {
             moveTask(id, to, index),
             "Couldn't move the task. Try again.",
         );
-    }
-
-    function start(task: Task) {
-        const startedAt = new Date().toISOString();
-        changeBoard((board) => placeTask(board, { ...task, startedAt }));
-        void save(startTask(task.id), "Couldn't start the task. Try again.");
     }
 
     async function reopen(task: Task) {
@@ -222,7 +213,7 @@ export function WorkPage() {
                                 task={task}
                                 projectName={projectName(task)}
                                 done={stage === "done"}
-                                withActions={hasTaskAction(stage)}
+                                withActions={stage === "done"}
                             />
                         )}
                         renderCopy={(task, stage) => (
@@ -233,11 +224,9 @@ export function WorkPage() {
                             />
                         )}
                         renderActions={(task, stage) =>
-                            hasTaskAction(stage) ? (
-                                <TaskCardActions
+                            stage === "done" ? (
+                                <TaskReopenButton
                                     task={task}
-                                    stage={stage}
-                                    onStart={start}
                                     onReopen={(card) => void reopen(card)}
                                 />
                             ) : null

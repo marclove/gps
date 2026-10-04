@@ -99,14 +99,6 @@ export function replaceTask(board: WorkBoard, task: Task): WorkBoard {
 }
 
 /**
- * Tells if a card in `stage` has an action button: "Start" in the Backlog, and "Reopen" in
- * Done.
- */
-export function hasTaskAction(stage: TaskStage): boolean {
-    return stage === "backlog" || stage === "done";
-}
-
-/**
  * The columns of the Work board, from left to right. The user orders Current and the Backlog.
  * The Icebox is sorted by the time of creation, so a card from another column goes to the
  * place of its creation time. Done is sorted by the time of completion, so a card from another
